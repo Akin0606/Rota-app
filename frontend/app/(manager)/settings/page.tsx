@@ -229,7 +229,10 @@ export default function SettingsPage() {
                       </select>
                     </div>
                   </div>
-                  <button onClick={() => handleShiftDone(sh)} className="shrink-0 text-[13px] font-semibold text-accent">
+                  <button
+                    onClick={() => handleShiftDone(sh)}
+                    className="shrink-0 rounded-lg px-3 py-2 text-[13px] font-semibold text-accent"
+                  >
                     Done
                   </button>
                 </div>
@@ -242,10 +245,16 @@ export default function SettingsPage() {
                       {sh.start_time} – {sh.end_time}
                     </div>
                   </div>
-                  <button onClick={() => setEditingShiftId(sh.id)} className="text-[13px] text-accent">
+                  <button
+                    onClick={() => setEditingShiftId(sh.id)}
+                    className="rounded-lg px-3 py-2 text-[13px] font-medium text-accent"
+                  >
                     Edit
                   </button>
-                  <button onClick={() => handleDeleteShift(sh)} className="text-[13px] text-unavail-text">
+                  <button
+                    onClick={() => handleDeleteShift(sh)}
+                    className="rounded-lg px-3 py-2 text-[13px] font-medium text-unavail-text"
+                  >
                     Delete
                   </button>
                 </div>

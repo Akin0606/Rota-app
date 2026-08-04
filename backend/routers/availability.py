@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from config import get_settings
 from database import get_supabase
@@ -12,7 +12,14 @@ from models.schemas import (
     StaffRotaOut,
     VenueInfoResponse,
 )
-from services import email_service
+from services import email_service, rate_limit
+
+# PIN auth: block a venue_token + IP after this many wrong PINs in the window.
+PIN_MAX_ATTEMPTS = 5
+PIN_WINDOW_SECONDS = 15 * 60
+# Forgot-PIN: cap requests per venue + email to curb enumeration/abuse.
+FORGOT_MAX_REQUESTS = 3
+FORGOT_WINDOW_SECONDS = 60 * 60
 
 router = APIRouter(prefix="/api/availability", tags=["availability"])
 
@@ -98,9 +105,27 @@ def get_venue_info(venue_token: str):
 
 
 @router.post("/{venue_token}/auth", response_model=AvailabilityAuthResponse)
-def authenticate(venue_token: str, payload: PinAuthRequest):
+def authenticate(venue_token: str, payload: PinAuthRequest, request: Request):
     venue = _get_venue_or_404(venue_token)
-    staff = _get_staff_by_pin(venue["id"], payload.pin)
+
+    lock_key = f"pinauth:{venue_token}:{rate_limit.client_ip(request)}"
+    locked, retry_after = rate_limit.is_locked(lock_key, PIN_MAX_ATTEMPTS, PIN_WINDOW_SECONDS)
+    if locked:
+        minutes = rate_limit.minutes_from_seconds(retry_after)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many incorrect attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}.",
+        )
+
+    try:
+        staff = _get_staff_by_pin(venue["id"], payload.pin)
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            # Only wrong PINs count toward the lockout.
+            rate_limit.record(lock_key)
+        raise
+    # Successful PIN clears the failure count for this venue_token + IP.
+    rate_limit.clear(lock_key)
 
     period = _get_current_period(venue["id"])
     submissions = []
@@ -181,6 +206,19 @@ def submit_availability(venue_token: str, payload: AvailabilitySubmitRequest):
 @router.post("/{venue_token}/forgot-pin")
 def forgot_pin(venue_token: str, payload: ForgotPinRequest):
     venue = _get_venue_or_404(venue_token)
+
+    # Rate limit per venue + email so this can't be used to hammer an inbox or
+    # probe which emails belong to staff. Keyed on the normalised email so case
+    # variations can't multiply the allowance.
+    limit_key = f"forgotpin:{venue['id']}:{payload.email.strip().lower()}"
+    allowed, retry_after = rate_limit.hit(limit_key, FORGOT_MAX_REQUESTS, FORGOT_WINDOW_SECONDS)
+    if not allowed:
+        minutes = rate_limit.minutes_from_seconds(retry_after)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many requests. Try again in {minutes} minute{'s' if minutes != 1 else ''}.",
+        )
+
     supabase = get_supabase()
 
     match = (

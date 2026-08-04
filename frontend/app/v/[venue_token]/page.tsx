@@ -49,7 +49,13 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
       sessionStorage.setItem(pinStorageKey(venue_token), pin);
       router.push(`/v/${venue_token}/availability`);
     } catch (err) {
-      showToast(err instanceof ApiError && err.status === 401 ? "Incorrect PIN" : "Something went wrong");
+      if (err instanceof ApiError && err.status === 429) {
+        showToast(err.message);
+      } else if (err instanceof ApiError && err.status === 401) {
+        showToast("Incorrect PIN");
+      } else {
+        showToast("Something went wrong");
+      }
     } finally {
       setSubmitting(false);
     }

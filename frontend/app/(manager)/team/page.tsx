@@ -244,25 +244,25 @@ export default function TeamPage() {
                   <>
                     <button
                       onClick={() => openEdit(member)}
-                      className="rounded-lg bg-surface-subtle px-3 py-1.5 text-xs font-medium text-accent"
+                      className="rounded-lg bg-surface-subtle px-3 py-2 text-xs font-medium text-accent"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => handleResetPin(member)}
-                      className="rounded-lg bg-surface-subtle px-3 py-1.5 text-xs font-medium text-ink-muted"
+                      className="rounded-lg bg-surface-subtle px-3 py-2 text-xs font-medium text-ink-muted"
                     >
                       Reset PIN
                     </button>
                     <button
                       onClick={() => handleRemind(member)}
-                      className="rounded-lg bg-surface-subtle px-3 py-1.5 text-xs font-medium text-ink-muted"
+                      className="rounded-lg bg-surface-subtle px-3 py-2 text-xs font-medium text-ink-muted"
                     >
                       Remind
                     </button>
                     <button
                       onClick={() => toggleActive(member)}
-                      className="rounded-lg bg-surface-subtle px-3 py-1.5 text-xs font-medium text-ink-muted"
+                      className="rounded-lg bg-surface-subtle px-3 py-2 text-xs font-medium text-ink-muted"
                     >
                       Deactivate
                     </button>
@@ -270,7 +270,7 @@ export default function TeamPage() {
                 ) : (
                   <button
                     onClick={() => toggleActive(member)}
-                    className="rounded-lg bg-surface-subtle px-3 py-1.5 text-xs font-medium text-accent"
+                    className="rounded-lg bg-surface-subtle px-3 py-2 text-xs font-medium text-accent"
                   >
                     Reactivate
                   </button>

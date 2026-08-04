@@ -106,6 +106,20 @@ def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
         .execute()
         .data
     )
+
+    # Nothing to schedule if no one has marked themselves available/preferred
+    # for an actual shift. Return early with a clear warning instead of wiping
+    # any existing assignments and silently producing an empty rota.
+    has_real_availability = any(
+        s.get("shift_id") and s["status"] in (AVAILABLE, PREFERRED) for s in submissions
+    )
+    if not has_real_availability:
+        return _build_summary(
+            venue["id"],
+            period,
+            warnings=["No availability has been submitted yet — there's nothing to schedule."],
+        )
+
     rules_res = (
         supabase.table("scheduling_rules")
         .select("max_hours_per_week, min_rest_hours")

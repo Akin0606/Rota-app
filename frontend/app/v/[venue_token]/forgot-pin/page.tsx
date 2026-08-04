@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 
 import Toast from "@/components/toast";
-import { forgotPin } from "@/lib/api";
+import { ApiError, forgotPin } from "@/lib/api";
 
 export default function ForgotPinPage({ params }: { params: { venue_token: string } }) {
   const { venue_token } = params;
@@ -27,8 +27,12 @@ export default function ForgotPinPage({ params }: { params: { venue_token: strin
     try {
       await forgotPin(venue_token, email);
       setSent(true);
-    } catch {
-      showToast("Something went wrong, please try again");
+    } catch (err) {
+      showToast(
+        err instanceof ApiError && err.status === 429
+          ? err.message
+          : "Something went wrong, please try again",
+      );
     } finally {
       setSending(false);
     }
