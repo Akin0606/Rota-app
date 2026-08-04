@@ -127,25 +127,29 @@ export function getStaffRota(venueToken: string, pin: string): Promise<StaffRota
   return request(`/api/availability/${venueToken}/rota?pin=${pin}`);
 }
 
-export async function requestMagicLink(email: string): Promise<{ status: string }> {
-  // Triggered client-side (not via the backend) so the PKCE code verifier
-  // Supabase generates for this sign-in is stored in this browser's own
-  // storage — it has to be, since only this browser will later complete the
-  // exchange in /auth/callback. A server-initiated OTP request has nowhere
-  // to put a verifier the browser could ever retrieve.
+export async function requestLoginCode(email: string): Promise<{ status: string }> {
+  // Sends a 6-digit OTP code rather than a clickable magic link. We
+  // deliberately omit emailRedirectTo: with no redirect URL, Supabase's email
+  // template renders the {{ .Token }} code instead of a link. This avoids the
+  // mobile failure where tapping a magic link opens the mail app's in-app
+  // browser, which loses the PKCE code verifier and breaks sign-in.
   const supabase = createClient();
-  console.log("[debug] cookies BEFORE signInWithOtp:", document.cookie);
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-  });
-  console.log("[debug] signInWithOtp error:", error);
-  console.log("[debug] cookies AFTER signInWithOtp:", document.cookie);
-
+  const { error } = await supabase.auth.signInWithOtp({ email });
   if (error) {
     throw new ApiError(400, error.message);
   }
   return { status: "sent" };
+}
+
+export async function verifyLoginCode(email: string, code: string): Promise<void> {
+  // verifyOtp establishes the session entirely on the device that entered the
+  // code — no PKCE verifier handoff — so it works regardless of which browser
+  // or in-app webview the email was opened in.
+  const supabase = createClient();
+  const { error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
+  if (error) {
+    throw new ApiError(400, error.message);
+  }
 }
 
 export type Venue = {

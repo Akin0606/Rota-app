@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Toast from "@/components/toast";
-import { ApiError, requestMagicLink } from "@/lib/api";
+import { ApiError, requestLoginCode } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,10 +24,10 @@ export default function LoginPage() {
     }
     setSending(true);
     try {
-      await requestMagicLink(email);
+      await requestLoginCode(email);
       router.push(`/login/check-email?email=${encodeURIComponent(email)}`);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not send link, please try again");
+      showToast(err instanceof ApiError ? err.message : "Could not send code, please try again");
     } finally {
       setSending(false);
     }
@@ -60,10 +60,10 @@ export default function LoginPage() {
             disabled={sending}
             className="w-full rounded-control bg-accent py-4 text-center text-base font-semibold text-white disabled:opacity-60"
           >
-            {sending ? "Sending…" : "Send login link"}
+            {sending ? "Sending…" : "Send code"}
           </button>
           <div className="mt-4 text-center text-[13px] text-ink-faint">
-            We&apos;ll email you a magic link — no password needed
+            We&apos;ll email you a 6-digit code — no password needed
           </div>
         </div>
       </div>
