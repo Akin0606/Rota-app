@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     resend_from_email: str = Field(default="Rota <onboarding@resend.dev>", alias="RESEND_FROM_EMAIL")
     cron_secret: str = Field(default="", alias="CRON_SECRET")
     admin_secret: str = Field(default="", alias="ADMIN_SECRET")
+    # In production this must be set to the deployed frontend origin
+    # (https://rota-app-mu.vercel.app) so email links and CORS resolve
+    # correctly. Defaults to localhost for local development.
     frontend_url: str = Field(default="http://localhost:3000", alias="FRONTEND_URL")
 
     model_config = SettingsConfigDict(

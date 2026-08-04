@@ -10,9 +10,22 @@ settings = get_settings()
 
 app = FastAPI(title="Rota App API")
 
+# Explicit allow-list plus whatever FRONTEND_URL is set to, deduped. This keeps
+# local dev working alongside the deployed Vercel frontend even if FRONTEND_URL
+# is pointed at just one of them.
+allowed_origins = list(
+    dict.fromkeys(
+        [
+            "http://localhost:3000",
+            "https://rota-app-mu.vercel.app",
+            settings.frontend_url,
+        ]
+    )
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
