@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+<style>
+body { margin:0; background:#f3f4f6; font-family:system-ui,-apple-system,sans-serif; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes slideIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+a { color:#3b82f6; }
+a:hover { color:#2563eb; }
+</style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; flex-direction:column;">
+{{ app }}
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: &quot;100%&quot;, &quot;height&quot;: &quot;100%&quot; },
+  &quot;startView&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;staff_avail&quot;, &quot;mgr_dash&quot;, &quot;onboard_1&quot;], &quot;default&quot;: &quot;staff_avail&quot;, &quot;tsType&quot;: &quot;string&quot; }
+}">
+
+class Component extends DCLogic {
+  state = {
+    view: 'staff_avail', // staff_avail, staff_submitted, staff_rota, mgr_login, mgr_check_email, mgr_dash, mgr_rota, mgr_team, mgr_settings, onboard_1, onboard_2, onboard_3, onboard_4
+    role: 'staff',
+    avail: this.initAvail(),
+    notes: { 2: 'Can stay late if needed' },
+    noteDay: null,
+    noteText: '',
+    rotaDay: 0,
+    email: '',
+    venueName: 'The Rose & Crown',
+    teamMembers: [
+      { id:1, name:'Sarah Mitchell', short:'SM', role:'Bartender', active:true, submitted:true },
+      { id:2, name:'Tom Kowalski', short:'TK', role:'Server', active:true, submitted:true },
+      { id:3, name:'Priya Sharma', short:'PS', role:'Server', active:true, submitted:true },
+      { id:4, name:'Jake Robinson', short:'JR', role:'Kitchen', active:false, submitted:false },
+      { id:5, name:'Emma Lewis', short:'EL', role:'Bartender', active:true, submitted:true },
+      { id:6, name:'Marcus Williams', short:'MW', role:'Kitchen', active:true, submitted:true },
+      { id:7, name:'Lucy Hart', short:'LH', role:'Server', active:true, submitted:false },
+      { id:8, name:'Dan Peters', short:'DP', role:'Bartender', active:true, submitted:false },
+    ],
+    shifts: [
+      { name:'Morning', time:'7am – 2pm', color:'#60a5fa' },
+      { name:'Afternoon', time:'12pm – 6pm', color:'#fbbf24' },
+      { name:'Evening', time:'5pm – close', color:'#a78bfa' },
+    ],
+    rotaAssignments: null,
+    showAddMember: false,
+    newName: '',
+    newEmail: '',
+    newRole: 'Server',
+    toast: null,
+  };
+
+  initAvail() {
+    // 7 days x 3 slots: 0=unset, 1=available, 2=unavailable, 3=preferred
+    const a = [];
+    for (let d = 0; d < 7; d++) a.push([0, 0, 0]);
+    return a;
+  }
+
+  initRota() {
+    const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const r = {};
+    const staff = this.state.teamMembers.filter(m => m.active);
+    days.forEach((d, di) => {
+      r[di] = [[],[],[]];
+      // Assign 2 per shift roughly
+      staff.forEach((s, si) => {
+        const slot = (si + di) % 3;
+        if (r[di][slot].length < 2) r[di][slot].push(s.id);
+      });
+    });
+    return r;
+  }
+
+  showToast(msg) {
+    this.setState({ toast: msg });
+    setTimeout(() => this.setState({ toast: null }), 2500);
+  }
+
+  componentDidMount() {
+    this.setState({ rotaAssignments: this.initRota() });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const daysFull = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const slotLabels = ['Morn','Aftn','Eve'];
+    const submitted = s.teamMembers.filter(m => m.submitted).length;
+    const total = s.teamMembers.filter(m => m.active).length;
+    const pending = total - submitted;
+    const self = this;
+
+    const cycleAvail = (d, sl) => {
+      const avail = s.avail.map(r => [...r]);
+      avail[d][sl] = (avail[d][sl] + 1) % 4;
+      self.setState({ avail });
+    };
+
+    const availIcon = (v) => {
+      if (v === 1) return '✓';
+      if (v === 2) return '✕';
+      if (v === 3) return '★';
+      return '—';
+    };
+    const availBg = (v) => {
+      if (v === 1) return '#dcfce7';
+      if (v === 2) return '#fee2e2';
+      if (v === 3) return '#fef9c3';
+      return '#f3f4f6';
+    };
+    const availBorder = (v) => {
+      if (v === 1) return '#22c55e';
+      if (v === 2) return '#ef4444';
+      if (v === 3) return '#eab308';
+      return '#e5e7eb';
+    };
+    const availColor = (v) => {
+      if (v === 1) return '#16a34a';
+      if (v === 2) return '#ef4444';
+      if (v === 3) return '#ca8a04';
+      return '#9ca3af';
+    };
+
+    const getMemberById = (id) => s.teamMembers.find(m => m.id === id);
+
+    const nav = (view) => () => self.setState({ view });
+
+    // Build the app UI
+    const h = React.createElement;
+    const views = {
+      // ===== STAFF AVAILABILITY =====
+      staff_avail: () => h('div', { style: { maxWidth:420, margin:'0 auto', padding:'16px 0' } },
+        // Role switcher
+        this.renderRoleSwitcher(h),
+        // Phone frame
+        h('div', { style: { background:'#fafaf9', borderRadius:24, boxShadow:'0 8px 32px rgba(0,0,0,0.1)', overflow:'hidden', margin:'0 16px' } },
+          h('div', { style: { padding:'20px 24px 28px' } },
+            // Header
+            h('div', { style: { textAlign:'center', padding:'8px 0 16px' } },
+              h('div', { style: { fontSize:12, color:'#9ca3af', fontWeight:500, letterSpacing:0.5, textTransform:'uppercase' } }, s.venueName),
+              h('div', { style: { fontSize:22, fontWeight:700, color:'#1a1a1a', marginTop:4 } }, 'Hi, Sarah'),
+            ),
+            // Deadline
+            h('div', { style: { display:'flex', justifyContent:'center', marginBottom:20 } },
+              h('div', { style: { background:'#fef3c7', color:'#92400e', fontSize:12, fontWeight:600, padding:'6px 14px', borderRadius:20, display:'flex', alignItems:'center', gap:6 } },
+                h('span', { style: { width:6, height:6, background:'#f59e0b', borderRadius:'50%', display:'inline-block' } }),
+                'Submit by Wed 30 Jul, 11pm'
+              )
+            ),
+            h('div', { style: { fontSize:13, fontWeight:600, color:'#6b7280', marginBottom:12 } }, 'Week of 28 Jul – 3 Aug'),
+            // Grid header
+            h('div', { style: { display:'grid', gridTemplateColumns:'52px 1fr 1fr 1fr', gap:4, padding:'0 0 6px' } },
+              h('div'),
+              ...slotLabels.map(l => h('div', { key: l, style: { fontSize:10, color:'#9ca3af', textAlign:'center', fontWeight:600, textTransform:'uppercase', letterSpacing:0.5 } }, l))
+            ),
+            // Day rows
+            ...days.map((day, di) =>
+              h('div', { key: day, style: { display:'grid', gridTemplateColumns:'52px 1fr 1fr 1fr', gap:4, alignItems:'center', marginBottom:4 } },
+                h('div', { style: { fontSize:13, fontWeight:600, color:'#374151' } }, day),
+                ...[0,1,2].map(sl =>
+                  h('div', {
+                    key: sl,
+                    onClick: () => cycleAvail(di, sl),
+                    style: {
+                      height:44, borderRadius:10, background: availBg(s.avail[di][sl]),
+                      border: `2px solid ${availBorder(s.avail[di][sl])}`,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      fontSize: s.avail[di][sl] === 0 ? 12 : 16,
+                      color: availColor(s.avail[di][sl]),
+                      cursor:'pointer', transition:'all 0.15s ease',
+                      userSelect:'none', fontWeight: 600,
+                    }
+                  }, availIcon(s.avail[di][sl]))
+                )
+              )
+            ),
+            // Notes
+            h('div', { style: { marginTop:12 } },
+              h('div', { style: { fontSize:12, fontWeight:600, color:'#374151', marginBottom:8 } }, 'Notes (optional)'),
+              ...days.map((day, di) =>
+                s.notes[di] ? h('div', { key: di, style: { padding:'8px 12px', background:'#f9fafb', borderRadius:8, border:'1px solid #e5e7eb', marginBottom:4, display:'flex', justifyContent:'space-between', alignItems:'center' } },
+                  h('div', null,
+                    h('div', { style: { fontSize:11, color:'#9ca3af' } }, day),
+                    h('div', { style: { fontSize:13, color:'#374151' } }, s.notes[di])
+                  ),
+                  h('div', { onClick: () => { const notes = {...s.notes}; delete notes[di]; self.setState({notes}); }, style: { fontSize:12, color:'#9ca3af', cursor:'pointer' } }, '✕')
+                ) : null
+              ),
+              s.noteDay === null ?
+                h('div', { onClick: () => self.setState({ noteDay: 0, noteText: '' }), style: { padding:'10px', border:'2px dashed #e5e7eb', borderRadius:10, textAlign:'center', fontSize:13, color:'#3b82f6', fontWeight:600, cursor:'pointer', marginTop:4 } }, '+ Add a note') :
+                h('div', { style: { padding:12, background:'#f9fafb', borderRadius:10, border:'1px solid #e5e7eb', marginTop:4 } },
+                  h('div', { style: { display:'flex', gap:8, marginBottom:8 } },
+                    ...days.map((day, di) =>
+                      h('div', { key: di, onClick: () => self.setState({ noteDay: di }), style: { padding:'4px 8px', borderRadius:6, fontSize:12, fontWeight:600, cursor:'pointer', background: s.noteDay === di ? '#3b82f6' : '#f3f4f6', color: s.noteDay === di ? '#fff' : '#6b7280' } }, day)
+                    )
+                  ),
+                  h('input', { value: s.noteText, onChange: e => self.setState({ noteText: e.target.value }), placeholder: 'e.g. Can stay late if needed', style: { width:'100%', padding:'10px 12px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none' } }),
+                  h('div', { style: { display:'flex', gap:8, marginTop:8 } },
+                    h('div', { onClick: () => self.setState({ noteDay: null }), style: { flex:1, padding:8, textAlign:'center', fontSize:13, color:'#6b7280', cursor:'pointer', borderRadius:8, background:'#f3f4f6' } }, 'Cancel'),
+                    h('div', { onClick: () => { if (s.noteText.trim()) { const notes = {...s.notes, [s.noteDay]: s.noteText.trim()}; self.setState({ notes, noteDay:null, noteText:'' }); } }, style: { flex:1, padding:8, textAlign:'center', fontSize:13, color:'#fff', fontWeight:600, cursor:'pointer', borderRadius:8, background:'#3b82f6' } }, 'Save')
+                  )
+                )
+            ),
+            // Legend
+            h('div', { style: { display:'flex', gap:12, marginTop:16, justifyContent:'center', flexWrap:'wrap' } },
+              ...[['#dcfce7','#22c55e','Available'],['#fee2e2','#ef4444','Unavailable'],['#fef9c3','#eab308','Preferred'],['#f3f4f6','#e5e7eb','Tap to set']].map(([bg,bd,label]) =>
+                h('div', { key:label, style: { display:'flex', alignItems:'center', gap:4, fontSize:11, color:'#6b7280' } },
+                  h('div', { style: { width:10, height:10, borderRadius:3, background:bg, border:`1.5px solid ${bd}` } }),
+                  label
+                )
+              )
+            ),
+            // Submit
+            h('div', {
+              onClick: () => {
+                const hasAny = s.avail.some(d => d.some(v => v > 0));
+                if (!hasAny) { self.showToast('Please set at least one slot'); return; }
+                self.setState({ view: 'staff_submitted' });
+              },
+              style: { width:'100%', padding:16, background:'#3b82f6', color:'#fff', textAlign:'center', borderRadius:14, fontSize:16, fontWeight:600, cursor:'pointer', marginTop:20, boxSizing:'border-box' }
+            }, 'Submit Availability'),
+          )
+        )
+      ),
+
+      // ===== STAFF SUBMITTED =====
+      staff_submitted: () => h('div', { style: { maxWidth:420, margin:'0 auto', padding:'16px 0' } },
+        this.renderRoleSwitcher(h),
+        h('div', { style: { background:'#fafaf9', borderRadius:24, boxShadow:'0 8px 32px rgba(0,0,0,0.1)', overflow:'hidden', margin:'0 16px', animation:'fadeIn 0.3s ease' } },
+          h('div', { style: { padding:'40px 24px', textAlign:'center' } },
+            h('div', { style: { width:72, height:72, borderRadius:'50%', background:'#dcfce7', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 20px', fontSize:32 } }, '✓'),
+            h('div', { style: { fontSize:24, fontWeight:700, color:'#1a1a1a', marginBottom:8 } }, 'Submitted!'),
+            h('div', { style: { fontSize:14, color:'#6b7280', lineHeight:1.5, marginBottom:32 } }, 'Your availability for 28 Jul – 3 Aug has been sent to James. You\'ll get a notification when the rota is published.'),
+            h('div', { onClick: nav('staff_avail'), style: { padding:12, background:'#fff', borderRadius:12, fontSize:14, fontWeight:600, color:'#3b82f6', border:'1px solid #dbeafe', cursor:'pointer', marginBottom:12 } }, 'Edit Availability'),
+            h('div', { onClick: nav('staff_rota'), style: { padding:16, background:'#3b82f6', borderRadius:14, fontSize:16, fontWeight:600, color:'#fff', cursor:'pointer' } }, 'View Published Rota'),
+          )
+        )
+      ),
+
+      // ===== STAFF ROTA VIEW =====
+      staff_rota: () => h('div', { style: { maxWidth:420, margin:'0 auto', padding:'16px 0' } },
+        this.renderRoleSwitcher(h),
+        h('div', { style: { background:'#fafaf9', borderRadius:24, boxShadow:'0 8px 32px rgba(0,0,0,0.1)', overflow:'hidden', margin:'0 16px', animation:'fadeIn 0.3s ease' } },
+          h('div', { style: { padding:'20px 24px 28px' } },
+            h('div', { style: { textAlign:'center', padding:'8px 0 12px' } },
+              h('div', { style: { fontSize:12, color:'#9ca3af', fontWeight:500, letterSpacing:0.5, textTransform:'uppercase' } }, s.venueName),
+              h('div', { style: { fontSize:20, fontWeight:700, color:'#1a1a1a', marginTop:4 } }, 'Your Rota'),
+              h('div', { style: { fontSize:13, color:'#6b7280', marginTop:2 } }, 'Week of 28 Jul – 3 Aug'),
+            ),
+            h('div', { style: { display:'flex', justifyContent:'center', margin:'12px 0 16px' } },
+              h('div', { style: { background:'#dcfce7', color:'#16a34a', fontSize:12, fontWeight:600, padding:'6px 14px', borderRadius:20, display:'flex', alignItems:'center', gap:6 } }, '✓ Confirmed by James')
+            ),
+            h('div', { style: { fontSize:14, fontWeight:700, color:'#1a1a1a', marginBottom:10 } }, 'Your Shifts'),
+            ...[
+              { day:'Mon 28', shift:'Morning Shift', time:'7:00am – 2:00pm', color:'#60a5fa' },
+              { day:'Wed 30', shift:'Evening Shift', time:'5:00pm – close', color:'#a78bfa' },
+              { day:'Sat 2', shift:'Afternoon Shift', time:'12:00pm – 6:00pm', color:'#fbbf24' },
+            ].map(sh =>
+              h('div', { key:sh.day, style: { display:'flex', alignItems:'center', gap:12, padding:'14px 16px', background:'#eff6ff', borderRadius:12, border:'1px solid #dbeafe', marginBottom:6 } },
+                h('div', { style: { minWidth:40, textAlign:'center' } },
+                  h('div', { style: { fontSize:11, color:'#9ca3af', fontWeight:500 } }, sh.day.split(' ')[0]),
+                  h('div', { style: { fontSize:18, fontWeight:700, color:'#1a1a1a' } }, sh.day.split(' ')[1]),
+                ),
+                h('div', { style: { width:1, height:32, background:'#dbeafe' } }),
+                h('div', { style: { flex:1 } },
+                  h('div', { style: { fontSize:14, fontWeight:600, color:'#1a1a1a' } }, sh.shift),
+                  h('div', { style: { fontSize:12, color:'#6b7280' } }, sh.time),
+                ),
+                h('div', { style: { width:4, height:28, background:sh.color, borderRadius:2 } })
+              )
+            ),
+            h('div', { onClick: () => self.showToast('Calendar event added!'), style: { padding:12, background:'#fff', borderRadius:12, textAlign:'center', fontSize:14, fontWeight:600, color:'#3b82f6', border:'1px solid #dbeafe', cursor:'pointer', marginTop:12, marginBottom:16 } }, '📅 Add to Calendar'),
+            h('div', { onClick: nav('staff_avail'), style: { padding:12, background:'#f3f4f6', borderRadius:12, textAlign:'center', fontSize:14, fontWeight:500, color:'#6b7280', cursor:'pointer' } }, '← Back to availability'),
+          )
+        )
+      ),
+
+      // ===== MANAGER LOGIN =====
+      mgr_login: () => h('div', { style: { maxWidth:420, margin:'0 auto', padding:'16px 0' } },
+        this.renderRoleSwitcher(h),
+        h('div', { style: { background:'#fafaf9', borderRadius:24, boxShadow:'0 8px 32px rgba(0,0,0,0.1)', overflow:'hidden', margin:'0 16px', animation:'fadeIn 0.3s ease' } },
+          h('div', { style: { padding:'40px 24px', display:'flex', flexDirection:'column', alignItems:'center', minHeight:500, justifyContent:'center' } },
+            h('div', { style: { width:64, height:64, borderRadius:18, background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:24 } },
+              h('div', { style: { fontSize:28, fontWeight:800, color:'#3b82f6' } }, 'R')
+            ),
+            h('div', { style: { fontSize:24, fontWeight:700, color:'#1a1a1a', marginBottom:6 } }, 'Welcome back'),
+            h('div', { style: { fontSize:14, color:'#9ca3af', marginBottom:32 } }, 'Sign in to manage your rota'),
+            h('div', { style: { width:'100%', marginBottom:16 } },
+              h('div', { style: { fontSize:13, fontWeight:600, color:'#374151', marginBottom:6 } }, 'Email address'),
+              h('input', { value: s.email, onChange: e => self.setState({ email: e.target.value }), placeholder: 'james@roseandcrown.co.uk', style: { width:'100%', padding:'14px 16px', borderRadius:12, border:'2px solid #e5e7eb', fontSize:15, boxSizing:'border-box', outline:'none', background:'#fff' } })
+            ),
+            h('div', {
+              onClick: () => {
+                if (!s.email.includes('@')) { self.showToast('Please enter a valid email'); return; }
+                self.setState({ view: 'mgr_check_email' });
+              },
+              style: { width:'100%', padding:16, background:'#3b82f6', color:'#fff', textAlign:'center', borderRadius:14, fontSize:16, fontWeight:600, cursor:'pointer', boxSizing:'border-box' }
+            }, 'Send login link'),
+            h('div', { style: { fontSize:13, color:'#9ca3af', textAlign:'center', marginTop:16 } }, 'We\'ll email you a magic link — no password needed'),
+          )
+        )
+      ),
+
+      // ===== MANAGER CHECK EMAIL =====
+      mgr_check_email: () => h('div', { style: { maxWidth:420, margin:'0 auto', padding:'16px 0' } },
+        this.renderRoleSwitcher(h),
+        h('div', { style: { background:'#fafaf9', borderRadius:24, boxShadow:'0 8px 32px rgba(0,0,0,0.1)', overflow:'hidden', margin:'0 16px', animation:'fadeIn 0.3s ease' } },
+          h('div', { style: { padding:'40px 24px', display:'flex', flexDirection:'column', alignItems:'center', minHeight:500, justifyContent:'center' } },
+            h('div', { style: { width:64, height:64, borderRadius:'50%', background:'#dcfce7', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:24, fontSize:28 } }, '✉️'),
+            h('div', { style: { fontSize:24, fontWeight:700, color:'#1a1a1a', marginBottom:6 } }, 'Check your email'),
+            h('div', { style: { fontSize:14, color:'#6b7280', textAlign:'center', lineHeight:1.5 } },
+              'We sent a login link to',
+              h('br'),
+              h('span', { style: { fontWeight:600, color:'#1a1a1a' } }, s.email || 'james@roseandcrown.co.uk')
+            ),
+            h('div', { onClick: nav('mgr_dash'), style: { width:'100%', padding:16, background:'#3b82f6', color:'#fff', textAlign:'center', borderRadius:14, fontSize:16, fontWeight:600, cursor:'pointer', marginTop:32, boxSizing:'border-box' } }, 'Continue to Dashboard →'),
+            h('div', { style: { fontSize:13, color:'#9ca3af', textAlign:'center', marginTop:16 } },
+              'Didn\'t get it? ',
+              h('span', { onClick: () => self.showToast('Link resent!'), style: { color:'#3b82f6', fontWeight:600, cursor:'pointer' } }, 'Resend link')
+            ),
+          )
+        )
+      ),
+
+      // ===== MANAGER DASHBOARD =====
+      mgr_dash: () => s.mgrMobile ? this.renderMobileDash(h, nav, submitted, total, pending) :
+        h('div', { style: { display:'flex', minHeight:'100vh' } },
+        this.renderSidebar(h, 'dashboard'),
+        h('div', { style: { flex:1, padding:'32px 40px', animation:'fadeIn 0.3s ease' } },
+          this.renderRoleSwitcher(h),
+          h('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:28, flexWrap:'wrap', gap:12 } },
+            h('div', null,
+              h('div', { style: { fontSize:13, color:'#9ca3af', fontWeight:500 } }, 'Good morning'),
+              h('div', { style: { fontSize:28, fontWeight:700, color:'#1a1a1a' } }, 'Dashboard'),
+            ),
+            h('div', { style: { display:'flex', gap:10, flexWrap:'wrap' } },
+              h('div', { style: { padding:'10px 16px', background:'#fff', borderRadius:10, fontSize:13, fontWeight:500, color:'#6b7280', border:'1px solid #e5e7eb' } }, '28 Jul – 3 Aug'),
+              h('div', { onClick: nav('mgr_rota'), style: { padding:'10px 16px', background:'#3b82f6', borderRadius:10, fontSize:13, fontWeight:600, color:'#fff', cursor:'pointer' } }, 'Open Rota Builder'),
+            )
+          ),
+          // Stats
+          h('div', { style: { display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:16, marginBottom:28 } },
+            ...[
+              { label:'Availability', value:`${submitted}`, sub:`/ ${total}`, extra: h('div', { style: { height:4, background:'#f3f4f6', borderRadius:2, marginTop:8 } }, h('div', { style: { width:`${(submitted/total)*100}%`, height:'100%', background:'#3b82f6', borderRadius:2, transition:'width 0.5s ease' } })) },
+              { label:'Days Until Deadline', value:'2', valueColor:'#f59e0b', extraText:'Wed 30 Jul' },
+              { label:'Conflicts', value:'0', valueColor:'#22c55e', extraText:'All clear' },
+              { label:'Total Hours', value:'224', extraText:'Across '+total+' staff' },
+            ].map((st, i) =>
+              h('div', { key:i, style: { background:'#fff', borderRadius:16, padding:24, border:'1px solid rgba(0,0,0,0.04)' } },
+                h('div', { style: { fontSize:12, color:'#9ca3af', fontWeight:500, marginBottom:8 } }, st.label),
+                h('div', { style: { fontSize:32, fontWeight:700, color: st.valueColor || '#1a1a1a' } }, st.value, st.sub ? h('span', { style: { fontSize:16, color:'#9ca3af', fontWeight:500 } }, ' '+st.sub) : null),
+                st.extra || (st.extraText ? h('div', { style: { fontSize:12, color:'#9ca3af', marginTop:8 } }, st.extraText) : null)
+              )
+            )
+          ),
+          // Team + Activity
+          h('div', { style: { display:'grid', gridTemplateColumns:'1fr 380px', gap:24 } },
+            // Team grid
+            h('div', { style: { background:'#fff', borderRadius:16, padding:24, border:'1px solid rgba(0,0,0,0.04)' } },
+              h('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 } },
+                h('div', { style: { fontSize:16, fontWeight:700, color:'#1a1a1a' } }, 'Team Status'),
+                h('div', { onClick: () => { const tm = s.teamMembers.map(m => m.active && !m.submitted ? {...m, submitted:true} : m); self.setState({ teamMembers: tm }); self.showToast(`Reminded ${pending} staff`); }, style: { padding:'8px 14px', background:'#eff6ff', borderRadius:8, fontSize:13, fontWeight:600, color:'#3b82f6', cursor:'pointer' } }, `Remind ${pending} pending`)
+              ),
+              ...s.teamMembers.filter(m => m.active).map(m =>
+                h('div', { key: m.id, style: { display:'flex', alignItems:'center', gap:10, padding:'10px 0', borderBottom:'1px solid #f3f4f6' } },
+                  h('div', { style: { width:32, height:32, borderRadius:8, background: m.submitted ? '#dbeafe' : '#f3f4f6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color: m.submitted ? '#3b82f6' : '#9ca3af' } }, m.short),
+                  h('div', { style: { flex:1 } },
+                    h('div', { style: { fontSize:13, fontWeight:600, color:'#1a1a1a' } }, m.name),
+                    h('div', { style: { fontSize:11, color:'#9ca3af' } }, m.role),
+                  ),
+                  h('div', { style: { padding:'4px 10px', borderRadius:6, fontSize:11, fontWeight:600, background: m.submitted ? '#dcfce7' : '#fef3c7', color: m.submitted ? '#16a34a' : '#92400e' } }, m.submitted ? 'Submitted' : 'Pending')
+                )
+              )
+            ),
+            // Activity
+            h('div', { style: { background:'#fff', borderRadius:16, padding:24, border:'1px solid rgba(0,0,0,0.04)' } },
+              h('div', { style: { fontSize:16, fontWeight:700, color:'#1a1a1a', marginBottom:16 } }, 'Recent Activity'),
+              ...[
+                { name:'Sarah M.', action:'submitted availability', time:'2 hours ago', color:'#22c55e' },
+                { name:'Marcus W.', action:'submitted availability', time:'5 hours ago', color:'#22c55e' },
+                { name:'Emma L.', action:'submitted availability', time:'Yesterday', color:'#22c55e' },
+                { name:null, action:'Availability window opened', time:'Saturday 9am', color:'#3b82f6' },
+              ].map((a, i) =>
+                h('div', { key:i, style: { display:'flex', gap:10, alignItems:'flex-start', marginBottom:12 } },
+                  h('div', { style: { width:8, height:8, borderRadius:'50%', background:a.color, marginTop:5, flexShrink:0 } }),
+                  h('div', null,
+                    h('div', { style: { fontSize:13, color:'#374151' } }, a.name ? h('span', { style: { fontWeight:600 } }, a.name + ' ') : null, a.action),
+                    h('div', { style: { fontSize:11, color:'#9ca3af' } }, a.time)
+                  )
+                )
+              )
+            )
+          )
+        )
+      ),
+
+      // ===== MANAGER ROTA BUILDER =====
+      mgr_rota: () => {
+        if (s.mgrMobile) return this.renderMobileRota(h, nav);
+        const ra = s.rotaAssignments || {};
+        return h('div', { style: { display:'flex', minHeight:'100vh' } },
+          this.renderSidebar(h, 'rota'),
+          h('div', { style: { flex:1, padding:'32px 40px', animation:'fadeIn 0.3s ease', overflow:'auto' } },
+            this.renderRoleSwitcher(h),
+            h('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24 } },
+              h('div', { style: { display:'flex', alignItems:'center', gap:16 } },
+                h('div', { style: { fontSize:28, fontWeight:700, color:'#1a1a1a' } }, 'Rota Builder'),
+                h('div', { style: { fontSize:14, fontWeight:600, color:'#374151' } }, '28 Jul – 3 Aug'),
+              ),
+              h('div', { style: { display:'flex', gap:10, flexWrap:'wrap' } },
+                h('div', { onClick: () => { self.setState({ rotaAssignments: self.initRota() }); self.showToast('Auto-filled rota'); }, style: { padding:'10px 16px', background:'#fff', borderRadius:10, fontSize:13, fontWeight:500, color:'#6b7280', border:'1px solid #e5e7eb', cursor:'pointer' } }, 'Auto-fill'),
+                h('div', { onClick: () => self.exportRotaCSV(), style: { padding:'10px 16px', background:'#fff', borderRadius:10, fontSize:13, fontWeight:500, color:'#16a34a', border:'1px solid #bbf7d0', cursor:'pointer', display:'flex', alignItems:'center', gap:6 } }, '📊 Export Excel'),
+                h('div', { onClick: () => self.exportRotaPDF(), style: { padding:'10px 16px', background:'#fff', borderRadius:10, fontSize:13, fontWeight:500, color:'#dc2626', border:'1px solid #fecaca', cursor:'pointer', display:'flex', alignItems:'center', gap:6 } }, '📄 Export PDF'),
+                h('div', { onClick: () => self.showToast('Rota published! Staff notified.'), style: { padding:'10px 16px', background:'#3b82f6', borderRadius:10, fontSize:13, fontWeight:600, color:'#fff', cursor:'pointer' } }, 'Publish Rota'),
+              )
+            ),
+            // Grid
+            h('div', { style: { background:'#fff', borderRadius:16, border:'1px solid rgba(0,0,0,0.04)', overflow:'hidden' } },
+              // Header row
+              h('div', { style: { display:'grid', gridTemplateColumns:'100px repeat(7,1fr)', borderBottom:'1px solid #f3f4f6' } },
+                h('div', { style: { padding:14 } }),
+                ...days.map((d, di) =>
+                  h('div', { key:d, onClick: () => self.setState({ rotaDay: di }), style: { padding:'14px 8px', textAlign:'center', borderLeft:'1px solid #f3f4f6', cursor:'pointer', background: s.rotaDay === di ? '#eff6ff' : 'transparent' } },
+                    h('div', { style: { fontSize:11, fontWeight:600, color:'#9ca3af', textTransform:'uppercase' } }, d),
+                    h('div', { style: { fontSize:16, fontWeight:700, color:'#1a1a1a' } }, 28 + di > 31 ? (28 + di - 31) : 28 + di)
+                  )
+                )
+              ),
+              // Shift rows
+              ...s.shifts.map((shift, si) =>
+                h('div', { key:si, style: { display:'grid', gridTemplateColumns:'100px repeat(7,1fr)', borderBottom: si < 2 ? '1px solid #f3f4f6' : 'none' } },
+                  h('div', { style: { padding:12, display:'flex', alignItems:'flex-start', gap:6 } },
+                    h('div', { style: { width:4, height:14, background:shift.color, borderRadius:2, marginTop:1 } }),
+                    h('div', null,
+                      h('div', { style: { fontSize:12, fontWeight:600, color:'#374151' } }, shift.name),
+                      h('div', { style: { fontSize:10, color:'#9ca3af' } }, shift.time)
+                    )
+                  ),
+                  ...days.map((d, di) => {
+                    const assigned = (ra[di] && ra[di][si]) || [];
+                    const shiftColors = ['#eff6ff', '#fef9c3', '#ede9fe'];
+                    const shiftTextColors = ['#3b82f6', '#92400e', '#6d28d9'];
+                    return h('div', { key:di, style: { padding:6, borderLeft:'1px solid #f3f4f6', display:'flex', flexDirection:'column', gap:3, minHeight:60, background: s.rotaDay === di ? '#fafcff' : 'transparent' } },
+                      ...assigned.map(id => {
+                        const m = getMemberById(id);
+                        return m ? h('div', { key:id, style: { padding:'5px 8px', background:shiftColors[si], borderRadius:6, fontSize:11, fontWeight:600, color:shiftTextColors[si], display:'flex', justifyContent:'space-between', alignItems:'center' } },
+                          h('span', null, m.name.split(' ')[0] + ' ' + m.name.split(' ')[1][0] + '.'),
+                          h('span', { onClick: () => {
+                            const newRa = JSON.parse(JSON.stringify(ra));
+                            newRa[di][si] = newRa[di][si].filter(x => x !== id);
+                            self.setState({ rotaAssignments: newRa });
+                          }, style: { cursor:'pointer', opacity:0.5, fontSize:10 } }, '✕')
+                        ) : null;
+                      }),
+                      h('div', { onClick: () => {
+                        // Add next unassigned active member
+                        const allAssigned = (ra[di] || [[],[],[]]).flat();
+                        const available = s.teamMembers.filter(m => m.active && !allAssigned.includes(m.id));
+                        if (available.length) {
+                          const newRa = JSON.parse(JSON.stringify(ra));
+                          if (!newRa[di]) newRa[di] = [[],[],[]];
+                          newRa[di][si].push(available[0].id);
+                          self.setState({ rotaAssignments: newRa });
+                        } else {
+                          self.showToast('All staff assigned for this day');
+                        }
+                      }, style: { padding:'4px 8px', borderRadius:6, border:'1px dashed #d1d5db', fontSize:11, color:'#9ca3af', textAlign:'center', cursor:'pointer' } }, '+ Add')
+                    );
+                  })
+                )
+              )
+            ),
+          )
+        );
+      },
+
+      // ===== MANAGER TEAM =====
+      mgr_team: () => s.mgrMobile ? this.renderMobileTeam(h) :
+        h('div', { style: { display:'flex', minHeight:'100vh' } },
+        this.renderSidebar(h, 'team'),
+        h('div', { style: { flex:1, padding:'32px 40px', animation:'fadeIn 0.3s ease' } },
+          this.renderRoleSwitcher(h),
+          h('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24 } },
+            h('div', { style: { fontSize:28, fontWeight:700, color:'#1a1a1a' } }, 'Team'),
+            h('div', { style: { display:'flex', gap:10 } },
+              h('div', { onClick: () => { navigator.clipboard && navigator.clipboard.writeText('rota.app/t/rose-crown'); self.showToast('Link copied!'); }, style: { padding:'10px 20px', background:'#fff', borderRadius:10, fontSize:14, fontWeight:500, color:'#3b82f6', border:'1px solid #dbeafe', cursor:'pointer' } }, 'Copy team link'),
+              h('div', { onClick: () => self.setState({ showAddMember: true }), style: { padding:'10px 20px', background:'#3b82f6', borderRadius:10, fontSize:14, fontWeight:600, color:'#fff', cursor:'pointer' } }, '+ Add team member'),
+            )
+          ),
+          // Table
+          h('div', { style: { background:'#fff', borderRadius:16, border:'1px solid rgba(0,0,0,0.04)', overflow:'hidden' } },
+            h('div', { style: { display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1.5fr', padding:'14px 20px', borderBottom:'1px solid #f3f4f6' } },
+              ...['Name','Email','Role','Status','Actions'].map(c => h('div', { key:c, style: { fontSize:11, fontWeight:600, color:'#9ca3af', textTransform:'uppercase', letterSpacing:0.5 } }, c))
+            ),
+            ...s.teamMembers.map(m =>
+              h('div', { key:m.id, style: { display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr 1fr 1.5fr', padding:'14px 20px', borderBottom:'1px solid #f3f4f6', alignItems:'center', opacity: m.active ? 1 : 0.5 } },
+                h('div', { style: { display:'flex', alignItems:'center', gap:10 } },
+                  h('div', { style: { width:36, height:36, borderRadius:10, background: m.active ? '#dbeafe' : '#f3f4f6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color: m.active ? '#3b82f6' : '#9ca3af' } }, m.short),
+                  h('div', { style: { fontSize:14, fontWeight:600, color:'#1a1a1a' } }, m.name)
+                ),
+                h('div', { style: { fontSize:13, color:'#6b7280' } }, m.name.split(' ')[0].toLowerCase() + '@email.com'),
+                h('div', { style: { fontSize:13, color:'#374151' } }, m.role),
+                h('div', null, h('div', { style: { display:'inline-block', padding:'4px 10px', borderRadius:6, fontSize:12, fontWeight:600, background: m.active ? '#dcfce7' : '#f3f4f6', color: m.active ? '#16a34a' : '#9ca3af' } }, m.active ? 'Active' : 'Inactive')),
+                h('div', { style: { display:'flex', gap:6 } },
+                  m.active ?
+                    h(React.Fragment, null,
+                      h('div', { onClick: () => self.setState({ editingMember: m.id, editMemberName: m.name, editMemberEmail: m.name.split(' ')[0].toLowerCase() + '@email.com', editMemberRole: m.role }), style: { padding:'6px 12px', background:'#f9fafb', borderRadius:8, fontSize:12, color:'#3b82f6', cursor:'pointer' } }, 'Edit'),
+                      h('div', { onClick: () => self.showToast('Reminder sent to ' + m.name.split(' ')[0]), style: { padding:'6px 12px', background:'#f9fafb', borderRadius:8, fontSize:12, color:'#6b7280', cursor:'pointer' } }, 'Remind'),
+                      h('div', { onClick: () => { const tm = s.teamMembers.map(x => x.id === m.id ? {...x, active:false} : x); self.setState({ teamMembers: tm }); }, style: { padding:'6px 12px', background:'#f9fafb', borderRadius:8, fontSize:12, color:'#6b7280', cursor:'pointer' } }, 'Deactivate'),
+                    ) :
+                    h('div', { onClick: () => { const tm = s.teamMembers.map(x => x.id === m.id ? {...x, active:true} : x); self.setState({ teamMembers: tm }); }, style: { padding:'6px 12px', background:'#f9fafb', borderRadius:8, fontSize:12, color:'#3b82f6', cursor:'pointer' } }, 'Reactivate')
+                )
+              )
+            )
+          ),
+          // Edit member modal
+          s.editingMember ? h('div', { style: { position:'fixed', inset:0, background:'rgba(0,0,0,0.3)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }, onClick: () => self.setState({ editingMember: null }) },
+            h('div', { style: { background:'#fff', borderRadius:20, padding:32, width:400, boxShadow:'0 20px 60px rgba(0,0,0,0.15)', animation:'fadeIn 0.2s ease' }, onClick: e => e.stopPropagation() },
+              h('div', { style: { fontSize:20, fontWeight:700, color:'#1a1a1a', marginBottom:20 } }, 'Edit Team Member'),
+              h('div', { style: { marginBottom:12 } },
+                h('div', { style: { fontSize:13, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Full name'),
+                h('input', { value: s.editMemberName ?? '', onChange: e => self.setState({ editMemberName: e.target.value }), style: { width:'100%', padding:'12px 14px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none' } })
+              ),
+              h('div', { style: { marginBottom:12 } },
+                h('div', { style: { fontSize:13, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Email'),
+                h('input', { value: s.editMemberEmail ?? '', onChange: e => self.setState({ editMemberEmail: e.target.value }), style: { width:'100%', padding:'12px 14px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none' } })
+              ),
+              h('div', { style: { marginBottom:20 } },
+                h('div', { style: { fontSize:13, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Role'),
+                h('div', { style: { display:'flex', gap:8 } },
+                  ...['Bartender','Server','Kitchen','Host','Manager'].map(r =>
+                    h('div', { key:r, onClick: () => self.setState({ editMemberRole: r }), style: { flex:1, padding:'10px', borderRadius:10, textAlign:'center', fontSize:12, fontWeight:600, cursor:'pointer', background: (s.editMemberRole ?? '') === r ? '#eff6ff' : '#f9fafb', color: (s.editMemberRole ?? '') === r ? '#3b82f6' : '#6b7280', border: (s.editMemberRole ?? '') === r ? '2px solid #3b82f6' : '2px solid transparent' } }, r)
+                  )
+                )
+              ),
+              h('div', { style: { display:'flex', gap:10 } },
+                h('div', { onClick: () => self.setState({ editingMember: null }), style: { flex:1, padding:14, background:'#f3f4f6', borderRadius:12, textAlign:'center', fontSize:15, fontWeight:600, color:'#6b7280', cursor:'pointer' } }, 'Cancel'),
+                h('div', { onClick: () => {
+                  const name = (s.editMemberName ?? '').trim();
+                  if (!name) { self.showToast('Please enter a name'); return; }
+                  const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+                  const tm = s.teamMembers.map(x => x.id === s.editingMember ? {...x, name, short: initials, role: s.editMemberRole ?? x.role } : x);
+                  self.setState({ teamMembers: tm, editingMember: null });
+                  self.showToast(name.split(' ')[0] + ' updated!');
+                }, style: { flex:1, padding:14, background:'#3b82f6', borderRadius:12, textAlign:'center', fontSize:15, fontWeight:600, color:'#fff', cursor:'pointer' } }, 'Save changes')
+              )
+            )
+          ) : null,
+          // Add member modal
+          s.showAddMember ? h('div', { style: { position:'fixed', inset:0, background:'rgba(0,0,0,0.3)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }, onClick: () => self.setState({ showAddMember: false }) },
+            h('div', { style: { background:'#fff', borderRadius:20, padding:32, width:400, boxShadow:'0 20px 60px rgba(0,0,0,0.15)', animation:'fadeIn 0.2s ease' }, onClick: e => e.stopPropagation() },
+              h('div', { style: { fontSize:20, fontWeight:700, color:'#1a1a1a', marginBottom:20 } }, 'Add Team Member'),
+              h('div', { style: { marginBottom:12 } },
+                h('div', { style: { fontSize:13, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Full name'),
+                h('input', { value: s.newName, onChange: e => self.setState({ newName: e.target.value }), placeholder: 'e.g. Priya Sharma', style: { width:'100%', padding:'12px 14px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none' } })
+              ),
+              h('div', { style: { marginBottom:12 } },
+                h('div', { style: { fontSize:13, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Email'),
+                h('input', { value: s.newEmail, onChange: e => self.setState({ newEmail: e.target.value }), placeholder: 'email@example.com', style: { width:'100%', padding:'12px 14px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none' } })
+              ),
+              h('div', { style: { marginBottom:20 } },
+                h('div', { style: { fontSize:13, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Role'),
+                h('div', { style: { display:'flex', gap:8 } },
+                  ...['Bartender','Server','Kitchen'].map(r =>
+                    h('div', { key:r, onClick: () => self.setState({ newRole: r }), style: { flex:1, padding:'10px', borderRadius:10, textAlign:'center', fontSize:13, fontWeight:600, cursor:'pointer', background: s.newRole === r ? '#eff6ff' : '#f9fafb', color: s.newRole === r ? '#3b82f6' : '#6b7280', border: s.newRole === r ? '2px solid #3b82f6' : '2px solid transparent' } }, r)
+                  )
+                )
+              ),
+              h('div', { style: { display:'flex', gap:10 } },
+                h('div', { onClick: () => self.setState({ showAddMember: false }), style: { flex:1, padding:14, background:'#f3f4f6', borderRadius:12, textAlign:'center', fontSize:15, fontWeight:600, color:'#6b7280', cursor:'pointer' } }, 'Cancel'),
+                h('div', { onClick: () => {
+                  if (!s.newName.trim()) { self.showToast('Please enter a name'); return; }
+                  const initials = s.newName.trim().split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+                  const newMember = { id: Date.now(), name: s.newName.trim(), short: initials, role: s.newRole, active: true, submitted: false };
+                  self.setState({ teamMembers: [...s.teamMembers, newMember], showAddMember: false, newName: '', newEmail: '', newRole: 'Server' });
+                  self.showToast(s.newName.trim().split(' ')[0] + ' added to team!');
+                }, style: { flex:1, padding:14, background:'#3b82f6', borderRadius:12, textAlign:'center', fontSize:15, fontWeight:600, color:'#fff', cursor:'pointer' } }, 'Add to team')
+              )
+            )
+          ) : null,
+        )
+      ),
+
+      // ===== MANAGER SETTINGS =====
+      mgr_settings: () => s.mgrMobile ? this.renderMobileSettings(h) :
+        h('div', { style: { display:'flex', minHeight:'100vh' } },
+        this.renderSidebar(h, 'settings'),
+        h('div', { style: { flex:1, padding:'32px 40px', maxWidth:840, animation:'fadeIn 0.3s ease' } },
+          this.renderRoleSwitcher(h),
+          h('div', { style: { fontSize:28, fontWeight:700, color:'#1a1a1a', marginBottom:28 } }, 'Settings'),
+          h('div', { style: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:24 } },
+            // Venue
+            h('div', { style: { background:'#fff', borderRadius:16, padding:24, border:'1px solid rgba(0,0,0,0.04)' } },
+              h('div', { style: { fontSize:16, fontWeight:700, color:'#1a1a1a', marginBottom:16 } }, 'Venue Details'),
+              h('div', { style: { display:'flex', flexDirection:'column', gap:14 } },
+                h('div', null,
+                  h('div', { style: { fontSize:12, color:'#9ca3af', marginBottom:4 } }, 'Venue name'),
+                  h('input', { value: s.venueName, onChange: e => self.setState({ venueName: e.target.value }), style: { width:'100%', padding:'10px 14px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none' } })
+                ),
+                h('div', null,
+                  h('div', { style: { fontSize:12, color:'#9ca3af', marginBottom:4 } }, 'Manager email'),
+                  h('div', { style: { padding:'10px 14px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, color:'#374151' } }, 'james@roseandcrown.co.uk')
+                ),
+              )
+            ),
+            // Rules
+            h('div', { style: { background:'#fff', borderRadius:16, padding:24, border:'1px solid rgba(0,0,0,0.04)' } },
+              h('div', { style: { fontSize:16, fontWeight:700, color:'#1a1a1a', marginBottom:16 } }, 'Scheduling Rules'),
+              h('div', { style: { display:'flex', flexDirection:'column', gap:14 } },
+                h('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center', paddingBottom:14, borderBottom:'1px solid #f3f4f6' } },
+                  h('div', { style: { fontSize:13, color:'#374151' } }, 'Max hours / week'),
+                  h('input', { value: s.maxHours ?? '48', onChange: e => self.setState({ maxHours: e.target.value }), style: { padding:'8px 14px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:14, fontWeight:600, color:'#1a1a1a', width:70, textAlign:'center', outline:'none' } })
+                ),
+                h('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center', paddingBottom:14, borderBottom:'1px solid #f3f4f6' } },
+                  h('div', { style: { fontSize:13, color:'#374151' } }, 'Min rest between shifts'),
+                  h('input', { value: s.minRest ?? '11', onChange: e => self.setState({ minRest: e.target.value }), style: { padding:'8px 14px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:14, fontWeight:600, color:'#1a1a1a', width:70, textAlign:'center', outline:'none' } })
+                ),
+                h('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center' } },
+                  h('div', { style: { fontSize:13, color:'#374151' } }, 'Always need on shift'),
+                  h('select', { value: s.alwaysNeed ?? '1 Bartender', onChange: e => self.setState({ alwaysNeed: e.target.value }), style: { padding:'8px 14px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:14, fontWeight:600, color:'#1a1a1a', outline:'none', background:'#fff' } },
+                    h('option', null, '1 Bartender'),
+                    h('option', null, '2 Bartenders'),
+                    h('option', null, '1 Server'),
+                    h('option', null, '2 Servers')
+                  )
+                )
+              )
+            ),
+            // Shifts
+            h('div', { style: { background:'#fff', borderRadius:16, padding:24, border:'1px solid rgba(0,0,0,0.04)' } },
+              h('div', { style: { fontSize:16, fontWeight:700, color:'#1a1a1a', marginBottom:16 } }, 'Shift Types'),
+              h('div', { style: { display:'flex', flexDirection:'column', gap:8 } },
+                ...s.shifts.map((sh, i) =>
+                  s.editingShift === i ?
+                  h('div', { key:i, style: { display:'flex', alignItems:'center', gap:10, padding:'14px', background:'#eff6ff', borderRadius:10, border:'2px solid #3b82f6' } },
+                    h('div', { style: { width:4, height:60, background:sh.color, borderRadius:2 } }),
+                    h('div', { style: { flex:1, display:'flex', flexDirection:'column', gap:8 } },
+                      h('input', { value: sh.name, onChange: e => { const shifts = [...s.shifts]; shifts[i] = {...shifts[i], name: e.target.value}; self.setState({ shifts }); }, style: { padding:'8px 10px', borderRadius:8, border:'1.5px solid #dbeafe', fontSize:14, fontWeight:600, outline:'none', width:'100%', boxSizing:'border-box' } }),
+                      h('div', { style: { display:'flex', alignItems:'center', gap:6 } },
+                        h('select', { value: sh.startTime ?? sh.time.split(' – ')[0] ?? '7:00am', onChange: e => { const shifts = [...s.shifts]; const end = shifts[i].endTime ?? shifts[i].time.split(' – ')[1] ?? '2:00pm'; shifts[i] = {...shifts[i], startTime: e.target.value, endTime: end, time: e.target.value + ' – ' + end}; self.setState({ shifts }); }, style: { flex:1, padding:'8px 10px', borderRadius:8, border:'1.5px solid #dbeafe', fontSize:13, outline:'none', background:'#fff', cursor:'pointer' } },
+                          ...['5:00am','6:00am','7:00am','8:00am','9:00am','10:00am','11:00am','12:00pm','1:00pm','2:00pm','3:00pm','4:00pm','5:00pm','6:00pm','7:00pm','8:00pm','9:00pm','10:00pm'].map(t => h('option', { key:t, value:t }, t))
+                        ),
+                        h('span', { style: { fontSize:13, color:'#6b7280', fontWeight:500 } }, '→'),
+                        h('select', { value: sh.endTime ?? sh.time.split(' – ')[1] ?? '2:00pm', onChange: e => { const shifts = [...s.shifts]; const start = shifts[i].startTime ?? shifts[i].time.split(' – ')[0] ?? '7:00am'; shifts[i] = {...shifts[i], endTime: e.target.value, startTime: start, time: start + ' – ' + e.target.value}; self.setState({ shifts }); }, style: { flex:1, padding:'8px 10px', borderRadius:8, border:'1.5px solid #dbeafe', fontSize:13, outline:'none', background:'#fff', cursor:'pointer' } },
+                          ...['12:00pm','1:00pm','2:00pm','3:00pm','4:00pm','5:00pm','6:00pm','7:00pm','8:00pm','9:00pm','10:00pm','11:00pm','close'].map(t => h('option', { key:t, value:t }, t))
+                        )
+                      )
+                    ),
+                    h('div', { onClick: () => self.setState({ editingShift: null }), style: { fontSize:13, color:'#3b82f6', cursor:'pointer', fontWeight:600 } }, 'Done')
+                  ) :
+                  h('div', { key:i, style: { display:'flex', alignItems:'center', gap:10, padding:'12px 14px', background:'#f9fafb', borderRadius:10 } },
+                    h('div', { style: { width:4, height:24, background:sh.color, borderRadius:2 } }),
+                    h('div', { style: { flex:1 } },
+                      h('div', { style: { fontSize:14, fontWeight:600, color:'#1a1a1a' } }, sh.name),
+                      h('div', { style: { fontSize:12, color:'#9ca3af' } }, sh.time)
+                    ),
+                    h('div', { style: { display:'flex', gap:8 } },
+                    h('div', { onClick: () => self.setState({ editingShift: i }), style: { fontSize:13, color:'#3b82f6', cursor:'pointer' } }, 'Edit'),
+                    h('div', { onClick: () => { if (s.shifts.length > 1) { const shifts = s.shifts.filter((_, j) => j !== i); self.setState({ shifts }); self.showToast(sh.name + ' shift removed'); } else { self.showToast('Need at least one shift'); } }, style: { fontSize:13, color:'#ef4444', cursor:'pointer' } }, 'Delete')
+                  )
+                  )
+                ),
+                h('div', { onClick: () => {
+                  const colors = ['#f472b6','#34d399','#fb923c','#38bdf8','#c084fc','#facc15'];
+                  const color = colors[s.shifts.length % colors.length];
+                  const shifts = [...s.shifts, { name:'New Shift', time:'Set times', color }];
+                  self.setState({ shifts, editingShift: shifts.length - 1 });
+                }, style: { padding:12, border:'2px dashed #dbeafe', borderRadius:10, textAlign:'center', fontSize:13, fontWeight:600, color:'#3b82f6', cursor:'pointer', marginTop:4 } }, '+ Add shift')
+              )
+            ),
+            // Availability window
+            h('div', { style: { background:'#fff', borderRadius:16, padding:24, border:'1px solid rgba(0,0,0,0.04)' } },
+              h('div', { style: { fontSize:16, fontWeight:700, color:'#1a1a1a', marginBottom:16 } }, 'Availability Window'),
+              this.renderAvailWindow(h)
+            ),
+          ),
+          h('div', { onClick: () => self.showToast('Settings saved!'), style: { marginTop:24, padding:'12px 24px', background:'#3b82f6', borderRadius:12, fontSize:15, fontWeight:600, color:'#fff', cursor:'pointer', display:'inline-block' } }, 'Save Changes'),
+        )
+      ),
+
+      // ===== ONBOARDING =====
+      onboard_1: () => this.renderOnboard(h, 1),
+      onboard_2: () => this.renderOnboard(h, 2),
+      onboard_3: () => this.renderOnboard(h, 3),
+      onboard_4: () => this.renderOnboard(h, 4),
+    };
+
+    const appContent = views[s.view] ? views[s.view]() : views.staff_avail();
+
+    // Toast
+    const toast = s.toast ? h('div', { style: { position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)', background:'#1a1a1a', color:'#fff', padding:'12px 24px', borderRadius:12, fontSize:14, fontWeight:600, zIndex:200, animation:'fadeIn 0.2s ease', boxShadow:'0 8px 24px rgba(0,0,0,0.2)' } }, s.toast) : null;
+
+    return {
+      app: h(React.Fragment, null, appContent, toast),
+    };
+  }
+
+  renderRoleSwitcher(h) {
+    const s = this.state;
+    const self = this;
+    const staffViews = ['staff_avail','staff_submitted','staff_rota'];
+    const mgrViews = ['mgr_login','mgr_check_email','mgr_dash','mgr_rota','mgr_team','mgr_settings'];
+    const onboardViews = ['onboard_1','onboard_2','onboard_3','onboard_4'];
+    const isStaff = staffViews.includes(s.view);
+    const isMgr = mgrViews.includes(s.view);
+    const isOnboard = onboardViews.includes(s.view);
+
+    return h('div', { style: { display:'flex', justifyContent:'center', gap:6, marginBottom:16, flexWrap:'wrap', alignItems:'center' } },
+      h('div', { onClick: () => self.setState({ view:'staff_avail' }), style: { padding:'8px 16px', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer', background: isStaff ? '#3b82f6' : '#fff', color: isStaff ? '#fff' : '#6b7280', border: isStaff ? 'none' : '1px solid #e5e7eb' } }, 'Staff View'),
+      h('div', { onClick: () => self.setState({ view:'mgr_dash' }), style: { padding:'8px 16px', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer', background: isMgr ? '#3b82f6' : '#fff', color: isMgr ? '#fff' : '#6b7280', border: isMgr ? 'none' : '1px solid #e5e7eb' } }, 'Manager View'),
+      h('div', { onClick: () => self.setState({ view:'onboard_1' }), style: { padding:'8px 16px', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer', background: isOnboard ? '#3b82f6' : '#fff', color: isOnboard ? '#fff' : '#6b7280', border: isOnboard ? 'none' : '1px solid #e5e7eb' } }, 'Onboarding'),
+      isMgr ? h('div', { onClick: () => self.setState({ mgrMobile: !s.mgrMobile }), style: { padding:'6px 12px', borderRadius:8, fontSize:12, fontWeight:600, cursor:'pointer', background: s.mgrMobile ? '#1a1a1a' : '#f3f4f6', color: s.mgrMobile ? '#fff' : '#6b7280', marginLeft:4 } }, s.mgrMobile ? '📱 Mobile' : '🖥 Desktop') : null,
+    );
+  }
+
+  renderMobileBottomNav(h, active) {
+    const self = this;
+    const items = [
+      { key:'dashboard', label:'Dashboard', icon:'📊', view:'mgr_dash' },
+      { key:'rota', label:'Rota', icon:'📅', view:'mgr_rota' },
+      { key:'team', label:'Team', icon:'👥', view:'mgr_team' },
+      { key:'settings', label:'Settings', icon:'⚙️', view:'mgr_settings' },
+    ];
+    return h('div', { style: { position:'fixed', bottom:0, left:0, right:0, background:'#fff', borderTop:'1px solid #e5e7eb', display:'grid', gridTemplateColumns:'repeat(4,1fr)', zIndex:50, paddingBottom:'env(safe-area-inset-bottom, 0px)' } },
+      ...items.map(it =>
+        h('div', { key:it.key, onClick: () => self.setState({ view: it.view }), style: { padding:'10px 8px 8px', textAlign:'center', cursor:'pointer' } },
+          h('div', { style: { fontSize:20, marginBottom:2 } }, it.icon),
+          h('div', { style: { fontSize:10, fontWeight: active === it.key ? 700 : 500, color: active === it.key ? '#3b82f6' : '#9ca3af' } }, it.label)
+        )
+      )
+    );
+  }
+
+  renderMobileDash(h, nav, submitted, total, pending) {
+    const s = this.state;
+    const self = this;
+    return h('div', { style: { maxWidth:420, margin:'0 auto', padding:'16px 0 80px' } },
+      this.renderRoleSwitcher(h),
+      h('div', { style: { background:'#fafaf9', borderRadius:24, boxShadow:'0 8px 32px rgba(0,0,0,0.1)', overflow:'hidden', margin:'0 16px', animation:'fadeIn 0.3s ease' } },
+        h('div', { style: { padding:'16px 20px 20px' } },
+          this.renderMobileHeader(h, 'Dashboard'),
+          h('div', { style: { background:'#fff', borderRadius:16, padding:16, boxShadow:'0 1px 3px rgba(0,0,0,0.06)', border:'1px solid rgba(0,0,0,0.04)', marginBottom:12 } },
+            h('div', { style: { display:'flex', alignItems:'center', gap:8, marginBottom:8 } },
+              h('div', { style: { width:8, height:8, background:'#f59e0b', borderRadius:'50%' } }),
+              h('div', { style: { fontSize:13, fontWeight:600, color:'#92400e' } }, 'Awaiting Availability')
+            ),
+            h('div', { style: { fontSize:28, fontWeight:700, color:'#1a1a1a', marginBottom:4 } }, submitted+' ', h('span', { style: { fontSize:16, color:'#9ca3af', fontWeight:500 } }, '/ '+total+' submitted')),
+            h('div', { style: { height:6, background:'#f3f4f6', borderRadius:3, overflow:'hidden', marginTop:8 } },
+              h('div', { style: { width: (submitted/total*100)+'%', height:'100%', background:'#3b82f6', borderRadius:3, transition:'width 0.5s' } })
+            )
+          ),
+          h('div', { style: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:12 } },
+            ...[['2','Days left'],['0','Conflicts'],[''+pending,'Pending']].map(([v,l]) =>
+              h('div', { key:l, style: { background:'#fff', borderRadius:12, padding:'14px 12px', textAlign:'center', border:'1px solid rgba(0,0,0,0.04)' } },
+                h('div', { style: { fontSize:22, fontWeight:700, color:'#1a1a1a' } }, v),
+                h('div', { style: { fontSize:11, color:'#9ca3af', marginTop:2 } }, l)
+              )
+            )
+          ),
+          h('div', { style: { fontSize:13, fontWeight:600, color:'#374151', marginBottom:10 } }, 'Team'),
+          h('div', { style: { display:'flex', flexWrap:'wrap', gap:10, marginBottom:12 } },
+            ...s.teamMembers.filter(m => m.active).map(m =>
+              h('div', { key:m.id, style: { display:'flex', flexDirection:'column', alignItems:'center', gap:4 } },
+                h('div', { style: { width:44, height:44, borderRadius:14, background: m.submitted ? '#dcfce7' : '#f3f4f6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color: m.submitted ? '#16a34a' : '#9ca3af', position:'relative' } }, m.short,
+                  m.submitted ? h('div', { style: { position:'absolute', bottom:-2, right:-2, width:14, height:14, background:'#22c55e', borderRadius:'50%', border:'2px solid #fafaf9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:8, color:'#fff' } }, '✓') : null
+                ),
+                h('div', { style: { fontSize:10, color: m.submitted ? '#9ca3af' : '#d1d5db' } }, m.name.split(' ')[0])
+              )
+            )
+          ),
+          h('div', { onClick: () => { const tm = s.teamMembers.map(m => m.active && !m.submitted ? {...m, submitted:true} : m); self.setState({ teamMembers: tm }); self.showToast('Reminded '+pending+' staff'); }, style: { padding:12, background:'#fff', borderRadius:12, textAlign:'center', fontSize:14, fontWeight:600, color:'#3b82f6', border:'1px solid #dbeafe', cursor:'pointer', marginBottom:12 } }, 'Remind '+pending+' pending'),
+          h('div', { onClick: nav('mgr_rota'), style: { padding:16, background:'#3b82f6', borderRadius:14, textAlign:'center', fontSize:16, fontWeight:600, color:'#fff', cursor:'pointer' } }, 'Open Rota Builder'),
+        )
+      ),
+      this.renderMobileBottomNav(h, 'dashboard')
+    );
+  }
+
+  renderMobileRota(h, nav) {
+    const s = this.state;
+    const self = this;
+    const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const ra = s.rotaAssignments || {};
+    const getMemberById = (id) => s.teamMembers.find(m => m.id === id);
+    const shiftBg = ['#dbeafe','#fef9c3','#ede9fe'];
+    const shiftText = ['#3b82f6','#92400e','#6d28d9'];
+    return h('div', { style: { maxWidth:420, margin:'0 auto', padding:'16px 0 80px' } },
+      this.renderRoleSwitcher(h),
+      h('div', { style: { background:'#fafaf9', borderRadius:24, boxShadow:'0 8px 32px rgba(0,0,0,0.1)', overflow:'hidden', margin:'0 16px', animation:'fadeIn 0.3s ease' } },
+        h('div', { style: { padding:'16px 20px 20px' } },
+          h('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 } },
+            h('div', { style: { fontSize:20, fontWeight:700, color:'#1a1a1a' } }, 'Rota Builder'),
+            h('div', { style: { fontSize:12, color:'#9ca3af', fontWeight:500 } }, '28 Jul – 3 Aug'),
+          ),
+          h('div', { style: { display:'flex', gap:4, marginBottom:16, overflowX:'auto' } },
+            ...days.map((d, di) =>
+              h('div', { key:d, onClick: () => self.setState({ rotaDay: di }), style: { padding:'8px 14px', background: s.rotaDay === di ? '#3b82f6' : '#f3f4f6', color: s.rotaDay === di ? '#fff' : '#6b7280', borderRadius:10, fontSize:13, fontWeight: s.rotaDay === di ? 600 : 500, cursor:'pointer', flexShrink:0 } }, d)
+            )
+          ),
+          ...s.shifts.map((shift, si) => {
+            const assigned = (ra[s.rotaDay] && ra[s.rotaDay][si]) || [];
+            return h('div', { key:si, style: { marginBottom:12 } },
+              h('div', { style: { display:'flex', alignItems:'center', gap:8, marginBottom:8 } },
+                h('div', { style: { width:4, height:16, background:shift.color, borderRadius:2 } }),
+                h('div', { style: { fontSize:13, fontWeight:600, color:'#374151' } }, shift.name),
+                h('div', { style: { fontSize:11, color:'#9ca3af' } }, shift.time)
+              ),
+              h('div', { style: { display:'flex', flexDirection:'column', gap:6 } },
+                ...assigned.map(id => {
+                  const m = getMemberById(id);
+                  return m ? h('div', { key:id, style: { display:'flex', alignItems:'center', gap:10, padding:'12px 14px', background:'#fff', borderRadius:12, border:'1px solid rgba(0,0,0,0.04)' } },
+                    h('div', { style: { width:34, height:34, borderRadius:10, background:shiftBg[si], display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:shiftText[si] } }, m.short),
+                    h('div', { style: { flex:1 } },
+                      h('div', { style: { fontSize:14, fontWeight:600, color:'#1a1a1a' } }, m.name.split(' ')[0]+' '+m.name.split(' ')[1][0]+'.'),
+                      h('div', { style: { fontSize:11, color:'#9ca3af' } }, m.role)
+                    ),
+                    h('div', { onClick: () => { const newRa = JSON.parse(JSON.stringify(ra)); newRa[s.rotaDay][si] = newRa[s.rotaDay][si].filter(x=>x!==id); self.setState({ rotaAssignments:newRa }); }, style: { fontSize:12, color:'#9ca3af', cursor:'pointer', padding:4 } }, '✕')
+                  ) : null;
+                }),
+                h('div', { onClick: () => {
+                  const allAssigned = (ra[s.rotaDay] || [[],[],[]]).flat();
+                  const available = s.teamMembers.filter(m => m.active && !allAssigned.includes(m.id));
+                  if (available.length) { const newRa = JSON.parse(JSON.stringify(ra)); if (!newRa[s.rotaDay]) newRa[s.rotaDay]=[[],[],[]]; newRa[s.rotaDay][si].push(available[0].id); self.setState({ rotaAssignments:newRa }); }
+                  else self.showToast('All staff assigned');
+                }, style: { padding:'10px', border:'1px dashed #d1d5db', borderRadius:10, textAlign:'center', fontSize:13, color:'#9ca3af', cursor:'pointer' } }, '+ Add staff')
+              )
+            );
+          }),
+          h('div', { style: { display:'flex', gap:8, marginTop:8 } },
+            h('div', { onClick: () => self.exportRotaCSV(), style: { flex:1, padding:12, background:'#fff', borderRadius:12, textAlign:'center', fontSize:13, fontWeight:600, color:'#16a34a', border:'1px solid #bbf7d0', cursor:'pointer' } }, '📊 Excel'),
+            h('div', { onClick: () => self.exportRotaPDF(), style: { flex:1, padding:12, background:'#fff', borderRadius:12, textAlign:'center', fontSize:13, fontWeight:600, color:'#dc2626', border:'1px solid #fecaca', cursor:'pointer' } }, '📄 PDF'),
+          ),
+          h('div', { onClick: () => self.showToast('Rota published! Staff notified.'), style: { padding:16, background:'#3b82f6', borderRadius:14, textAlign:'center', fontSize:16, fontWeight:600, color:'#fff', cursor:'pointer', marginTop:8 } }, 'Publish Rota'),
+        )
+      ),
+      this.renderMobileBottomNav(h, 'rota')
+    );
+  }
+
+  renderMobileTeam(h) {
+    const s = this.state;
+    const self = this;
+    return h('div', { style: { maxWidth:420, margin:'0 auto', padding:'16px 0 80px' } },
+      this.renderRoleSwitcher(h),
+      h('div', { style: { background:'#fafaf9', borderRadius:24, boxShadow:'0 8px 32px rgba(0,0,0,0.1)', overflow:'hidden', margin:'0 16px', animation:'fadeIn 0.3s ease' } },
+        h('div', { style: { padding:'16px 20px 20px' } },
+          h('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 } },
+            h('div', { style: { fontSize:20, fontWeight:700, color:'#1a1a1a' } }, 'Team'),
+            h('div', { onClick: () => self.setState({ showAddMember: true }), style: { padding:'8px 16px', background:'#3b82f6', color:'#fff', borderRadius:10, fontSize:13, fontWeight:600, cursor:'pointer' } }, '+ Add')
+          ),
+          h('div', { style: { display:'flex', flexDirection:'column', gap:8 } },
+            ...s.teamMembers.map(m =>
+              h('div', { key:m.id, style: { padding:14, background:'#fff', borderRadius:14, border:'1px solid rgba(0,0,0,0.04)', opacity: m.active ? 1 : 0.5 } },
+                h('div', { style: { display:'flex', alignItems:'center', gap:10, marginBottom:8 } },
+                  h('div', { style: { width:38, height:38, borderRadius:12, background: m.active ? '#dbeafe' : '#f3f4f6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color: m.active ? '#3b82f6' : '#9ca3af' } }, m.short),
+                  h('div', { style: { flex:1 } },
+                    h('div', { style: { fontSize:14, fontWeight:600, color:'#1a1a1a' } }, m.name),
+                    h('div', { style: { fontSize:12, color:'#9ca3af' } }, m.role)
+                  ),
+                  h('div', { style: { padding:'4px 8px', background: m.active ? '#dcfce7' : '#f3f4f6', color: m.active ? '#16a34a' : '#9ca3af', fontSize:11, fontWeight:600, borderRadius:6 } }, m.active ? 'Active' : 'Inactive')
+                ),
+                h('div', { style: { display:'flex', gap:6 } },
+                  m.active ? h(React.Fragment, null,
+                    h('div', { onClick: () => self.setState({ editingMember: m.id, editMemberName: m.name, editMemberEmail: m.name.split(' ')[0].toLowerCase()+'@email.com', editMemberRole: m.role }), style: { flex:1, padding:8, background:'#f9fafb', borderRadius:8, textAlign:'center', fontSize:11, color:'#3b82f6', cursor:'pointer' } }, 'Edit'),
+                    h('div', { onClick: () => self.showToast('Reminded '+m.name.split(' ')[0]), style: { flex:1, padding:8, background:'#f9fafb', borderRadius:8, textAlign:'center', fontSize:11, color:'#6b7280', cursor:'pointer' } }, 'Remind'),
+                    h('div', { onClick: () => { const tm = s.teamMembers.map(x => x.id===m.id ? {...x,active:false} : x); self.setState({teamMembers:tm}); }, style: { flex:1, padding:8, background:'#f9fafb', borderRadius:8, textAlign:'center', fontSize:11, color:'#6b7280', cursor:'pointer' } }, 'Deactivate'),
+                  ) :
+                  h('div', { onClick: () => { const tm = s.teamMembers.map(x => x.id===m.id ? {...x,active:true} : x); self.setState({teamMembers:tm}); }, style: { flex:1, padding:8, background:'#f9fafb', borderRadius:8, textAlign:'center', fontSize:11, color:'#3b82f6', cursor:'pointer' } }, 'Reactivate')
+                )
+              )
+            )
+          )
+        )
+      ),
+      // Reuse modals
+      s.editingMember ? this.renderEditMemberModal(h) : null,
+      s.showAddMember ? this.renderAddMemberModal(h) : null,
+      this.renderMobileBottomNav(h, 'team')
+    );
+  }
+
+  renderMobileSettings(h) {
+    const s = this.state;
+    const self = this;
+    return h('div', { style: { maxWidth:420, margin:'0 auto', padding:'16px 0 80px' } },
+      this.renderRoleSwitcher(h),
+      h('div', { style: { background:'#fafaf9', borderRadius:24, boxShadow:'0 8px 32px rgba(0,0,0,0.1)', overflow:'hidden', margin:'0 16px', animation:'fadeIn 0.3s ease' } },
+        h('div', { style: { padding:'16px 20px 20px' } },
+          h('div', { style: { fontSize:20, fontWeight:700, color:'#1a1a1a', marginBottom:16 } }, 'Settings'),
+          // Venue
+          h('div', { style: { marginBottom:16 } },
+            h('div', { style: { fontSize:13, fontWeight:600, color:'#374151', marginBottom:8 } }, 'Venue'),
+            h('div', { style: { background:'#fff', borderRadius:14, padding:16, border:'1px solid rgba(0,0,0,0.04)' } },
+              h('div', { style: { marginBottom:12 } },
+                h('div', { style: { fontSize:11, color:'#9ca3af', marginBottom:4 } }, 'Venue name'),
+                h('input', { value: s.venueName, onChange: e => self.setState({ venueName: e.target.value }), style: { width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none' } })
+              ),
+              h('div', null,
+                h('div', { style: { fontSize:11, color:'#9ca3af', marginBottom:4 } }, 'Manager email'),
+                h('div', { style: { padding:'10px 12px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, color:'#374151' } }, 'james@roseandcrown.co.uk')
+              )
+            )
+          ),
+          // Shifts
+          h('div', { style: { marginBottom:16 } },
+            h('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 } },
+              h('div', { style: { fontSize:13, fontWeight:600, color:'#374151' } }, 'Shift Types'),
+              h('div', { onClick: () => { const colors = ['#f472b6','#34d399','#fb923c','#38bdf8']; const shifts = [...s.shifts, { name:'New Shift', time:'9:00am – 5:00pm', color: colors[s.shifts.length%colors.length] }]; self.setState({ shifts, editingShift: shifts.length-1 }); }, style: { fontSize:12, color:'#3b82f6', fontWeight:600, cursor:'pointer' } }, '+ Add')
+            ),
+            h('div', { style: { display:'flex', flexDirection:'column', gap:6 } },
+              ...s.shifts.map((sh, i) =>
+                h('div', { key:i, style: { display:'flex', alignItems:'center', gap:10, padding:'12px 14px', background:'#fff', borderRadius:12, border:'1px solid rgba(0,0,0,0.04)' } },
+                  h('div', { style: { width:4, height:24, background:sh.color, borderRadius:2 } }),
+                  h('div', { style: { flex:1 } },
+                    h('div', { style: { fontSize:14, fontWeight:600, color:'#1a1a1a' } }, sh.name),
+                    h('div', { style: { fontSize:12, color:'#9ca3af' } }, sh.time)
+                  ),
+                  h('div', { style: { fontSize:13, color:'#9ca3af' } }, '⋯')
+                )
+              )
+            )
+          ),
+          // Rules
+          h('div', { style: { marginBottom:16 } },
+            h('div', { style: { fontSize:13, fontWeight:600, color:'#374151', marginBottom:8 } }, 'Scheduling Rules'),
+            h('div', { style: { background:'#fff', borderRadius:14, padding:16, border:'1px solid rgba(0,0,0,0.04)' } },
+              ...[['Max hours / week', s.maxHours ?? '48', 'maxHours'],['Min rest between shifts', s.minRest ?? '11', 'minRest']].map(([label,val,key]) =>
+                h('div', { key:label, style: { display:'flex', justifyContent:'space-between', alignItems:'center', paddingBottom:12, marginBottom:12, borderBottom:'1px solid #f3f4f6' } },
+                  h('div', { style: { fontSize:13, color:'#374151' } }, label),
+                  h('input', { value: val, onChange: e => self.setState({ [key]: e.target.value }), style: { width:60, padding:'6px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:14, fontWeight:600, textAlign:'center', outline:'none' } })
+                )
+              ),
+              h('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center' } },
+                h('div', { style: { fontSize:13, color:'#374151' } }, 'Always need'),
+                h('select', { value: s.alwaysNeed ?? '1 Bartender', onChange: e => self.setState({ alwaysNeed: e.target.value }), style: { padding:'6px 10px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:13, fontWeight:600, outline:'none', background:'#fff' } },
+                  ...['1 Bartender','2 Bartenders','1 Server','2 Servers'].map(o => React.createElement('option', { key:o }, o))
+                )
+              )
+            )
+          ),
+          // Availability window
+          h('div', { style: { marginBottom:16 } },
+            h('div', { style: { fontSize:13, fontWeight:600, color:'#374151', marginBottom:8 } }, 'Availability Window'),
+            h('div', { style: { background:'#fff', borderRadius:14, padding:16, border:'1px solid rgba(0,0,0,0.04)' } },
+              this.renderAvailWindow(h)
+            )
+          ),
+          h('div', { onClick: () => self.showToast('Settings saved!'), style: { padding:16, background:'#3b82f6', borderRadius:14, textAlign:'center', fontSize:16, fontWeight:600, color:'#fff', cursor:'pointer' } }, 'Save Changes'),
+        )
+      ),
+      this.renderMobileBottomNav(h, 'settings')
+    );
+  }
+
+  renderEditMemberModal(h) {
+    const s = this.state;
+    const self = this;
+    return h('div', { style: { position:'fixed', inset:0, background:'rgba(0,0,0,0.3)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }, onClick: () => self.setState({ editingMember: null }) },
+      h('div', { style: { background:'#fff', borderRadius:20, padding:28, width:340, maxWidth:'90vw', boxShadow:'0 20px 60px rgba(0,0,0,0.15)', animation:'fadeIn 0.2s ease' }, onClick: e => e.stopPropagation() },
+        h('div', { style: { fontSize:18, fontWeight:700, color:'#1a1a1a', marginBottom:16 } }, 'Edit Member'),
+        h('div', { style: { marginBottom:10 } },
+          h('div', { style: { fontSize:12, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Name'),
+          h('input', { value: s.editMemberName ?? '', onChange: e => self.setState({ editMemberName: e.target.value }), style: { width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none' } })
+        ),
+        h('div', { style: { marginBottom:10 } },
+          h('div', { style: { fontSize:12, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Email'),
+          h('input', { value: s.editMemberEmail ?? '', onChange: e => self.setState({ editMemberEmail: e.target.value }), style: { width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none' } })
+        ),
+        h('div', { style: { marginBottom:16 } },
+          h('div', { style: { fontSize:12, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Role'),
+          h('select', { value: s.editMemberRole ?? '', onChange: e => self.setState({ editMemberRole: e.target.value }), style: { width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none', background:'#fff' } },
+            ...['Bartender','Server','Kitchen','Host','Manager'].map(r => React.createElement('option', { key:r, value:r }, r))
+          )
+        ),
+        h('div', { style: { display:'flex', gap:8 } },
+          h('div', { onClick: () => self.setState({ editingMember: null }), style: { flex:1, padding:12, background:'#f3f4f6', borderRadius:12, textAlign:'center', fontSize:14, fontWeight:600, color:'#6b7280', cursor:'pointer' } }, 'Cancel'),
+          h('div', { onClick: () => {
+            const name = (s.editMemberName ?? '').trim();
+            if (!name) { self.showToast('Enter a name'); return; }
+            const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+            const tm = s.teamMembers.map(x => x.id === s.editingMember ? {...x, name, short:initials, role: s.editMemberRole ?? x.role} : x);
+            self.setState({ teamMembers:tm, editingMember:null }); self.showToast(name.split(' ')[0]+' updated!');
+          }, style: { flex:1, padding:12, background:'#3b82f6', borderRadius:12, textAlign:'center', fontSize:14, fontWeight:600, color:'#fff', cursor:'pointer' } }, 'Save')
+        )
+      )
+    );
+  }
+
+  renderAddMemberModal(h) {
+    const s = this.state;
+    const self = this;
+    return h('div', { style: { position:'fixed', inset:0, background:'rgba(0,0,0,0.3)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }, onClick: () => self.setState({ showAddMember: false }) },
+      h('div', { style: { background:'#fff', borderRadius:20, padding:28, width:340, maxWidth:'90vw', boxShadow:'0 20px 60px rgba(0,0,0,0.15)', animation:'fadeIn 0.2s ease' }, onClick: e => e.stopPropagation() },
+        h('div', { style: { fontSize:18, fontWeight:700, color:'#1a1a1a', marginBottom:16 } }, 'Add Team Member'),
+        h('div', { style: { marginBottom:10 } },
+          h('div', { style: { fontSize:12, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Name'),
+          h('input', { value: s.newName, onChange: e => self.setState({ newName: e.target.value }), placeholder:'e.g. Priya Sharma', style: { width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none' } })
+        ),
+        h('div', { style: { marginBottom:10 } },
+          h('div', { style: { fontSize:12, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Email'),
+          h('input', { value: s.newEmail, onChange: e => self.setState({ newEmail: e.target.value }), placeholder:'email@example.com', style: { width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none' } })
+        ),
+        h('div', { style: { marginBottom:16 } },
+          h('div', { style: { fontSize:12, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Role'),
+          h('select', { value: s.newRole, onChange: e => self.setState({ newRole: e.target.value }), style: { width:'100%', padding:'10px 12px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, boxSizing:'border-box', outline:'none', background:'#fff' } },
+            ...['Bartender','Server','Kitchen','Host','Manager'].map(r => React.createElement('option', { key:r, value:r }, r))
+          )
+        ),
+        h('div', { style: { display:'flex', gap:8 } },
+          h('div', { onClick: () => self.setState({ showAddMember: false }), style: { flex:1, padding:12, background:'#f3f4f6', borderRadius:12, textAlign:'center', fontSize:14, fontWeight:600, color:'#6b7280', cursor:'pointer' } }, 'Cancel'),
+          h('div', { onClick: () => {
+            if (!s.newName.trim()) { self.showToast('Enter a name'); return; }
+            const initials = s.newName.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+            const newM = { id:Date.now(), name:s.newName.trim(), short:initials, role:s.newRole, active:true, submitted:false };
+            self.setState({ teamMembers:[...s.teamMembers,newM], showAddMember:false, newName:'', newEmail:'', newRole:'Server' });
+            self.showToast(s.newName.trim().split(' ')[0]+' added!');
+          }, style: { flex:1, padding:12, background:'#3b82f6', borderRadius:12, textAlign:'center', fontSize:14, fontWeight:600, color:'#fff', cursor:'pointer' } }, 'Add')
+        )
+      )
+    );
+  }
+
+  renderMobileHeader(h, title) {
+    const s = this.state;
+    return h('div', { style: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 20px 12px' } },
+      h('div', null,
+        h('div', { style: { fontSize:12, color:'#9ca3af', fontWeight:500 } }, s.venueName),
+        h('div', { style: { fontSize:22, fontWeight:700, color:'#1a1a1a' } }, title),
+      ),
+      h('div', { style: { width:40, height:40, borderRadius:12, background:'#e0e7ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, color:'#3b82f6' } }, 'JM')
+    );
+  }
+
+  renderSidebar(h, active) {
+    const self = this;
+    const items = [
+      { key:'dashboard', label:'Dashboard', icon:'📊', view:'mgr_dash' },
+      { key:'rota', label:'Rota', icon:'📅', view:'mgr_rota' },
+      { key:'team', label:'Team', icon:'👥', view:'mgr_team' },
+      { key:'settings', label:'Settings', icon:'⚙️', view:'mgr_settings' },
+    ];
+    return h('div', { style: { width:240, background:'#fff', borderRight:'1px solid #f0f0ef', padding:'28px 20px', display:'flex', flexDirection:'column', gap:4, flexShrink:0 } },
+      h('div', { style: { display:'flex', alignItems:'center', gap:10, marginBottom:28 } },
+        h('div', { style: { width:36, height:36, borderRadius:10, background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:800, color:'#3b82f6' } }, 'R'),
+        h('div', null,
+          h('div', { style: { fontSize:15, fontWeight:700, color:'#1a1a1a' } }, 'Rota'),
+          h('div', { style: { fontSize:11, color:'#9ca3af' } }, this.state.venueName)
+        )
+      ),
+      ...items.map(it =>
+        h('div', { key:it.key, onClick: () => self.setState({ view: it.view }), style: { padding:'10px 14px', borderRadius:10, fontSize:14, fontWeight: active === it.key ? 600 : 500, color: active === it.key ? '#3b82f6' : '#6b7280', background: active === it.key ? '#eff6ff' : 'transparent', cursor:'pointer', display:'flex', alignItems:'center', gap:10 } },
+          h('span', { style: { fontSize:16 } }, it.icon),
+          it.label
+        )
+      ),
+      h('div', { style: { flex:1 } }),
+      h('div', { style: { display:'flex', alignItems:'center', gap:10, padding:'12px 14px', background:'#f9fafb', borderRadius:10 } },
+        h('div', { style: { width:32, height:32, borderRadius:10, background:'#e0e7ff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#3b82f6' } }, 'JM'),
+        h('div', null,
+          h('div', { style: { fontSize:13, fontWeight:600, color:'#1a1a1a' } }, 'James Martin'),
+          h('div', { style: { fontSize:11, color:'#9ca3af' } }, 'Manager')
+        )
+      )
+    );
+  }
+
+  getDayIndex(day) {
+    return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].indexOf(day);
+  }
+
+  timeToNum(hour, ampm) {
+    let h = parseInt(hour);
+    if (ampm === 'PM' && h !== 12) h += 12;
+    if (ampm === 'AM' && h === 12) h = 0;
+    return h;
+  }
+
+  isCloseBefore(openDay, openHour, openAmpm, closeDay, closeHour, closeAmpm) {
+    const dayOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const od = dayOrder.indexOf(openDay);
+    const cd = dayOrder.indexOf(closeDay);
+    if (cd < od) return true;
+    if (cd === od) {
+      return this.timeToNum(closeHour, closeAmpm) <= this.timeToNum(openHour, openAmpm);
+    }
+    return false;
+  }
+
+  autoSuggestClose(openDay, openHour, openAmpm) {
+    const dayOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const od = dayOrder.indexOf(openDay);
+    // Close 4 days later at 11 PM
+    const cd = (od + 4) % 7;
+    return { day: dayOrder[cd], hour: '11', ampm: 'PM' };
+  }
+
+  autoSuggestRemind(openDay, closeDay, closeHour, closeAmpm) {
+    const dayOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const cd = dayOrder.indexOf(closeDay);
+    // Remind 1 day before close at 6 PM
+    const rd = (cd - 1 + 7) % 7;
+    return { day: dayOrder[rd], hour: '6', ampm: 'PM' };
+  }
+
+  renderAvailWindow(h) {
+    const s = this.state;
+    const self = this;
+    const daysOfWeek = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const hours = ['1','2','3','4','5','6','7','8','9','10','11','12'];
+    const ampms = ['AM','PM'];
+
+    const openDay = s.winOpenDay ?? 'Saturday';
+    const openHour = s.winOpenHour ?? '9';
+    const openAmpm = s.winOpenAmpm ?? 'AM';
+    const closeDay = s.winCloseDay ?? 'Wednesday';
+    const closeHour = s.winCloseHour ?? '11';
+    const closeAmpm = s.winCloseAmpm ?? 'PM';
+    const remindDay = s.winRemindDay ?? 'Tuesday';
+    const remindHour = s.winRemindHour ?? '6';
+    const remindAmpm = s.winRemindAmpm ?? 'PM';
+
+    const hasError = this.isCloseBefore(openDay, openHour, openAmpm, closeDay, closeHour, closeAmpm);
+
+    const selStyle = { padding:'7px 6px', borderRadius:8, border:'1.5px solid #e5e7eb', fontSize:13, fontWeight:600, color:'#1a1a1a', outline:'none', background:'#fff', cursor:'pointer' };
+    const selStyleErr = { ...selStyle, border:'1.5px solid #fca5a5', background:'#fef2f2' };
+
+    const renderTimePicker = (label, day, hour, ampm, onDay, onHour, onAmpm, error) => {
+      const ss = error ? selStyleErr : selStyle;
+      return h('div', { style: { paddingBottom:16, marginBottom:16, borderBottom:'1px solid #f3f4f6' } },
+        h('div', { style: { fontSize:13, color:'#374151', marginBottom:8, fontWeight:500 } }, label),
+        h('div', { style: { display:'flex', gap:6, alignItems:'center' } },
+          h('select', { value: day, onChange: onDay, style: { ...ss, flex:2 } },
+            ...daysOfWeek.map(d => h('option', { key:d, value:d }, d))
+          ),
+          h('div', { style: { fontSize:13, color:'#9ca3af' } }, 'at'),
+          h('select', { value: hour, onChange: onHour, style: { ...ss, flex:1 } },
+            ...hours.map(hr => h('option', { key:hr, value:hr }, hr))
+          ),
+          h('select', { value: ampm, onChange: onAmpm, style: { ...ss, flex:1 } },
+            ...ampms.map(ap => h('option', { key:ap, value:ap }, ap))
+          ),
+        ),
+        error ? h('div', { style: { fontSize:12, color:'#ef4444', marginTop:6, display:'flex', alignItems:'center', gap:4 } }, '⚠ Close time must be after open time') : null
+      );
+    };
+
+    return h('div', { style: { display:'flex', flexDirection:'column' } },
+      renderTimePicker('Opens', openDay, openHour, openAmpm,
+        e => {
+          const nd = e.target.value;
+          const sug = this.autoSuggestClose(nd, openHour, openAmpm);
+          const rem = this.autoSuggestRemind(nd, sug.day, sug.hour, sug.ampm);
+          self.setState({ winOpenDay: nd, winCloseDay: sug.day, winCloseHour: sug.hour, winCloseAmpm: sug.ampm, winRemindDay: rem.day, winRemindHour: rem.hour, winRemindAmpm: rem.ampm });
+        },
+        e => self.setState({ winOpenHour: e.target.value }),
+        e => self.setState({ winOpenAmpm: e.target.value }),
+        false
+      ),
+      renderTimePicker('Closes', closeDay, closeHour, closeAmpm,
+        e => {
+          const nd = e.target.value;
+          const rem = this.autoSuggestRemind(openDay, nd, closeHour, closeAmpm);
+          self.setState({ winCloseDay: nd, winRemindDay: rem.day, winRemindHour: rem.hour, winRemindAmpm: rem.ampm });
+        },
+        e => self.setState({ winCloseHour: e.target.value }),
+        e => self.setState({ winCloseAmpm: e.target.value }),
+        hasError
+      ),
+      renderTimePicker('Auto-remind', remindDay, remindHour, remindAmpm,
+        e => self.setState({ winRemindDay: e.target.value }),
+        e => self.setState({ winRemindHour: e.target.value }),
+        e => self.setState({ winRemindAmpm: e.target.value }),
+        false
+      ),
+      h('div', { style: { padding:'10px 14px', background:'#f9fafb', borderRadius:8, fontSize:12, color:'#6b7280', lineHeight:1.4, marginTop:4 } },
+        '💡 Tip: Changing the open day auto-suggests close and reminder times.'
+      )
+    );
+  }
+
+  exportRotaCSV() {
+    const s = this.state;
+    const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const ra = s.rotaAssignments || {};
+    const getMember = (id) => s.teamMembers.find(m => m.id === id);
+
+    let csv = 'Shift,' + days.join(',') + '\n';
+    s.shifts.forEach((shift, si) => {
+      const row = [shift.name];
+      days.forEach((_, di) => {
+        const assigned = (ra[di] && ra[di][si]) || [];
+        const names = assigned.map(id => { const m = getMember(id); return m ? m.name : ''; }).filter(Boolean).join(' / ');
+        row.push('"' + (names || '—') + '"');
+      });
+      csv += row.join(',') + '\n';
+    });
+
+    csv += '\nHours Summary\n';
+    csv += 'Staff,Mon,Tue,Wed,Thu,Fri,Sat,Sun,Total\n';
+    s.teamMembers.filter(m => m.active).forEach(m => {
+      let total = 0;
+      const row = [m.name];
+      days.forEach((_, di) => {
+        let hrs = 0;
+        s.shifts.forEach((_, si) => {
+          const assigned = (ra[di] && ra[di][si]) || [];
+          if (assigned.includes(m.id)) hrs += 7;
+        });
+        total += hrs;
+        row.push(hrs > 0 ? hrs : '—');
+      });
+      row.push(total);
+      csv += row.join(',') + '\n';
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'rota-' + s.venueName.replace(/[^a-zA-Z0-9]/g, '-') + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    this.showToast('Rota exported as CSV — open in Excel');
+  }
+
+  exportRotaPDF() {
+    const s = this.state;
+    const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const ra = s.rotaAssignments || {};
+    const getMember = (id) => s.teamMembers.find(m => m.id === id);
+
+    const shiftColors = { 0: '#dbeafe', 1: '#fef9c3', 2: '#ede9fe' };
+    const shiftTextColors = { 0: '#1e40af', 1: '#78350f', 2: '#4c1d95' };
+
+    let tableRows = '';
+    s.shifts.forEach((shift, si) => {
+      let cells = '<td style="padding:10px 12px;font-weight:700;white-space:nowrap;border-right:1px solid #e5e7eb;background:#f9fafb;"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + shift.color + ';margin-right:6px;"></span>' + shift.name + '<br><span style="font-weight:400;font-size:11px;color:#6b7280;">' + shift.time + '</span></td>';
+      days.forEach((_, di) => {
+        const assigned = (ra[di] && ra[di][si]) || [];
+        const names = assigned.map(id => { const m = getMember(id); return m ? m.name.split(' ')[0] + ' ' + m.name.split(' ')[1][0] + '.' : ''; }).filter(Boolean);
+        cells += '<td style="padding:8px;border-right:1px solid #e5e7eb;vertical-align:top;">' + (names.length ? names.map(n => '<div style="padding:4px 8px;background:' + shiftColors[si] + ';color:' + shiftTextColors[si] + ';border-radius:6px;font-size:12px;font-weight:600;margin-bottom:3px;">' + n + '</div>').join('') : '<span style="color:#d1d5db;">—</span>') + '</td>';
+      });
+      tableRows += '<tr style="border-bottom:1px solid #e5e7eb;">' + cells + '</tr>';
+    });
+
+    const dateHeaders = days.map((d, i) => {
+      const date = 28 + i > 31 ? (28 + i - 31) : 28 + i;
+      return '<th style="padding:12px 8px;text-align:center;border-right:1px solid #e5e7eb;border-bottom:2px solid #e5e7eb;"><div style="font-size:11px;color:#6b7280;text-transform:uppercase;">' + d + '</div><div style="font-size:16px;font-weight:700;">' + date + '</div></th>';
+    }).join('');
+
+    const html = '<!DOCTYPE html><html><head><title>Rota — ' + s.venueName + '</title><style>body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:40px;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@media print{body{padding:20px;}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;"><div><div style="font-size:24px;font-weight:700;">' + s.venueName + '</div><div style="font-size:14px;color:#6b7280;">Weekly Rota — 28 Jul – 3 Aug 2025</div></div><div style="font-size:12px;color:#9ca3af;">Generated ' + new Date().toLocaleDateString() + '</div></div><table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;font-size:13px;"><thead><tr style="background:#fafaf9;"><th style="padding:12px;text-align:left;border-right:1px solid #e5e7eb;border-bottom:2px solid #e5e7eb;width:120px;">Shift</th>' + dateHeaders + '</tr></thead><tbody>' + tableRows + '</tbody></table><div style="margin-top:24px;font-size:11px;color:#9ca3af;">Staff count: ' + s.teamMembers.filter(m=>m.active).length + ' active members</div></body></html>';
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      setTimeout(() => win.print(), 500);
+    } else {
+      this.showToast('Please allow popups to export PDF');
+    }
+  }
+
+  renderOnboard(h, step) {
+    const self = this;
+    const s = this.state;
+    const progress = h('div', { style: { display:'flex', gap:4, marginBottom:28 } },
+      ...[1,2,3,4].map(i => h('div', { key:i, style: { flex:1, height:4, background: i <= step ? '#3b82f6' : '#e5e7eb', borderRadius:2, transition:'background 0.3s ease' } }))
+    );
+
+    const steps = {
+      1: h('div', null,
+        progress,
+        h('div', { style: { fontSize:22, fontWeight:700, color:'#1a1a1a', marginBottom:6 } }, 'What\'s your venue called?'),
+        h('div', { style: { fontSize:14, color:'#9ca3af', marginBottom:28 } }, 'This is how your team will see it'),
+        h('div', { style: { marginBottom:16 } },
+          h('div', { style: { fontSize:13, fontWeight:600, color:'#374151', marginBottom:6 } }, 'Venue name'),
+          h('input', { value: s.venueName, onChange: e => self.setState({ venueName: e.target.value }), style: { width:'100%', padding:'14px 16px', borderRadius:12, border:'2px solid #3b82f6', fontSize:15, color:'#1a1a1a', background:'#fff', boxSizing:'border-box', outline:'none' } })
+        ),
+        h('div', { onClick: () => self.setState({ view: 'onboard_2' }), style: { width:'100%', padding:16, background:'#3b82f6', color:'#fff', textAlign:'center', borderRadius:14, fontSize:16, fontWeight:600, cursor:'pointer', boxSizing:'border-box' } }, 'Continue'),
+      ),
+      2: h('div', null,
+        progress,
+        h('div', { style: { fontSize:22, fontWeight:700, color:'#1a1a1a', marginBottom:6 } }, 'Define your shifts'),
+        h('div', { style: { fontSize:14, color:'#9ca3af', marginBottom:24 } }, 'We\'ve added common ones — edit or add your own'),
+        h('div', { style: { display:'flex', flexDirection:'column', gap:8, marginBottom:12 } },
+          ...s.shifts.map((sh, i) =>
+            s.onboardEditShift === i ?
+            h('div', { key:i, style: { padding:14, background:'#eff6ff', borderRadius:12, border:'2px solid #3b82f6' } },
+              h('div', { style: { display:'flex', alignItems:'center', gap:8, marginBottom:8 } },
+                h('div', { style: { width:4, height:28, background:sh.color, borderRadius:2 } }),
+                h('input', { value: sh.name, onChange: e => { const shifts = [...s.shifts]; shifts[i] = {...shifts[i], name: e.target.value}; self.setState({ shifts }); }, style: { flex:1, padding:'8px 10px', borderRadius:8, border:'1.5px solid #dbeafe', fontSize:14, fontWeight:600, outline:'none', boxSizing:'border-box' } }),
+              ),
+              h('div', { style: { display:'flex', alignItems:'center', gap:6, marginBottom:8 } },
+                h('select', { value: sh.startTime ?? sh.time.split(' – ')[0] ?? '7:00am', onChange: e => { const shifts = [...s.shifts]; const end = shifts[i].endTime ?? shifts[i].time.split(' – ')[1] ?? '2:00pm'; shifts[i] = {...shifts[i], startTime: e.target.value, endTime: end, time: e.target.value + ' – ' + end}; self.setState({ shifts }); }, style: { flex:1, padding:'8px 8px', borderRadius:8, border:'1.5px solid #dbeafe', fontSize:13, outline:'none', background:'#fff' } },
+                  ...['5:00am','6:00am','7:00am','8:00am','9:00am','10:00am','11:00am','12:00pm','1:00pm','2:00pm','3:00pm','4:00pm','5:00pm','6:00pm','7:00pm','8:00pm','9:00pm','10:00pm'].map(t => h('option', { key:t, value:t }, t))
+                ),
+                h('span', { style: { fontSize:13, color:'#6b7280' } }, '→'),
+                h('select', { value: sh.endTime ?? sh.time.split(' – ')[1] ?? '2:00pm', onChange: e => { const shifts = [...s.shifts]; const start = shifts[i].startTime ?? shifts[i].time.split(' – ')[0] ?? '7:00am'; shifts[i] = {...shifts[i], endTime: e.target.value, startTime: start, time: start + ' – ' + e.target.value}; self.setState({ shifts }); }, style: { flex:1, padding:'8px 8px', borderRadius:8, border:'1.5px solid #dbeafe', fontSize:13, outline:'none', background:'#fff' } },
+                  ...['12:00pm','1:00pm','2:00pm','3:00pm','4:00pm','5:00pm','6:00pm','7:00pm','8:00pm','9:00pm','10:00pm','11:00pm','close'].map(t => h('option', { key:t, value:t }, t))
+                ),
+              ),
+              h('div', { style: { display:'flex', gap:8 } },
+                h('div', { onClick: () => self.setState({ onboardEditShift: null }), style: { flex:1, padding:8, background:'#3b82f6', color:'#fff', borderRadius:8, textAlign:'center', fontSize:13, fontWeight:600, cursor:'pointer' } }, 'Done'),
+                s.shifts.length > 1 ? h('div', { onClick: () => { const shifts = s.shifts.filter((_, j) => j !== i); self.setState({ shifts, onboardEditShift: null }); }, style: { padding:8, background:'#fff', color:'#ef4444', borderRadius:8, textAlign:'center', fontSize:13, fontWeight:600, cursor:'pointer', border:'1px solid #fecaca' } }, 'Delete') : null,
+              )
+            ) :
+            h('div', { key:i, style: { display:'flex', alignItems:'center', gap:10, padding:14, background:'#fff', borderRadius:12, border:'1px solid rgba(0,0,0,0.04)' } },
+              h('div', { style: { width:4, height:28, background:sh.color, borderRadius:2 } }),
+              h('div', { style: { flex:1 } },
+                h('div', { style: { fontSize:14, fontWeight:600, color:'#1a1a1a' } }, sh.name),
+                h('div', { style: { fontSize:12, color:'#9ca3af' } }, sh.time)
+              ),
+              h('div', { onClick: () => self.setState({ onboardEditShift: i }), style: { fontSize:13, color:'#3b82f6', cursor:'pointer', fontWeight:500 } }, 'Edit')
+            )
+          )
+        ),
+        h('div', { onClick: () => {
+          const colors = ['#f472b6','#34d399','#fb923c','#38bdf8','#c084fc','#facc15'];
+          const color = colors[s.shifts.length % colors.length];
+          const shifts = [...s.shifts, { name:'New Shift', time:'9:00am – 5:00pm', color }];
+          self.setState({ shifts, onboardEditShift: shifts.length - 1 });
+        }, style: { padding:12, border:'2px dashed #e5e7eb', borderRadius:12, textAlign:'center', fontSize:14, color:'#3b82f6', fontWeight:600, cursor:'pointer', marginBottom:20 } }, '+ Add another shift'),
+        h('div', { style: { display:'flex', gap:10 } },
+          h('div', { onClick: () => self.setState({ view:'onboard_1' }), style: { flex:1, padding:16, background:'#f3f4f6', color:'#6b7280', textAlign:'center', borderRadius:14, fontSize:14, fontWeight:600, cursor:'pointer' } }, 'Back'),
+          h('div', { onClick: () => self.setState({ view:'onboard_3' }), style: { flex:1, padding:16, background:'#3b82f6', color:'#fff', textAlign:'center', borderRadius:14, fontSize:16, fontWeight:600, cursor:'pointer' } }, 'Continue'),
+        )
+      ),
+      3: h('div', null,
+        progress,
+        h('div', { style: { fontSize:22, fontWeight:700, color:'#1a1a1a', marginBottom:6 } }, 'Add your team'),
+        h('div', { style: { fontSize:14, color:'#9ca3af', marginBottom:20 } }, 'You can always add more later'),
+        // Added members list
+        s.teamMembers.filter(m => m.active).length > 0 ?
+          h('div', { style: { display:'flex', flexDirection:'column', gap:6, marginBottom:16 } },
+            ...s.teamMembers.filter(m => m.active).map(m =>
+              h('div', { key:m.id, style: { display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'#fff', borderRadius:12, border:'1px solid rgba(0,0,0,0.04)' } },
+                h('div', { style: { width:32, height:32, borderRadius:10, background:'#dbeafe', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color:'#3b82f6' } }, m.short),
+                h('div', { style: { flex:1 } },
+                  h('div', { style: { fontSize:14, fontWeight:500, color:'#1a1a1a' } }, m.name),
+                  h('div', { style: { fontSize:11, color:'#9ca3af' } }, m.role),
+                ),
+                h('div', { onClick: () => { const tm = s.teamMembers.map(x => x.id === m.id ? {...x, active: false} : x); self.setState({ teamMembers: tm }); }, style: { fontSize:12, color:'#9ca3af', cursor:'pointer', padding:'4px 8px' } }, '✕')
+              )
+            )
+          ) : h('div', { style: { padding:20, textAlign:'center', fontSize:13, color:'#9ca3af', background:'#f9fafb', borderRadius:12, marginBottom:16 } }, 'No team members yet — add someone below'),
+        // Add form
+        h('div', { style: { padding:16, background:'#f9fafb', borderRadius:14, marginBottom:20 } },
+          h('div', { style: { marginBottom:10 } },
+            h('div', { style: { fontSize:12, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Name'),
+            h('input', { value: s.onboardNewName ?? '', onChange: e => self.setState({ onboardNewName: e.target.value }), placeholder: 'e.g. Priya Sharma', style: { width:'100%', padding:'10px 14px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, background:'#fff', boxSizing:'border-box', outline:'none' } })
+          ),
+          h('div', { style: { display:'flex', gap:8, marginBottom:10 } },
+            h('div', { style: { flex:1 } },
+              h('div', { style: { fontSize:12, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Email'),
+              h('input', { value: s.onboardNewEmail ?? '', onChange: e => self.setState({ onboardNewEmail: e.target.value }), placeholder: 'email@example.com', style: { width:'100%', padding:'10px 14px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, background:'#fff', boxSizing:'border-box', outline:'none' } })
+            ),
+            h('div', { style: { flex:1 } },
+              h('div', { style: { fontSize:12, fontWeight:600, color:'#374151', marginBottom:4 } }, 'Role'),
+              h('select', { value: s.onboardNewRole ?? 'Server', onChange: e => self.setState({ onboardNewRole: e.target.value }), style: { width:'100%', padding:'10px 14px', borderRadius:10, border:'1.5px solid #e5e7eb', fontSize:14, background:'#fff', boxSizing:'border-box', outline:'none', cursor:'pointer' } },
+                ...['Bartender','Server','Kitchen','Host','Manager'].map(r => h('option', { key:r, value:r }, r))
+              )
+            )
+          ),
+          h('div', { onClick: () => {
+            const name = (s.onboardNewName ?? '').trim();
+            if (!name) { self.showToast('Please enter a name'); return; }
+            const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
+            const newM = { id: Date.now(), name, short: initials, role: s.onboardNewRole ?? 'Server', active: true, submitted: false };
+            self.setState({ teamMembers: [...s.teamMembers, newM], onboardNewName: '', onboardNewEmail: '', onboardNewRole: 'Server' });
+            self.showToast(name.split(' ')[0] + ' added!');
+          }, style: { padding:10, background:'#3b82f6', color:'#fff', textAlign:'center', borderRadius:10, fontSize:14, fontWeight:600, cursor:'pointer' } }, 'Add to team')
+        ),
+        h('div', { style: { display:'flex', gap:10 } },
+          h('div', { onClick: () => self.setState({ view:'onboard_2' }), style: { flex:1, padding:16, background:'#f3f4f6', color:'#6b7280', textAlign:'center', borderRadius:14, fontSize:14, fontWeight:600, cursor:'pointer' } }, 'Back'),
+          h('div', { onClick: () => self.setState({ view:'onboard_4' }), style: { flex:1, padding:16, background:'#3b82f6', color:'#fff', textAlign:'center', borderRadius:14, fontSize:16, fontWeight:600, cursor:'pointer' } }, 'Continue'),
+        )
+      ),
+      4: h('div', null,
+        progress,
+        h('div', { style: { textAlign:'center', padding:'20px 0' } },
+          h('div', { style: { width:72, height:72, borderRadius:'50%', background:'#dcfce7', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 20px', fontSize:32 } }, '🎉'),
+          h('div', { style: { fontSize:24, fontWeight:700, color:'#1a1a1a', marginBottom:8 } }, 'You\'re all set!'),
+          h('div', { style: { fontSize:14, color:'#6b7280', lineHeight:1.5, marginBottom:24 } }, 'Share this link with your team so they can submit their availability'),
+          h('div', { style: { padding:'14px 16px', background:'#f3f4f6', borderRadius:12, display:'flex', alignItems:'center', gap:8, marginBottom:20 } },
+            h('div', { style: { flex:1, fontSize:13, color:'#374151', overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' } }, 'rota.app/t/' + s.venueName.toLowerCase().replace(/[^a-z]/g,'-').replace(/-+/g,'-').slice(0,20)),
+            h('div', { onClick: () => self.showToast('Link copied!'), style: { padding:'6px 12px', background:'#3b82f6', color:'#fff', borderRadius:8, fontSize:12, fontWeight:600, cursor:'pointer', flexShrink:0 } }, 'Copy')
+          ),
+          h('div', { onClick: () => self.setState({ view:'mgr_dash' }), style: { width:'100%', padding:16, background:'#3b82f6', color:'#fff', textAlign:'center', borderRadius:14, fontSize:16, fontWeight:600, cursor:'pointer', boxSizing:'border-box' } }, 'Go to Dashboard'),
+        )
+      ),
+    };
+
+    return h('div', { style: { maxWidth:420, margin:'0 auto', padding:'16px 0' } },
+      this.renderRoleSwitcher(h),
+      h('div', { style: { background:'#fafaf9', borderRadius:24, boxShadow:'0 8px 32px rgba(0,0,0,0.1)', overflow:'hidden', margin:'0 16px', animation:'fadeIn 0.3s ease' } },
+        h('div', { style: { padding:'24px 24px 28px' } }, steps[step])
+      )
+    );
+  }
+}
+
+</script>
+</body>
+</html>

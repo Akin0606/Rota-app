@@ -1,0 +1,207 @@
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+
+from config import get_settings
+from database import get_supabase
+from models.schemas import (
+    AdminActivityOut,
+    AdminVenueDetailOut,
+    AdminVenueOut,
+    RotaSummaryOut,
+    StaffManagerOut,
+)
+from routers.rota import run_solver_for_period
+from routers.staff import _generate_unique_pin
+
+router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+
+def require_admin(x_admin_secret: str = Header(default="")) -> None:
+    settings = get_settings()
+    if not settings.admin_secret or x_admin_secret != settings.admin_secret:
+        raise HTTPException(status_code=401, detail="Invalid admin secret")
+
+
+def _get_venue_or_404(venue_id: str) -> dict:
+    supabase = get_supabase()
+    res = supabase.table("venues").select("*").eq("id", venue_id).limit(1).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Venue not found")
+    return res.data[0]
+
+
+def _latest_period(venue_id: str) -> Optional[dict]:
+    supabase = get_supabase()
+    res = (
+        supabase.table("availability_periods")
+        .select("*")
+        .eq("venue_id", venue_id)
+        .order("week_start", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return res.data[0] if res.data else None
+
+
+@router.get("/venues", response_model=list[AdminVenueOut], dependencies=[Depends(require_admin)])
+def list_venues():
+    supabase = get_supabase()
+    venues = supabase.table("venues").select("*").order("created_at", desc=True).execute().data
+
+    all_staff = supabase.table("staff_members").select("id, venue_id, is_active").execute().data
+    staff_counts: dict[str, int] = {}
+    for s in all_staff:
+        if s["is_active"]:
+            staff_counts[s["venue_id"]] = staff_counts.get(s["venue_id"], 0) + 1
+
+    all_periods = (
+        supabase.table("availability_periods")
+        .select("venue_id, status, week_start")
+        .order("week_start", desc=True)
+        .execute()
+        .data
+    )
+    latest_status: dict[str, str] = {}
+    for p in all_periods:
+        latest_status.setdefault(p["venue_id"], p["status"])
+
+    return [
+        {
+            "id": v["id"],
+            "name": v["name"],
+            "manager_email": v["manager_email"],
+            "created_at": v["created_at"],
+            "staff_count": staff_counts.get(v["id"], 0),
+            "period_status": latest_status.get(v["id"]),
+        }
+        for v in venues
+    ]
+
+
+@router.get(
+    "/venues/{venue_id}",
+    response_model=AdminVenueDetailOut,
+    dependencies=[Depends(require_admin)],
+)
+def get_venue_detail(venue_id: str):
+    supabase = get_supabase()
+    venue = _get_venue_or_404(venue_id)
+
+    staff = (
+        supabase.table("staff_members")
+        .select("*")
+        .eq("venue_id", venue_id)
+        .order("created_at")
+        .execute()
+        .data
+    )
+
+    period = _latest_period(venue_id)
+    submitted_ids: set[str] = set()
+    if period:
+        subs = (
+            supabase.table("availability_submissions")
+            .select("staff_id")
+            .eq("period_id", period["id"])
+            .execute()
+            .data
+        )
+        submitted_ids = {s["staff_id"] for s in subs}
+
+    for member in staff:
+        member["submitted"] = member["id"] in submitted_ids if period else None
+
+    return {
+        "id": venue["id"],
+        "name": venue["name"],
+        "manager_email": venue["manager_email"],
+        "created_at": venue["created_at"],
+        "link_token": venue["link_token"],
+        "staff": staff,
+        "period": (
+            {"id": period["id"], "week_start": str(period["week_start"]), "status": period["status"]}
+            if period
+            else None
+        ),
+    }
+
+
+@router.get("/activity", response_model=list[AdminActivityOut], dependencies=[Depends(require_admin)])
+def list_all_activity(limit: int = Query(default=50, le=200)):
+    supabase = get_supabase()
+    rows = (
+        supabase.table("activity_log")
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+        .data
+    )
+
+    venue_ids = {r["venue_id"] for r in rows if r.get("venue_id")}
+    staff_ids = {r["staff_id"] for r in rows if r.get("staff_id")}
+
+    venues_by_id: dict[str, str] = {}
+    if venue_ids:
+        vres = supabase.table("venues").select("id, name").in_("id", list(venue_ids)).execute()
+        venues_by_id = {v["id"]: v["name"] for v in vres.data}
+
+    staff_by_id: dict[str, str] = {}
+    if staff_ids:
+        sres = supabase.table("staff_members").select("id, name").in_("id", list(staff_ids)).execute()
+        staff_by_id = {s["id"]: s["name"] for s in sres.data}
+
+    for r in rows:
+        r["venue_name"] = venues_by_id.get(r["venue_id"], "Unknown venue")
+        r["staff_name"] = staff_by_id.get(r["staff_id"]) if r.get("staff_id") else None
+
+    return rows
+
+
+@router.post(
+    "/venues/{venue_id}/generate",
+    response_model=RotaSummaryOut,
+    dependencies=[Depends(require_admin)],
+)
+def admin_generate_rota(venue_id: str):
+    venue = _get_venue_or_404(venue_id)
+    period = _latest_period(venue_id)
+    if not period:
+        raise HTTPException(status_code=404, detail="This venue has no availability period yet")
+
+    return run_solver_for_period(venue, period, note=" (triggered via admin console)")
+
+
+@router.post(
+    "/staff/{staff_id}/reset-pin",
+    response_model=StaffManagerOut,
+    dependencies=[Depends(require_admin)],
+)
+def admin_reset_pin(staff_id: str):
+    supabase = get_supabase()
+    staff_res = supabase.table("staff_members").select("*").eq("id", staff_id).limit(1).execute()
+    if not staff_res.data:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    staff = staff_res.data[0]
+
+    new_pin = _generate_unique_pin(staff["venue_id"])
+    updated = (
+        supabase.table("staff_members")
+        .update({"pin": new_pin})
+        .eq("id", staff_id)
+        .execute()
+        .data[0]
+    )
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": staff["venue_id"],
+            "staff_id": staff_id,
+            "action": "pin_reset",
+            "detail": f"{staff['name']}'s PIN was reset (via admin console)",
+        }
+    ).execute()
+
+    updated["submitted"] = None
+    return updated
