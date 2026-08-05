@@ -207,6 +207,19 @@ class AdminVenueOut(BaseModel):
     pending: bool = False
 
 
+class WaitlistRequest(BaseModel):
+    venue_name: str = Field(min_length=1)
+    email: str = Field(min_length=3)
+
+
+class WaitlistEntryOut(BaseModel):
+    id: str
+    venue_name: str
+    email: str
+    status: str
+    created_at: str
+
+
 class AdminCreateManagerRequest(BaseModel):
     email: str = Field(min_length=3)
 

@@ -1,0 +1,533 @@
+/* Crewplan marketing landing — converted verbatim from crewplan-landing.html.
+   Every rule is scoped under .crewplan so nothing leaks into the app UI.
+   Fonts are injected as --font-display / --font-body by the marketing layout
+   via next/font. */
+
+.crewplan {
+  --bg: #0d0d0d;
+  --surface: #141414;
+  --surface-2: #1a1a1a;
+  --border: #232323;
+  --border-strong: #2e2e2e;
+  --text-primary: #f5f5f4;
+  --text-secondary: #8c8c8a;
+  --text-muted: #545452;
+  --accent: #ff4d00;
+  --accent-dim: #7a2600;
+  --accent-bg: #1f1108;
+
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body), "IBM Plex Sans", -apple-system, sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+:global(html) {
+  scroll-behavior: smooth;
+}
+
+.crewplan * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.crewplan .display {
+  font-family: var(--font-display), "Space Grotesk", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.crewplan a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.crewplan .wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+/* ---------- NAV ---------- */
+.crewplan nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(13, 13, 13, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 0.5px solid var(--border);
+}
+.crewplan .nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 32px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.crewplan .logo {
+  font-family: var(--font-display), "Space Grotesk", sans-serif;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+  display: flex;
+  align-items: baseline;
+}
+.crewplan .logo .dot {
+  color: var(--accent);
+}
+.crewplan .nav-links {
+  display: flex;
+  gap: 36px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.crewplan .nav-links a:hover {
+  color: var(--text-primary);
+}
+.crewplan .nav-cta {
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 18px;
+  border-radius: 7px;
+  transition: opacity 0.15s;
+}
+.crewplan .nav-cta:hover {
+  opacity: 0.88;
+}
+@media (max-width: 768px) {
+  .crewplan .nav-links {
+    display: none;
+  }
+}
+
+/* ---------- HERO ---------- */
+.crewplan .hero {
+  padding: 96px 32px 72px;
+  text-align: center;
+}
+.crewplan .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-bg);
+  border: 0.5px solid var(--accent-dim);
+  color: #ff9a5c;
+  font-size: 12.5px;
+  padding: 6px 14px;
+  border-radius: 100px;
+  margin-bottom: 28px;
+}
+.crewplan .badge .pulse {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: crewplan-pulse 2s infinite;
+}
+@keyframes crewplan-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.crewplan h1 {
+  font-family: var(--font-display), "Space Grotesk", sans-serif;
+  font-weight: 700;
+  font-size: clamp(36px, 6vw, 60px);
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  max-width: 780px;
+  margin: 0 auto 22px;
+}
+.crewplan h1 .accent {
+  color: var(--accent);
+}
+
+.crewplan .hero-sub {
+  color: var(--text-secondary);
+  font-size: 17px;
+  max-width: 520px;
+  margin: 0 auto 40px;
+}
+
+.crewplan .waitlist-form {
+  display: flex;
+  gap: 10px;
+  max-width: 440px;
+  margin: 0 auto 14px;
+}
+.crewplan .waitlist-form input {
+  flex: 1;
+  background: var(--surface);
+  border: 0.5px solid var(--border-strong);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  padding: 13px 16px;
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.crewplan .waitlist-form input::placeholder {
+  color: var(--text-muted);
+}
+.crewplan .waitlist-form input:focus {
+  border-color: var(--accent);
+}
+.crewplan .waitlist-form button {
+  background: var(--accent);
+  color: #fff;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  border: none;
+  padding: 13px 22px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.crewplan .waitlist-form button:hover {
+  opacity: 0.88;
+}
+.crewplan .waitlist-form button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+@media (max-width: 520px) {
+  .crewplan .waitlist-form {
+    flex-direction: column;
+  }
+}
+
+.crewplan .hero-note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* ---------- PRODUCT MOCKUP ---------- */
+.crewplan .mockup-shell {
+  max-width: 860px;
+  margin: 64px auto 0;
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 40px 100px -30px rgba(255, 77, 0, 0.08);
+}
+.crewplan .mockup-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 0.5px solid var(--border);
+}
+.crewplan .mockup-title {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.crewplan .mockup-status {
+  font-size: 12px;
+  color: #ff9a5c;
+  background: var(--accent-bg);
+  padding: 4px 10px;
+  border-radius: 100px;
+}
+.crewplan .rota-grid {
+  display: grid;
+  grid-template-columns: 90px repeat(7, 1fr);
+  gap: 6px;
+}
+.crewplan .rota-cell {
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 10px 6px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.crewplan .rota-cell.head {
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.crewplan .rota-cell.name {
+  background: transparent;
+  color: var(--text-secondary);
+  justify-content: flex-start;
+  padding-left: 8px;
+}
+.crewplan .rota-cell.filled {
+  background: var(--accent-bg);
+  color: #ff9a5c;
+}
+@media (max-width: 640px) {
+  .crewplan .mockup-shell {
+    display: none;
+  }
+}
+
+/* ---------- SECTION SHARED ---------- */
+.crewplan section {
+  padding: 100px 32px;
+}
+.crewplan .section-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.crewplan .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.crewplan .eyebrow::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+}
+.crewplan h2 {
+  font-family: var(--font-display), "Space Grotesk", sans-serif;
+  font-weight: 600;
+  font-size: clamp(26px, 4vw, 36px);
+  letter-spacing: -0.02em;
+  max-width: 560px;
+  margin-bottom: 16px;
+}
+.crewplan .section-sub {
+  color: var(--text-secondary);
+  font-size: 16px;
+  max-width: 480px;
+}
+
+/* ---------- HOW IT WORKS ---------- */
+.crewplan .steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 0.5px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-top: 48px;
+}
+.crewplan .step {
+  background: var(--bg);
+  padding: 32px 28px;
+}
+.crewplan .step-num {
+  font-family: var(--font-display), "Space Grotesk", sans-serif;
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+.crewplan .step h3 {
+  font-family: var(--font-display), "Space Grotesk", sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.crewplan .step p {
+  color: var(--text-secondary);
+  font-size: 14.5px;
+}
+@media (max-width: 800px) {
+  .crewplan .steps {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- FEATURES ---------- */
+.crewplan .features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  margin-top: 48px;
+}
+.crewplan .feature-card {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+}
+.crewplan .feature-icon {
+  width: 34px;
+  height: 34px;
+  background: var(--accent-bg);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 16px;
+  margin-bottom: 18px;
+  font-weight: 600;
+}
+.crewplan .feature-card h3 {
+  font-family: var(--font-display), "Space Grotesk", sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.crewplan .feature-card p {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+@media (max-width: 800px) {
+  .crewplan .features-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- QUOTE / DIFFERENTIATOR ---------- */
+.crewplan .quote-section {
+  border-top: 0.5px solid var(--border);
+  border-bottom: 0.5px solid var(--border);
+  text-align: center;
+}
+.crewplan .quote {
+  font-family: var(--font-display), "Space Grotesk", sans-serif;
+  font-size: clamp(22px, 3.4vw, 30px);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  max-width: 700px;
+  margin: 0 auto;
+  line-height: 1.4;
+}
+.crewplan .quote .accent {
+  color: var(--accent);
+}
+.crewplan .quote-attrib {
+  margin-top: 24px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---------- COMING SOON ---------- */
+.crewplan .roadmap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+  border: 0.5px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-top: 48px;
+}
+.crewplan .roadmap-item {
+  background: var(--bg);
+  padding: 22px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.crewplan .roadmap-item-text h4 {
+  font-family: var(--font-display), "Space Grotesk", sans-serif;
+  font-size: 15.5px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.crewplan .roadmap-item-text p {
+  color: var(--text-secondary);
+  font-size: 13.5px;
+}
+.crewplan .roadmap-tag {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 100px;
+  white-space: nowrap;
+}
+.crewplan .roadmap-tag.next {
+  background: var(--accent-bg);
+  color: #ff9a5c;
+}
+.crewplan .roadmap-tag.later {
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+@media (max-width: 600px) {
+  .crewplan .roadmap-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+
+/* ---------- FINAL CTA ---------- */
+.crewplan .final-cta {
+  text-align: center;
+  padding: 110px 32px;
+}
+.crewplan .final-cta h2 {
+  max-width: 100%;
+  margin: 0 auto 14px;
+}
+.crewplan .final-cta .section-sub {
+  margin: 0 auto 40px;
+}
+
+/* ---------- FOOTER ---------- */
+.crewplan footer {
+  border-top: 0.5px solid var(--border);
+  padding: 40px 32px;
+}
+.crewplan .footer-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.crewplan .footer-links {
+  display: flex;
+  gap: 24px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.crewplan .footer-links a:hover {
+  color: var(--text-secondary);
+}
+.crewplan .footer-copy {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---------- FADE-IN ---------- */
+.crewplan .fade-in {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
+}
+.crewplan .fade-in.visible {
+  opacity: 1;
+  transform: translateY(0);
+}

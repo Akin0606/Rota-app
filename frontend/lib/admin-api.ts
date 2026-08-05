@@ -101,6 +101,22 @@ export function addAdminManager(email: string): Promise<AdminManager> {
   });
 }
 
+export type WaitlistEntry = {
+  id: string;
+  venue_name: string;
+  email: string;
+  status: string;
+  created_at: string;
+};
+
+export function listWaitlist(): Promise<WaitlistEntry[]> {
+  return adminRequest("/api/admin/waitlist");
+}
+
+export function inviteWaitlistEntry(id: string): Promise<AdminManager> {
+  return adminRequest(`/api/admin/waitlist/${id}/invite`, { method: "POST" });
+}
+
 export function getAdminVenueDetail(id: string): Promise<AdminVenueDetail> {
   return adminRequest(`/api/admin/venues/${id}`);
 }

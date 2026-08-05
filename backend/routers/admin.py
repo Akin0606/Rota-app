@@ -12,6 +12,7 @@ from models.schemas import (
     AdminVenueOut,
     RotaSummaryOut,
     StaffManagerOut,
+    WaitlistEntryOut,
 )
 from routers.rota import run_solver_for_period
 from routers.staff import _generate_unique_pin
@@ -108,9 +109,12 @@ def list_venues():
     return rows
 
 
-@router.post("/managers", response_model=AdminManagerOut, dependencies=[Depends(require_admin)])
-def add_manager(payload: AdminCreateManagerRequest):
-    email = payload.email.strip().lower()
+def _create_manager_account(email: str) -> str:
+    """Creates a confirmed Supabase auth user for `email` so they can sign in
+    via the OTP flow and run onboarding. Returns the login URL to hand them.
+    Raises HTTPException on invalid input, an existing venue, or an existing
+    account. Shared by the Add Manager and waitlist Invite actions."""
+    email = email.strip().lower()
     if "@" not in email or "." not in email.split("@")[-1]:
         raise HTTPException(status_code=400, detail="Enter a valid email address")
 
@@ -133,11 +137,45 @@ def add_manager(payload: AdminCreateManagerRequest):
             raise HTTPException(status_code=409, detail="That email already has an account")
         raise HTTPException(status_code=500, detail=f"Could not create account: {message}")
 
-    return {
-        "email": email,
-        "status": "created",
-        "login_url": f"{get_settings().frontend_url}/login",
-    }
+    return f"{get_settings().frontend_url}/login"
+
+
+@router.post("/managers", response_model=AdminManagerOut, dependencies=[Depends(require_admin)])
+def add_manager(payload: AdminCreateManagerRequest):
+    login_url = _create_manager_account(payload.email)
+    return {"email": payload.email.strip().lower(), "status": "created", "login_url": login_url}
+
+
+@router.get(
+    "/waitlist", response_model=list[WaitlistEntryOut], dependencies=[Depends(require_admin)]
+)
+def list_waitlist():
+    supabase = get_supabase()
+    return (
+        supabase.table("waitlist")
+        .select("*")
+        .order("created_at", desc=True)
+        .execute()
+        .data
+    )
+
+
+@router.post(
+    "/waitlist/{entry_id}/invite",
+    response_model=AdminManagerOut,
+    dependencies=[Depends(require_admin)],
+)
+def invite_waitlist_entry(entry_id: str):
+    supabase = get_supabase()
+    res = supabase.table("waitlist").select("*").eq("id", entry_id).limit(1).execute()
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Waitlist entry not found")
+    entry = res.data[0]
+
+    login_url = _create_manager_account(entry["email"])
+    supabase.table("waitlist").update({"status": "invited"}).eq("id", entry_id).execute()
+
+    return {"email": entry["email"], "status": "invited", "login_url": login_url}
 
 
 @router.get(

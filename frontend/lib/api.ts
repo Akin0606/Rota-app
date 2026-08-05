@@ -72,6 +72,16 @@ async function authedRequest<T>(path: string, init?: RequestInit): Promise<T> {
   });
 }
 
+export function joinWaitlist(
+  venueName: string,
+  email: string,
+): Promise<{ status: string; already_joined: boolean }> {
+  return request(`/api/waitlist`, {
+    method: "POST",
+    body: JSON.stringify({ venue_name: venueName, email }),
+  });
+}
+
 export function getVenueInfo(venueToken: string): Promise<VenueInfo> {
   return request(`/api/availability/${venueToken}`);
 }

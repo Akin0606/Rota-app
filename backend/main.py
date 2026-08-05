@@ -3,7 +3,19 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
 from database import get_supabase
-from routers import activity, admin, availability, cron, periods, rota, rules, shifts, staff, venue
+from routers import (
+    activity,
+    admin,
+    availability,
+    cron,
+    periods,
+    rota,
+    rules,
+    shifts,
+    staff,
+    venue,
+    waitlist,
+)
 from services import cron_scheduler
 
 settings = get_settings()
@@ -41,6 +53,7 @@ app.include_router(rules.router)
 app.include_router(rota.router)
 app.include_router(admin.router)
 app.include_router(cron.router)
+app.include_router(waitlist.router)
 
 
 @app.on_event("startup")

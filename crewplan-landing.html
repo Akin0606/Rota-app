@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crewplan — Rotas that build themselves</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0D0D0D;
+    --surface: #141414;
+    --surface-2: #1A1A1A;
+    --border: #232323;
+    --border-strong: #2E2E2E;
+    --text-primary: #F5F5F4;
+    --text-secondary: #8C8C8A;
+    --text-muted: #545452;
+    --accent: #FF4D00;
+    --accent-dim: #7A2600;
+    --accent-bg: #1F1108;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .display {
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  /* ---------- NAV ---------- */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(13, 13, 13, 0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 0.5px solid var(--border);
+  }
+  .nav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    max-width: 1120px;
+    margin: 0 auto;
+  }
+  .logo {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    letter-spacing: -0.03em;
+    display: flex;
+    align-items: baseline;
+  }
+  .logo .dot { color: var(--accent); }
+  .nav-links {
+    display: flex;
+    gap: 36px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  .nav-links a:hover { color: var(--text-primary); }
+  .nav-cta {
+    background: var(--accent);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 9px 18px;
+    border-radius: 7px;
+    transition: opacity 0.15s;
+  }
+  .nav-cta:hover { opacity: 0.88; }
+  @media (max-width: 768px) {
+    .nav-links { display: none; }
+  }
+
+  /* ---------- HERO ---------- */
+  .hero {
+    padding: 96px 32px 72px;
+    text-align: center;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--accent-bg);
+    border: 0.5px solid var(--accent-dim);
+    color: #FF9A5C;
+    font-size: 12.5px;
+    padding: 6px 14px;
+    border-radius: 100px;
+    margin-bottom: 28px;
+  }
+  .badge .pulse {
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: clamp(36px, 6vw, 60px);
+    letter-spacing: -0.03em;
+    line-height: 1.08;
+    max-width: 780px;
+    margin: 0 auto 22px;
+  }
+  h1 .accent { color: var(--accent); }
+
+  .hero-sub {
+    color: var(--text-secondary);
+    font-size: 17px;
+    max-width: 520px;
+    margin: 0 auto 40px;
+  }
+
+  .waitlist-form {
+    display: flex;
+    gap: 10px;
+    max-width: 440px;
+    margin: 0 auto 14px;
+  }
+  .waitlist-form input {
+    flex: 1;
+    background: var(--surface);
+    border: 0.5px solid var(--border-strong);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 13px 16px;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .waitlist-form input::placeholder { color: var(--text-muted); }
+  .waitlist-form input:focus { border-color: var(--accent); }
+  .waitlist-form button {
+    background: var(--accent);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+    padding: 13px 22px;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+  }
+  .waitlist-form button:hover { opacity: 0.88; }
+  @media (max-width: 520px) {
+    .waitlist-form { flex-direction: column; }
+  }
+
+  .hero-note {
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+
+  /* ---------- PRODUCT MOCKUP ---------- */
+  .mockup-shell {
+    max-width: 860px;
+    margin: 64px auto 0;
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: 0 40px 100px -30px rgba(255, 77, 0, 0.08);
+  }
+  .mockup-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .mockup-title { font-size: 13px; color: var(--text-secondary); }
+  .mockup-status {
+    font-size: 12px;
+    color: #FF9A5C;
+    background: var(--accent-bg);
+    padding: 4px 10px;
+    border-radius: 100px;
+  }
+  .rota-grid {
+    display: grid;
+    grid-template-columns: 90px repeat(7, 1fr);
+    gap: 6px;
+  }
+  .rota-cell {
+    background: var(--surface-2);
+    border-radius: 6px;
+    padding: 10px 6px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .rota-cell.head { background: transparent; color: var(--text-secondary); font-weight: 500; }
+  .rota-cell.name { background: transparent; color: var(--text-secondary); justify-content: flex-start; padding-left: 8px; }
+  .rota-cell.filled { background: var(--accent-bg); color: #FF9A5C; }
+  @media (max-width: 640px) {
+    .mockup-shell { display: none; }
+  }
+
+  /* ---------- SECTION SHARED ---------- */
+  section { padding: 100px 32px; }
+  .section-inner { max-width: 1120px; margin: 0 auto; }
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 14px;
+  }
+  .eyebrow::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+  h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: clamp(26px, 4vw, 36px);
+    letter-spacing: -0.02em;
+    max-width: 560px;
+    margin-bottom: 16px;
+  }
+  .section-sub {
+    color: var(--text-secondary);
+    font-size: 16px;
+    max-width: 480px;
+  }
+
+  /* ---------- HOW IT WORKS ---------- */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 0.5px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-top: 48px;
+  }
+  .step {
+    background: var(--bg);
+    padding: 32px 28px;
+  }
+  .step-num {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 20px;
+  }
+  .step h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .step p {
+    color: var(--text-secondary);
+    font-size: 14.5px;
+  }
+  @media (max-width: 800px) {
+    .steps { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- FEATURES ---------- */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-top: 48px;
+  }
+  .feature-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+  }
+  .feature-icon {
+    width: 34px;
+    height: 34px;
+    background: var(--accent-bg);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    font-size: 16px;
+    margin-bottom: 18px;
+    font-weight: 600;
+  }
+  .feature-card h3 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .feature-card p {
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+  @media (max-width: 800px) {
+    .features-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- QUOTE / DIFFERENTIATOR ---------- */
+  .quote-section {
+    border-top: 0.5px solid var(--border);
+    border-bottom: 0.5px solid var(--border);
+    text-align: center;
+  }
+  .quote {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: clamp(22px, 3.4vw, 30px);
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    max-width: 700px;
+    margin: 0 auto;
+    line-height: 1.4;
+  }
+  .quote .accent { color: var(--accent); }
+  .quote-attrib {
+    margin-top: 24px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* ---------- COMING SOON ---------- */
+  .roadmap-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    background: var(--border);
+    border: 0.5px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-top: 48px;
+  }
+  .roadmap-item {
+    background: var(--bg);
+    padding: 22px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .roadmap-item-text h4 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 15.5px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .roadmap-item-text p {
+    color: var(--text-secondary);
+    font-size: 13.5px;
+  }
+  .roadmap-tag {
+    flex-shrink: 0;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 100px;
+    white-space: nowrap;
+  }
+  .roadmap-tag.next { background: var(--accent-bg); color: #FF9A5C; }
+  .roadmap-tag.later { background: var(--surface-2); color: var(--text-muted); }
+  @media (max-width: 600px) {
+    .roadmap-item { flex-direction: column; align-items: flex-start; gap: 10px; }
+  }
+
+  /* ---------- FINAL CTA ---------- */
+  .final-cta {
+    text-align: center;
+    padding: 110px 32px;
+  }
+  .final-cta h2 { max-width: 100%; margin: 0 auto 14px; }
+  .final-cta .section-sub { margin: 0 auto 40px; }
+
+  /* ---------- FOOTER ---------- */
+  footer {
+    border-top: 0.5px solid var(--border);
+    padding: 40px 32px;
+  }
+  .footer-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .footer-links {
+    display: flex;
+    gap: 24px;
+    font-size: 13.5px;
+    color: var(--text-muted);
+  }
+  .footer-links a:hover { color: var(--text-secondary); }
+  .footer-copy { font-size: 13px; color: var(--text-muted); }
+
+  /* ---------- FADE-IN ---------- */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <div class="logo">crewplan<span class="dot">.</span></div>
+    <div class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#roadmap">Roadmap</a>
+    </div>
+    <a href="#waitlist" class="nav-cta">Join waitlist</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="badge"><span class="pulse"></span>Now taking pilot venues</div>
+  <h1 class="display">Rotas that build<br>themselves<span class="accent">.</span></h1>
+  <p class="hero-sub">Your team sends in when they're free. Crewplan builds the week's rota. You check it once on Saturday morning, and it's out to everyone.</p>
+
+  <form class="waitlist-form" id="waitlistForm">
+    <input type="text" placeholder="Venue name" id="venueName" required>
+    <input type="email" placeholder="you@yourvenue.co.uk" id="email" required>
+    <button type="submit">Join the waitlist</button>
+  </form>
+  <p class="hero-note">Free while we're in pilot. No card, no commitment.</p>
+
+  <div class="mockup-shell fade-in" id="mockup">
+    <div class="mockup-topbar">
+      <span class="mockup-title">The Anchor — week of 11 Aug</span>
+      <span class="mockup-status">Ready to review</span>
+    </div>
+    <div class="rota-grid">
+      <div class="rota-cell head"></div>
+      <div class="rota-cell head">Mon</div>
+      <div class="rota-cell head">Tue</div>
+      <div class="rota-cell head">Wed</div>
+      <div class="rota-cell head">Thu</div>
+      <div class="rota-cell head">Fri</div>
+      <div class="rota-cell head">Sat</div>
+      <div class="rota-cell head">Sun</div>
+
+      <div class="rota-cell name">Sarah</div>
+      <div class="rota-cell filled">Eve</div>
+      <div class="rota-cell"></div>
+      <div class="rota-cell filled">Eve</div>
+      <div class="rota-cell filled">Eve</div>
+      <div class="rota-cell"></div>
+      <div class="rota-cell filled">Day</div>
+      <div class="rota-cell filled">Day</div>
+
+      <div class="rota-cell name">Marcus</div>
+      <div class="rota-cell filled">Day</div>
+      <div class="rota-cell filled">Day</div>
+      <div class="rota-cell"></div>
+      <div class="rota-cell"></div>
+      <div class="rota-cell filled">Eve</div>
+      <div class="rota-cell filled">Eve</div>
+      <div class="rota-cell"></div>
+
+      <div class="rota-cell name">Priya</div>
+      <div class="rota-cell"></div>
+      <div class="rota-cell filled">Eve</div>
+      <div class="rota-cell filled">Eve</div>
+      <div class="rota-cell"></div>
+      <div class="rota-cell filled">Day</div>
+      <div class="rota-cell filled">Day</div>
+      <div class="rota-cell filled">Eve</div>
+    </div>
+  </div>
+</header>
+
+<section id="how">
+  <div class="section-inner">
+    <div class="eyebrow">The loop</div>
+    <h2 class="display">Three steps. Every week. On its own.</h2>
+    <p class="section-sub">No app to install, no chasing people on WhatsApp for the third time.</p>
+
+    <div class="steps">
+      <div class="step fade-in">
+        <div class="step-num display">01</div>
+        <h3 class="display">Send one link</h3>
+        <p>Drop your venue's link in the group chat once. It never changes — everyone taps in with their own PIN.</p>
+      </div>
+      <div class="step fade-in">
+        <div class="step-num display">02</div>
+        <h3 class="display">Team fills it in</h3>
+        <p>Staff mark their week — available, unavailable, or preferred — in under a minute, right from their phone.</p>
+      </div>
+      <div class="step fade-in">
+        <div class="step-num display">03</div>
+        <h3 class="display">You get a rota</h3>
+        <p>Saturday morning, review it, tweak anything that's off, hit confirm. It's out to the team in seconds.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="section-inner">
+    <div class="eyebrow">Built for the bar, not the boardroom</div>
+    <h2 class="display">Everything you need. Nothing you don't.</h2>
+    <p class="section-sub">Most rota software is built for chains with a scheduling manager. Crewplan is built for the one person doing everything.</p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">✓</div>
+        <h3 class="display">No staff accounts</h3>
+        <p>No app downloads, no passwords to reset. A link and a 4-digit PIN is the whole login.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3 class="display">Conflicts caught early</h3>
+        <p>If a shift can't be covered, you'll know before the week starts — not when someone doesn't show up.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">◐</div>
+        <h3 class="display">Fair by default</h3>
+        <p>Hours spread evenly across your team automatically, so nobody's quietly carrying the rota.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">✉</div>
+        <h3 class="display">Reminders, handled</h3>
+        <p>Crewplan chases the two people who always forget, so you don't have to.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">◫</div>
+        <h3 class="display">One Saturday check-in</h3>
+        <p>An email lands with the week ready to go. Approve as-is, or adjust in a couple of taps.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">▤</div>
+        <h3 class="display">Calendar-ready</h3>
+        <p>Staff add their shifts straight to their phone calendar the moment the rota's confirmed.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="quote-section">
+  <div class="section-inner">
+    <p class="quote display">Built for the pub with eight staff and one manager<span class="accent">.</span> Not the chain with a scheduling department.</p>
+    <p class="quote-attrib">— why we're building Crewplan</p>
+  </div>
+</section>
+
+<section id="roadmap">
+  <div class="section-inner">
+    <div class="eyebrow">What's next</div>
+    <h2 class="display">Where Crewplan is heading.</h2>
+    <p class="section-sub">The core loop comes first. These land as we hear from real venues.</p>
+
+    <div class="roadmap-list">
+      <div class="roadmap-item">
+        <div class="roadmap-item-text">
+          <h4 class="display">Square integration</h4>
+          <p>Pull footfall and sales data in, so the rota accounts for your busiest hours automatically.</p>
+        </div>
+        <span class="roadmap-tag next">In progress</span>
+      </div>
+      <div class="roadmap-item">
+        <div class="roadmap-item-text">
+          <h4 class="display">Xero payroll export</h4>
+          <p>Confirmed hours flow straight into payroll — no re-typing a week's shifts by hand.</p>
+        </div>
+        <span class="roadmap-tag next">In progress</span>
+      </div>
+      <div class="roadmap-item">
+        <div class="roadmap-item-text">
+          <h4 class="display">Shift swaps</h4>
+          <p>Staff arrange swaps between themselves, with the manager only stepping in to approve.</p>
+        </div>
+        <span class="roadmap-tag later">Planned</span>
+      </div>
+      <div class="roadmap-item">
+        <div class="roadmap-item-text">
+          <h4 class="display">Multi-site view</h4>
+          <p>Running more than one venue? See every rota in one place.</p>
+        </div>
+        <span class="roadmap-tag later">Planned</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="final-cta" id="waitlist">
+  <div class="section-inner">
+    <div class="eyebrow" style="justify-content: center;">Get started</div>
+    <h2 class="display" style="text-align: center;">Be one of the first venues on Crewplan.</h2>
+    <p class="section-sub" style="text-align: center;">We're onboarding pilot venues by hand right now, so we can get it right before opening up.</p>
+    <form class="waitlist-form" id="waitlistForm2">
+      <input type="text" placeholder="Venue name" required>
+      <input type="email" placeholder="you@yourvenue.co.uk" required>
+      <button type="submit">Join the waitlist</button>
+    </form>
+    <p class="hero-note">Free while we're in pilot. No card, no commitment.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-inner">
+    <div class="logo" style="font-size: 16px;">crewplan<span class="dot">.</span></div>
+    <div class="footer-links">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#roadmap">Roadmap</a>
+    </div>
+    <div class="footer-copy">© 2026 Crewplan. Made for pubs.</div>
+  </div>
+</footer>
+
+<script>
+  // Fade-in on scroll
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) entry.target.classList.add('visible');
+    });
+  }, { threshold: 0.15 });
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+  // Waitlist form handling (placeholder — wire to real backend later)
+  function handleWaitlist(e) {
+    e.preventDefault();
+    const btn = e.target.querySelector('button');
+    const originalText = btn.textContent;
+    btn.textContent = "You're on the list";
+    btn.style.opacity = '0.7';
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.style.opacity = '1';
+      e.target.reset();
+    }, 2500);
+  }
+  document.getElementById('waitlistForm').addEventListener('submit', handleWaitlist);
+  document.getElementById('waitlistForm2').addEventListener('submit', handleWaitlist);
+</script>
+
+</body>
+</html>

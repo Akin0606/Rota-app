@@ -87,6 +87,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   const venuesActive = pathname === "/admin" || pathname?.startsWith("/admin/venues");
+  const waitlistActive = pathname === "/admin/waitlist";
   const activityActive = pathname === "/admin/activity";
 
   return (
@@ -100,6 +101,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               className={`text-[13px] font-medium ${venuesActive ? "text-accent" : "text-ink-muted"}`}
             >
               Venues
+            </Link>
+            <Link
+              href="/admin/waitlist"
+              className={`text-[13px] font-medium ${waitlistActive ? "text-accent" : "text-ink-muted"}`}
+            >
+              Waitlist
             </Link>
             <Link
               href="/admin/activity"
