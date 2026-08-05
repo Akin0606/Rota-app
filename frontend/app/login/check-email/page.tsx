@@ -3,9 +3,10 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import LoadingScreen from "@/components/loading-screen";
 import Toast from "@/components/toast";
 import Wordmark from "@/components/wordmark";
-import { ApiError, requestLoginCode, verifyLoginCode } from "@/lib/api";
+import { ApiError, requestLoginCode, verifyLoginCode, warmBackend } from "@/lib/api";
 
 function VerifyCodeContent() {
   const searchParams = useSearchParams();
@@ -13,6 +14,7 @@ function VerifyCodeContent() {
 
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -35,6 +37,10 @@ function VerifyCodeContent() {
     setError(null);
     try {
       await verifyLoginCode(email, code);
+      // Show the honest cold-start loader and wake the backend before the hard
+      // navigation, so the dashboard's server render isn't a blank 30–60s wait.
+      setSigningIn(true);
+      await warmBackend();
       // Hard navigation so the server components (root redirect + manager
       // layout) re-read the freshly-set session cookie.
       window.location.assign("/dashboard");
@@ -61,6 +67,19 @@ function VerifyCodeContent() {
     } finally {
       setResending(false);
     }
+  }
+
+  if (signingIn) {
+    return (
+      <div className="mx-auto max-w-[420px] py-4">
+        <div className="mx-4 animate-fadeIn overflow-hidden rounded-card bg-surface shadow-card">
+          <div className="flex min-h-[500px] flex-col items-center justify-center px-6 py-10">
+            <Wordmark className="mb-8 text-[22px]" />
+            <LoadingScreen base="Signing you in…" className="min-h-0" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

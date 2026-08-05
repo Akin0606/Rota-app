@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import LoadingScreen from "@/components/loading-screen";
 import Toast from "@/components/toast";
 import {
   ApiError,
@@ -127,7 +128,7 @@ export default function SettingsPage() {
   }
 
   if (loading) {
-    return <div className="p-10 text-center text-sm text-ink-muted">Loading…</div>;
+    return <LoadingScreen base="Loading settings…" />;
   }
 
   if (error || !rules) {

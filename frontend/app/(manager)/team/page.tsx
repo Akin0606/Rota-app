@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import LoadingScreen from "@/components/loading-screen";
 import Modal from "@/components/modal";
 import Toast from "@/components/toast";
 import {
@@ -172,7 +173,7 @@ export default function TeamPage() {
   }
 
   if (loading) {
-    return <div className="p-10 text-center text-sm text-ink-muted">Loading…</div>;
+    return <LoadingScreen base="Loading your team…" />;
   }
 
   if (error) {

@@ -100,6 +100,29 @@ export function pinStorageKey(venueToken: string): string {
   return `rota_pin_${venueToken}`;
 }
 
+function parseClock(text: string): { h: number; m: number } | null {
+  const match = text.trim().toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
+  if (!match) return null;
+  let h = parseInt(match[1], 10);
+  const m = match[2] ? parseInt(match[2], 10) : 0;
+  if (match[3] === "pm" && h < 12) h += 12;
+  if (match[3] === "am" && h === 12) h = 0;
+  if (h > 23 || m > 59) return null;
+  return { h, m };
+}
+
+// Duration of a shift in hours from free-text start/end times (e.g. "7:00am"
+// to "2:00pm"). Returns null when the end time isn't a parseable clock time
+// (e.g. "close"). Overnight shifts wrap past midnight.
+export function shiftDurationHours(start: string, end: string): number | null {
+  const s = parseClock(start);
+  const e = parseClock(end);
+  if (!s || !e) return null;
+  let mins = e.h * 60 + e.m - (s.h * 60 + s.m);
+  if (mins <= 0) mins += 24 * 60;
+  return Math.round((mins / 60) * 10) / 10;
+}
+
 function pad(n: number): string {
   return String(n).padStart(2, "0");
 }

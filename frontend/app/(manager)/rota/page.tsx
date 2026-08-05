@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import LoadingScreen from "@/components/loading-screen";
 import RotaDayView from "@/components/rota-day-view";
 import RotaGrid from "@/components/rota-grid";
 import StatusBanner from "@/components/status-banner";
@@ -139,7 +140,7 @@ export default function RotaPage() {
   }
 
   if (loading) {
-    return <div className="p-10 text-center text-sm text-ink-muted">Loading…</div>;
+    return <LoadingScreen base="Loading the rota…" />;
   }
 
   if (error) {

@@ -11,18 +11,23 @@ type TeamStatusCardProps = {
   name: string;
   role: string;
   submitted: boolean | null;
+  onClick?: () => void;
 };
 
-export default function TeamStatusCard({ name, role, submitted }: TeamStatusCardProps) {
+export default function TeamStatusCard({ name, role, submitted, onClick }: TeamStatusCardProps) {
   return (
     <div className="flex items-center gap-2.5 border-b border-surface-page py-2.5 last:border-0">
-      <div
-        className={`flex h-8 w-8 items-center justify-center rounded-[8px] text-[10px] font-bold ${
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={`Open ${name}`}
+        disabled={!onClick}
+        className={`flex h-8 w-8 items-center justify-center rounded-[8px] text-[10px] font-bold transition ${
           submitted ? "bg-accent-border text-accent" : "bg-surface-page text-ink-faint"
-        }`}
+        } ${onClick ? "cursor-pointer hover:ring-2 hover:ring-accent/50" : ""}`}
       >
         {initials(name)}
-      </div>
+      </button>
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-semibold text-ink">{name}</div>
         <div className="text-[11px] text-ink-faint">{role}</div>

@@ -58,6 +58,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// Pings the backend so Render's free-tier instance is awake before we
+// navigate to a page that server-renders against it. Best-effort — never
+// throws.
+export async function warmBackend(): Promise<void> {
+  try {
+    await fetch(`${API_URL}/health`, { cache: "no-store" });
+  } catch {
+    // ignore — the destination page will surface any real error
+  }
+}
+
 async function authedRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const supabase = createClient();
   const { data } = await supabase.auth.getSession();
