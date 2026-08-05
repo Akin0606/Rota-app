@@ -2,12 +2,80 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---- Theme palettes as CSS variables. Dark is the default brand; light is
+   the opt-in via data-theme="light" on <html>. Tailwind tokens reference
+   these (see tailwind.config.ts). ---- */
 :root {
-  --background: #0d0d0d;
-  --foreground: #f5f5f4;
-  /* Render native controls (scrollbars, date/time pickers, number spinners,
-     select popups) in dark mode. */
+  --c-bg: #0d0d0d;
+  --c-fg: #f5f5f4;
+  --c-accent: #ff4d00;
+  --c-accent-hover: #e64500;
+  --c-accent-light: #1f1108;
+  --c-accent-border: #7a2600;
+  --c-ink: #f5f5f4;
+  --c-ink-label: #c9c9c7;
+  --c-ink-muted: #8c8c8a;
+  --c-ink-faint: #545452;
+  --c-surface: #141414;
+  --c-surface-page: #0d0d0d;
+  --c-surface-card: #141414;
+  --c-surface-subtle: #1a1a1a;
+  --c-avail-bg: #10231a;
+  --c-avail-border: #22c55e;
+  --c-avail-text: #4ade80;
+  --c-unavail-bg: #2a1113;
+  --c-unavail-border: #f87171;
+  --c-unavail-text: #f87171;
+  --c-preferred-bg: #241e0a;
+  --c-preferred-border: #eab308;
+  --c-preferred-text: #fbbf24;
+  --c-unset-bg: #1a1a1a;
+  --c-unset-border: #2e2e2e;
+  --c-unset-text: #6b6b69;
+  --c-warn-bg: #241c0a;
+  --c-warn-text: #fcd34d;
+  --c-warn-dot: #f59e0b;
+  --c-hairline: #232323;
+  --c-shadow: rgba(0, 0, 0, 0.4);
+
+  --background: var(--c-bg);
+  --foreground: var(--c-fg);
   color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --c-bg: #f5f5f4;
+  --c-fg: #1a1a1a;
+  --c-accent: #ff4d00;
+  --c-accent-hover: #e64500;
+  --c-accent-light: #fff1eb;
+  --c-accent-border: #ffd9c7;
+  --c-ink: #1a1a1a;
+  --c-ink-label: #374151;
+  --c-ink-muted: #6b7280;
+  --c-ink-faint: #9ca3af;
+  --c-surface: #ffffff;
+  --c-surface-page: #f5f5f4;
+  --c-surface-card: #ffffff;
+  --c-surface-subtle: #f6f6f5;
+  --c-avail-bg: #dcfce7;
+  --c-avail-border: #22c55e;
+  --c-avail-text: #16a34a;
+  --c-unavail-bg: #fee2e2;
+  --c-unavail-border: #ef4444;
+  --c-unavail-text: #dc2626;
+  --c-preferred-bg: #fef9c3;
+  --c-preferred-border: #eab308;
+  --c-preferred-text: #ca8a04;
+  --c-unset-bg: #f3f4f6;
+  --c-unset-border: #e5e7eb;
+  --c-unset-text: #9ca3af;
+  --c-warn-bg: #fef3c7;
+  --c-warn-text: #92400e;
+  --c-warn-dot: #f59e0b;
+  --c-hairline: rgba(0, 0, 0, 0.08);
+  --c-shadow: rgba(0, 0, 0, 0.1);
+  color-scheme: light;
 }
 
 body {
@@ -23,24 +91,23 @@ body {
     sans-serif;
 }
 
-/* Dark default for form controls that don't set their own background, so the
-   browser's white UA default never shows through. Explicit bg-* utility
-   classes (higher specificity) still win, and the marketing landing's own
-   scoped input styles are unaffected. */
+/* Dark/light default for form controls that don't set their own background, so
+   the browser's white UA default never shows through. Explicit bg-* utility
+   classes (higher specificity) still win; the marketing landing's own scoped
+   input styles are unaffected. */
 input,
 textarea,
 select {
-  background-color: #1a1a1a;
+  background-color: var(--c-surface-subtle);
   color: var(--foreground);
 }
 input::placeholder,
 textarea::placeholder {
-  color: #545452;
+  color: var(--c-ink-faint);
 }
 
 /* iOS Safari auto-zooms when a focused control's font-size is < 16px. Force
-   16px on small screens so focusing an input never zooms the page. Desktop
-   keeps the designed sizes. */
+   16px on small screens so focusing an input never zooms the page. */
 @media (max-width: 767px) {
   input,
   select,
@@ -50,8 +117,8 @@ textarea::placeholder {
 }
 
 a {
-  color: #ff4d00;
+  color: var(--c-accent);
 }
 a:hover {
-  color: #ff6a2b;
+  color: var(--c-accent-hover);
 }

@@ -15,49 +15,48 @@ const config: Config = {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
-        // Orange — reserved for primary actions and status only.
+        // All theme colours resolve to CSS variables so light/dark can be
+        // switched at runtime (see globals.css). Orange accent is reserved
+        // for primary actions and status.
         accent: {
-          DEFAULT: "#ff4d00",
-          hover: "#e64500",
-          light: "#1f1108", // accent-bg: dark tinted surface behind accent chips
-          border: "#7a2600", // accent-dim
+          DEFAULT: "var(--c-accent)",
+          hover: "var(--c-accent-hover)",
+          light: "var(--c-accent-light)",
+          border: "var(--c-accent-border)",
         },
-        // Text
         ink: {
-          DEFAULT: "#f5f5f4", // text-primary
-          label: "#c9c9c7",
-          muted: "#8c8c8a", // text-secondary
-          faint: "#545452", // text-muted
+          DEFAULT: "var(--c-ink)",
+          label: "var(--c-ink-label)",
+          muted: "var(--c-ink-muted)",
+          faint: "var(--c-ink-faint)",
         },
-        // Dark surfaces
         surface: {
-          DEFAULT: "#141414",
-          page: "#0d0d0d",
-          card: "#141414",
-          subtle: "#1a1a1a", // surface-2
+          DEFAULT: "var(--c-surface)",
+          page: "var(--c-surface-page)",
+          card: "var(--c-surface-card)",
+          subtle: "var(--c-surface-subtle)",
         },
-        // Status / shift-availability — tuned for contrast on #141414.
         avail: {
-          bg: "#10231a",
-          border: "#22c55e",
-          text: "#4ade80",
+          bg: "var(--c-avail-bg)",
+          border: "var(--c-avail-border)",
+          text: "var(--c-avail-text)",
         },
         unavail: {
-          bg: "#2a1113",
-          border: "#f87171",
-          text: "#f87171",
+          bg: "var(--c-unavail-bg)",
+          border: "var(--c-unavail-border)",
+          text: "var(--c-unavail-text)",
         },
         preferred: {
-          bg: "#241e0a",
-          border: "#eab308",
-          text: "#fbbf24",
+          bg: "var(--c-preferred-bg)",
+          border: "var(--c-preferred-border)",
+          text: "var(--c-preferred-text)",
         },
         unset: {
-          bg: "#1a1a1a",
-          border: "#2e2e2e",
-          text: "#6b6b69",
+          bg: "var(--c-unset-bg)",
+          border: "var(--c-unset-border)",
+          text: "var(--c-unset-text)",
         },
-        warn: { bg: "#241c0a", text: "#fcd34d", dot: "#f59e0b" },
+        warn: { bg: "var(--c-warn-bg)", text: "var(--c-warn-text)", dot: "var(--c-warn-dot)" },
       },
       borderRadius: {
         card: "24px",
@@ -66,10 +65,10 @@ const config: Config = {
         input: "12px",
       },
       boxShadow: {
-        card: "0 8px 32px rgba(0,0,0,0.4)",
+        card: "0 8px 32px var(--c-shadow)",
       },
       borderColor: {
-        hairline: "#232323",
+        hairline: "var(--c-hairline)",
       },
       keyframes: {
         fadeIn: {

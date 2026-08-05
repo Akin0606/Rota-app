@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import LoadingScreen from "@/components/loading-screen";
+import ThemeToggle from "@/components/theme-toggle";
 import Toast from "@/components/toast";
 import {
   ApiError,
@@ -150,6 +151,17 @@ export default function SettingsPage() {
       <div className="mb-7 text-[26px] font-bold text-ink md:text-[28px]">Settings</div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:max-w-[840px]">
+        {/* Appearance */}
+        <div className="rounded-panel border border-hairline bg-surface-card p-6 md:col-span-2">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-base font-bold text-ink">Appearance</div>
+              <div className="text-[13px] text-ink-faint">Choose how Crewplan looks on this device.</div>
+            </div>
+            <ThemeToggle />
+          </div>
+        </div>
+
         {/* Venue */}
         <div className="rounded-panel border border-hairline bg-surface-card p-6">
           <div className="mb-4 text-base font-bold text-ink">Venue Details</div>

@@ -24,7 +24,7 @@ export default function TeamStatusCard({ name, role, submitted, onClick }: TeamS
         disabled={!onClick}
         className={`flex h-8 w-8 items-center justify-center rounded-[8px] text-[10px] font-bold transition ${
           submitted ? "bg-accent-border text-accent" : "bg-surface-page text-ink-faint"
-        } ${onClick ? "cursor-pointer hover:ring-2 hover:ring-accent/50" : ""}`}
+        } ${onClick ? "cursor-pointer hover:ring-2 hover:ring-accent-border" : ""}`}
       >
         {initials(name)}
       </button>
