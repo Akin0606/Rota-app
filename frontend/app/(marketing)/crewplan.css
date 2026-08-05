@@ -167,6 +167,7 @@
 }
 .crewplan .waitlist-form input {
   flex: 1;
+  min-width: 0;
   background: var(--surface);
   border: 0.5px solid var(--border-strong);
   color: var(--text-primary);
