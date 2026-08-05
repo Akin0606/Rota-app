@@ -108,10 +108,29 @@ export function submitAvailability(
   venueToken: string,
   pin: string,
   submissions: AvailabilityEntry[],
+  weekStart?: string,
 ): Promise<{ status: string }> {
   return request(`/api/availability/${venueToken}/submit`, {
     method: "POST",
-    body: JSON.stringify({ pin, submissions }),
+    body: JSON.stringify({ pin, submissions, week_start: weekStart }),
+  });
+}
+
+export type WeekAvailability = {
+  week_start: string;
+  period: { id: string; week_start: string; status: string } | null;
+  editable: boolean;
+  submissions: AvailabilityEntry[];
+};
+
+export function getWeekAvailability(
+  venueToken: string,
+  pin: string,
+  weekStart: string,
+): Promise<WeekAvailability> {
+  return request(`/api/availability/${venueToken}/week`, {
+    method: "POST",
+    body: JSON.stringify({ pin, week_start: weekStart }),
   });
 }
 
@@ -296,6 +315,13 @@ export function createStaff(staff: {
 
 export function listPeriods(): Promise<Period[]> {
   return authedRequest(`/api/periods`);
+}
+
+export function createPeriod(weekStart: string): Promise<Period> {
+  return authedRequest(`/api/periods`, {
+    method: "POST",
+    body: JSON.stringify({ week_start: weekStart }),
+  });
 }
 
 export function listActivity(limit = 20): Promise<Activity[]> {

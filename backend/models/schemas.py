@@ -24,6 +24,10 @@ class PeriodOut(BaseModel):
     status: str
 
 
+class PeriodCreateRequest(BaseModel):
+    week_start: str
+
+
 class RulesOut(BaseModel):
     avail_closes_day: str
     avail_closes_time: str
@@ -74,6 +78,21 @@ class AvailabilityEntryIn(BaseModel):
 class AvailabilitySubmitRequest(BaseModel):
     pin: str = Field(pattern=r"^\d{4}$")
     submissions: list[AvailabilityEntryIn]
+    # Optional target week (Monday, YYYY-MM-DD). Defaults to the current open
+    # week when omitted, so existing clients keep working.
+    week_start: Optional[str] = None
+
+
+class WeekAvailabilityRequest(BaseModel):
+    pin: str = Field(pattern=r"^\d{4}$")
+    week_start: str
+
+
+class WeekAvailabilityOut(BaseModel):
+    week_start: str
+    period: Optional[PeriodOut] = None
+    editable: bool
+    submissions: list[AvailabilityEntryOut] = []
 
 
 class ForgotPinRequest(BaseModel):

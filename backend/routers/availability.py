@@ -11,6 +11,8 @@ from models.schemas import (
     PinAuthRequest,
     StaffRotaOut,
     VenueInfoResponse,
+    WeekAvailabilityOut,
+    WeekAvailabilityRequest,
 )
 from services import email_service, rate_limit
 
@@ -115,6 +117,59 @@ def _get_or_create_current_period(venue_id: str) -> dict:
     return period
 
 
+# Staff can plan availability up to this many weeks ahead of the current week.
+AVAIL_WEEKS_AHEAD = 4
+
+
+def _week_window() -> tuple["date", "date"]:
+    from datetime import date, timedelta
+
+    today = date.today()
+    this_monday = today - timedelta(days=today.weekday())
+    return this_monday, this_monday + timedelta(weeks=AVAIL_WEEKS_AHEAD)
+
+
+def _normalize_monday(week_start: str) -> "date":
+    from datetime import date, timedelta
+
+    d = date.fromisoformat(week_start)
+    return d - timedelta(days=d.weekday())
+
+
+def _period_for_week(venue_id: str, monday: "date") -> Optional[dict]:
+    supabase = get_supabase()
+    res = (
+        supabase.table("availability_periods")
+        .select("*")
+        .eq("venue_id", venue_id)
+        .eq("week_start", monday.isoformat())
+        .limit(1)
+        .execute()
+    )
+    return res.data[0] if res.data else None
+
+
+def _get_or_create_period_for_week(venue_id: str, monday: "date") -> dict:
+    existing = _period_for_week(venue_id, monday)
+    if existing:
+        return existing
+    supabase = get_supabase()
+    period = (
+        supabase.table("availability_periods")
+        .insert({"venue_id": venue_id, "week_start": monday.isoformat(), "status": "collecting"})
+        .execute()
+        .data[0]
+    )
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue_id,
+            "action": "availability_opened",
+            "detail": f"Availability opened for week of {monday.isoformat()} (auto)",
+        }
+    ).execute()
+    return period
+
+
 def _get_shifts(venue_id: str) -> list[dict]:
     supabase = get_supabase()
     return (
@@ -208,12 +263,61 @@ def authenticate(venue_token: str, payload: PinAuthRequest, request: Request):
     }
 
 
+@router.post("/{venue_token}/week", response_model=WeekAvailabilityOut)
+def get_week_availability(venue_token: str, payload: WeekAvailabilityRequest):
+    """Availability for a specific upcoming week (within the 1-month window),
+    so staff can plan ahead. Read-only for weeks whose collection has closed."""
+    venue = _get_venue_or_404(venue_token)
+    staff = _get_staff_by_pin(venue["id"], payload.pin)
+
+    monday = _normalize_monday(payload.week_start)
+    window_start, window_end = _week_window()
+    if monday < window_start or monday > window_end:
+        raise HTTPException(status_code=400, detail="That week is outside the planning window")
+
+    period = _period_for_week(venue["id"], monday)
+    editable = period is None or period["status"] == "collecting"
+
+    submissions = []
+    if period:
+        supabase = get_supabase()
+        submissions = (
+            supabase.table("availability_submissions")
+            .select("day_index, shift_id, status, note")
+            .eq("period_id", period["id"])
+            .eq("staff_id", staff["id"])
+            .execute()
+            .data
+        )
+
+    return {
+        "week_start": monday.isoformat(),
+        "period": (
+            {"id": period["id"], "week_start": str(period["week_start"]), "status": period["status"]}
+            if period
+            else None
+        ),
+        "editable": editable,
+        "submissions": submissions,
+    }
+
+
 @router.post("/{venue_token}/submit")
 def submit_availability(venue_token: str, payload: AvailabilitySubmitRequest):
     venue = _get_venue_or_404(venue_token)
     staff = _get_staff_by_pin(venue["id"], payload.pin)
 
-    period = _get_or_create_current_period(venue["id"])
+    if payload.week_start:
+        monday = _normalize_monday(payload.week_start)
+        window_start, window_end = _week_window()
+        if monday < window_start or monday > window_end:
+            raise HTTPException(status_code=400, detail="That week is outside the planning window")
+        existing = _period_for_week(venue["id"], monday)
+        if existing and existing["status"] != "collecting":
+            raise HTTPException(status_code=400, detail="Availability for that week has already closed")
+        period = _get_or_create_period_for_week(venue["id"], monday)
+    else:
+        period = _get_or_create_current_period(venue["id"])
 
     supabase = get_supabase()
 
