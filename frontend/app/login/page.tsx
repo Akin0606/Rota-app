@@ -3,31 +3,26 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import Toast from "@/components/toast";
 import { ApiError, requestLoginCode } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  }
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSend() {
     if (!email.includes("@")) {
-      showToast("Please enter a valid email");
+      setError("Please enter a valid email address.");
       return;
     }
     setSending(true);
+    setError(null);
     try {
       await requestLoginCode(email);
       router.push(`/login/check-email?email=${encodeURIComponent(email)}`);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not send code, please try again");
+      setError(err instanceof ApiError ? err.message : "Could not send code, please try again.");
     } finally {
       setSending(false);
     }
@@ -55,6 +50,12 @@ export default function LoginPage() {
             />
           </div>
 
+          {error && (
+            <div className="mb-3 w-full rounded-input border border-unavail-border bg-unavail-bg px-3.5 py-2.5 text-center text-[13px] font-medium text-unavail-text">
+              {error}
+            </div>
+          )}
+
           <button
             onClick={handleSend}
             disabled={sending}
@@ -67,7 +68,6 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
-      <Toast message={toast} />
     </div>
   );
 }

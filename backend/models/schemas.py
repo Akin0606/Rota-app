@@ -204,6 +204,17 @@ class AdminVenueOut(BaseModel):
     created_at: str
     staff_count: int
     period_status: Optional[str] = None
+    pending: bool = False
+
+
+class AdminCreateManagerRequest(BaseModel):
+    email: str = Field(min_length=3)
+
+
+class AdminManagerOut(BaseModel):
+    email: str
+    status: str
+    login_url: str
 
 
 class AdminStaffOut(BaseModel):

@@ -136,7 +136,32 @@ export async function requestLoginCode(email: string): Promise<{ status: string 
   const supabase = createClient();
   const { error } = await supabase.auth.signInWithOtp({ email });
   if (error) {
-    throw new ApiError(400, error.message);
+    // Log the full error object so failures are never silent during debugging.
+    console.error("[login] signInWithOtp failed:", error);
+
+    const raw = (error.message || "").trim();
+    const name = (error as { name?: string }).name;
+    // AuthRetryableFetchError carries an empty ("{}") body — it's a transient
+    // network / rate-limit failure, not something the user did wrong.
+    const retryable = name === "AuthRetryableFetchError";
+    const emptyMessage = !raw || raw === "{}" || raw === "[object Object]";
+    // When "Allow new users to sign up" is off in Supabase Auth, requesting a
+    // code for an email with no account returns "Signups not allowed for otp".
+    const signupsDisabled =
+      (error as { code?: string }).code === "otp_disabled" ||
+      /signups?\s+not\s+allowed|not\s+allowed\s+for\s+otp/i.test(raw);
+
+    let message: string;
+    if (signupsDisabled) {
+      message = "This email isn't registered — contact your Crewplan admin.";
+    } else if (retryable) {
+      message = "Couldn't reach the server — please try again in a moment.";
+    } else if (emptyMessage) {
+      message = "Could not send code, please try again.";
+    } else {
+      message = raw;
+    }
+    throw new ApiError((error as { status?: number }).status ?? 400, message);
   }
   return { status: "sent" };
 }

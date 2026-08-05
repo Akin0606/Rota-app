@@ -49,6 +49,13 @@ export type AdminVenue = {
   created_at: string;
   staff_count: number;
   period_status: string | null;
+  pending: boolean;
+};
+
+export type AdminManager = {
+  email: string;
+  status: string;
+  login_url: string;
 };
 
 export type AdminStaff = {
@@ -85,6 +92,13 @@ export type AdminActivity = {
 
 export function listAdminVenues(): Promise<AdminVenue[]> {
   return adminRequest("/api/admin/venues");
+}
+
+export function addAdminManager(email: string): Promise<AdminManager> {
+  return adminRequest("/api/admin/managers", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
 }
 
 export function getAdminVenueDetail(id: string): Promise<AdminVenueDetail> {

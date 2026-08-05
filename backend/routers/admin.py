@@ -6,6 +6,8 @@ from config import get_settings
 from database import get_supabase
 from models.schemas import (
     AdminActivityOut,
+    AdminCreateManagerRequest,
+    AdminManagerOut,
     AdminVenueDetailOut,
     AdminVenueOut,
     RotaSummaryOut,
@@ -66,7 +68,7 @@ def list_venues():
     for p in all_periods:
         latest_status.setdefault(p["venue_id"], p["status"])
 
-    return [
+    rows = [
         {
             "id": v["id"],
             "name": v["name"],
@@ -74,9 +76,68 @@ def list_venues():
             "created_at": v["created_at"],
             "staff_count": staff_counts.get(v["id"], 0),
             "period_status": latest_status.get(v["id"]),
+            "pending": False,
         }
         for v in venues
     ]
+
+    # Managers who have a Supabase auth account but haven't run the onboarding
+    # wizard yet (no venue) — surface them so the admin can see accounts they
+    # created that are still awaiting onboarding.
+    venue_emails = {(v.get("manager_email") or "").lower() for v in venues}
+    try:
+        users = supabase.auth.admin.list_users()
+    except Exception:
+        users = []
+    for u in users:
+        email = (getattr(u, "email", None) or "").lower()
+        if not email or email in venue_emails:
+            continue
+        rows.append(
+            {
+                "id": f"pending:{getattr(u, 'id', '')}",
+                "name": getattr(u, "email", ""),
+                "manager_email": getattr(u, "email", ""),
+                "created_at": str(getattr(u, "created_at", "")),
+                "staff_count": 0,
+                "period_status": "awaiting_onboarding",
+                "pending": True,
+            }
+        )
+
+    return rows
+
+
+@router.post("/managers", response_model=AdminManagerOut, dependencies=[Depends(require_admin)])
+def add_manager(payload: AdminCreateManagerRequest):
+    email = payload.email.strip().lower()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(status_code=400, detail="Enter a valid email address")
+
+    supabase = get_supabase()
+
+    existing_venue = (
+        supabase.table("venues").select("id").eq("manager_email", email).limit(1).execute()
+    )
+    if existing_venue.data:
+        raise HTTPException(status_code=409, detail="A venue already exists for this email")
+
+    try:
+        # email_confirm=True marks the account confirmed so they can request a
+        # login code and sign in immediately, without any email verification
+        # step or Supabase "allow signups" toggle getting in the way.
+        supabase.auth.admin.create_user({"email": email, "email_confirm": True})
+    except Exception as exc:
+        message = str(exc)
+        if "already" in message.lower() or "registered" in message.lower():
+            raise HTTPException(status_code=409, detail="That email already has an account")
+        raise HTTPException(status_code=500, detail=f"Could not create account: {message}")
+
+    return {
+        "email": email,
+        "status": "created",
+        "login_url": f"{get_settings().frontend_url}/login",
+    }
 
 
 @router.get(
