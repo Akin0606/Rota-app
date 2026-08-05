@@ -48,6 +48,15 @@ export default function TeamPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [pendingOnly, setPendingOnly] = useState(false);
+
+  // Honour ?filter=pending from the dashboard Availability card.
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setPendingOnly(new URLSearchParams(window.location.search).get("filter") === "pending");
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,11 +64,14 @@ export default function TeamPage() {
       setLoading(true);
       setError(false);
       try {
-        const [venueRes, staffRes, periodsRes] = await Promise.all([getVenue(), listStaff(), listPeriods()]);
+        const [venueRes, periodsRes] = await Promise.all([getVenue(), listPeriods()]);
+        if (cancelled) return;
+        const current = periodsRes.find((p) => p.status === "collecting") ?? periodsRes[0] ?? null;
+        const staffRes = await listStaff(current?.id);
         if (cancelled) return;
         setVenue(venueRes);
+        setPeriod(current);
         setStaff(staffRes);
-        setPeriod(periodsRes.find((p) => p.status === "collecting") ?? periodsRes[0] ?? null);
       } catch {
         if (!cancelled) setError(true);
       } finally {
@@ -207,80 +219,139 @@ export default function TeamPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-panel border border-hairline bg-surface-card">
-        {staff.length === 0 ? (
-          <div className="p-10 text-center text-sm text-ink-faint">No team members yet.</div>
-        ) : (
-          staff.map((member, i) => (
-            <div
-              key={member.id}
-              className={`flex flex-wrap items-center gap-3 px-5 py-4 ${
-                i < staff.length - 1 ? "border-b border-surface-page" : ""
-              } ${member.is_active ? "" : "opacity-50"}`}
-            >
-              <div
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-[11px] font-bold ${
-                  member.is_active ? "bg-accent-border text-accent" : "bg-surface-page text-ink-faint"
-                }`}
-              >
-                {initials(member.name)}
-              </div>
-              <div className="min-w-[140px] flex-1">
-                <div className="text-sm font-semibold text-ink">{member.name}</div>
-                <div className="text-xs text-ink-faint">{member.email || "No email"}</div>
-              </div>
-              <div className="w-24 text-[13px] text-ink-label">{member.role}</div>
-              <div className="w-20 rounded-md bg-surface-page px-2 py-1 text-center text-[11px] font-bold tracking-wide text-ink-label">
-                {member.pin}
-              </div>
-              <div
-                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${
-                  member.is_active ? "bg-avail-bg text-avail-text" : "bg-surface-page text-ink-faint"
-                }`}
-              >
-                {member.is_active ? "Active" : "Inactive"}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {member.is_active ? (
-                  <>
-                    <button
-                      onClick={() => openEdit(member)}
-                      className="rounded-lg bg-surface-subtle px-3 py-2 text-xs font-medium text-accent"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleResetPin(member)}
-                      className="rounded-lg bg-surface-subtle px-3 py-2 text-xs font-medium text-ink-muted"
-                    >
-                      Reset PIN
-                    </button>
-                    <button
-                      onClick={() => handleRemind(member)}
-                      className="rounded-lg bg-surface-subtle px-3 py-2 text-xs font-medium text-ink-muted"
-                    >
-                      Remind
-                    </button>
-                    <button
-                      onClick={() => toggleActive(member)}
-                      className="rounded-lg bg-surface-subtle px-3 py-2 text-xs font-medium text-ink-muted"
-                    >
-                      Deactivate
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => toggleActive(member)}
-                    className="rounded-lg bg-surface-subtle px-3 py-2 text-xs font-medium text-accent"
-                  >
-                    Reactivate
-                  </button>
-                )}
-              </div>
+      {pendingOnly && (
+        <div className="mb-4 flex items-center gap-2 text-[13px] text-ink-muted">
+          <span className="rounded-full bg-warn-bg px-2.5 py-1 text-[11px] font-semibold text-warn-text">
+            Showing pending
+          </span>
+          <button onClick={() => setPendingOnly(false)} className="font-semibold text-accent">
+            Show all
+          </button>
+        </div>
+      )}
+
+      {(() => {
+        const visible = pendingOnly
+          ? staff.filter((m) => m.is_active && !m.submitted)
+          : staff;
+        if (staff.length === 0) {
+          return (
+            <div className="rounded-panel border border-hairline bg-surface-card p-10 text-center text-sm text-ink-faint">
+              No team members yet.
             </div>
-          ))
-        )}
-      </div>
+          );
+        }
+        if (visible.length === 0) {
+          return (
+            <div className="rounded-panel border border-hairline bg-surface-card p-10 text-center text-sm text-ink-faint">
+              Everyone&apos;s submitted — nobody pending.
+            </div>
+          );
+        }
+        return (
+          <div className="flex flex-col gap-2.5">
+            {visible.map((member) => {
+              const expanded = expandedId === member.id;
+              return (
+                <div
+                  key={member.id}
+                  className={`overflow-hidden rounded-panel border bg-surface-card ${
+                    expanded ? "border-accent-border" : "border-hairline"
+                  } ${member.is_active ? "" : "opacity-60"}`}
+                >
+                  <button
+                    onClick={() => setExpandedId(expanded ? null : member.id)}
+                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+                  >
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-xs font-bold ${
+                        member.is_active ? "bg-accent-border text-accent" : "bg-surface-page text-ink-faint"
+                      }`}
+                    >
+                      {initials(member.name)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold text-ink">{member.name}</div>
+                      <div className="text-xs text-ink-faint">{member.role}</div>
+                    </div>
+                    {member.submitted !== null && member.is_active && (
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          member.submitted ? "bg-avail-bg text-avail-text" : "bg-warn-bg text-warn-text"
+                        }`}
+                      >
+                        {member.submitted ? "Submitted" : "Pending"}
+                      </span>
+                    )}
+                    {!member.is_active && (
+                      <span className="shrink-0 rounded-full bg-surface-page px-2.5 py-1 text-[11px] font-semibold text-ink-faint">
+                        Inactive
+                      </span>
+                    )}
+                    <span
+                      className={`shrink-0 text-ink-faint transition-transform ${expanded ? "rotate-180" : ""}`}
+                    >
+                      ⌄
+                    </span>
+                  </button>
+
+                  {expanded && (
+                    <div className="border-t border-surface-page px-4 py-3.5">
+                      <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1.5 text-[13px]">
+                        <div>
+                          <span className="text-ink-faint">Email </span>
+                          <span className="text-ink-label">{member.email || "—"}</span>
+                        </div>
+                        <div>
+                          <span className="text-ink-faint">PIN </span>
+                          <span className="font-bold tracking-wide text-ink-label">{member.pin}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {member.is_active ? (
+                          <>
+                            <button
+                              onClick={() => openEdit(member)}
+                              className="rounded-lg bg-surface-subtle px-3.5 py-2 text-xs font-medium text-accent"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleResetPin(member)}
+                              className="rounded-lg bg-surface-subtle px-3.5 py-2 text-xs font-medium text-ink-muted"
+                            >
+                              Reset PIN
+                            </button>
+                            <button
+                              onClick={() => handleRemind(member)}
+                              className="rounded-lg bg-surface-subtle px-3.5 py-2 text-xs font-medium text-ink-muted"
+                            >
+                              Remind
+                            </button>
+                            <button
+                              onClick={() => toggleActive(member)}
+                              className="rounded-lg bg-surface-subtle px-3.5 py-2 text-xs font-medium text-unavail-text"
+                            >
+                              Deactivate
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => toggleActive(member)}
+                            className="rounded-lg bg-surface-subtle px-3.5 py-2 text-xs font-medium text-accent"
+                          >
+                            Reactivate
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       <Modal open={modalMode !== null} onClose={closeModal} title={modalMode === "add" ? "Add Team Member" : "Edit Team Member"}>
         <div className="mb-3">
