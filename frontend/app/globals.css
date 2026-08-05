@@ -38,6 +38,17 @@ textarea::placeholder {
   color: #545452;
 }
 
+/* iOS Safari auto-zooms when a focused control's font-size is < 16px. Force
+   16px on small screens so focusing an input never zooms the page. Desktop
+   keeps the designed sizes. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 a {
   color: #ff4d00;
 }

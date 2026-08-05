@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from config import get_settings
 from database import get_supabase
@@ -68,6 +68,53 @@ def _get_current_period(venue_id: str) -> Optional[dict]:
     return res.data[0] if res.data else None
 
 
+def _get_or_create_current_period(venue_id: str) -> dict:
+    """Returns the venue's open (collecting) period, creating one on the fly if
+    none exists. This guarantees a staff member who taps the venue link always
+    has a week to fill in, even if the open/close cron timing left a gap."""
+    existing = _get_current_period(venue_id)
+    if existing:
+        return existing
+
+    from datetime import date, timedelta
+
+    supabase = get_supabase()
+    today = date.today()
+    this_monday = today - timedelta(days=today.weekday())
+
+    # Pick the earliest upcoming week (from this week) that doesn't already have
+    # a period, so we don't collide with a closed/generated week.
+    taken = {
+        str(r["week_start"])
+        for r in supabase.table("availability_periods")
+        .select("week_start")
+        .eq("venue_id", venue_id)
+        .gte("week_start", this_monday.isoformat())
+        .execute()
+        .data
+    }
+    candidate = this_monday
+    for _ in range(8):
+        if candidate.isoformat() not in taken:
+            break
+        candidate = candidate + timedelta(days=7)
+
+    period = (
+        supabase.table("availability_periods")
+        .insert({"venue_id": venue_id, "week_start": candidate.isoformat(), "status": "collecting"})
+        .execute()
+        .data[0]
+    )
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue_id,
+            "action": "availability_opened",
+            "detail": f"Availability opened for week of {candidate.isoformat()} (auto)",
+        }
+    ).execute()
+    return period
+
+
 def _get_shifts(venue_id: str) -> list[dict]:
     supabase = get_supabase()
     return (
@@ -96,8 +143,11 @@ def _get_rules(venue_id: str) -> dict:
 
 
 @router.get("/{venue_token}", response_model=VenueInfoResponse)
-def get_venue_info(venue_token: str):
+def get_venue_info(venue_token: str, response: Response):
     venue = _get_venue_or_404(venue_token)
+    # Never let a browser/CDN serve a cached venue name — it must always reflect
+    # the latest rename.
+    response.headers["Cache-Control"] = "no-store, max-age=0"
     return {
         "venue_name": venue["name"],
         "shifts": _get_shifts(venue["id"]),
@@ -127,18 +177,18 @@ def authenticate(venue_token: str, payload: PinAuthRequest, request: Request):
     # Successful PIN clears the failure count for this venue_token + IP.
     rate_limit.clear(lock_key)
 
-    period = _get_current_period(venue["id"])
-    submissions = []
-    if period:
-        supabase = get_supabase()
-        submissions = (
-            supabase.table("availability_submissions")
-            .select("day_index, shift_id, status, note")
-            .eq("period_id", period["id"])
-            .eq("staff_id", staff["id"])
-            .execute()
-            .data
-        )
+    # Always give the staff member an open week to fill — create one on the fly
+    # if the cron cycle left a gap.
+    period = _get_or_create_current_period(venue["id"])
+    supabase = get_supabase()
+    submissions = (
+        supabase.table("availability_submissions")
+        .select("day_index, shift_id, status, note")
+        .eq("period_id", period["id"])
+        .eq("staff_id", staff["id"])
+        .execute()
+        .data
+    )
 
     return {
         "staff": {"id": staff["id"], "name": staff["name"], "role": staff["role"]},
@@ -163,9 +213,7 @@ def submit_availability(venue_token: str, payload: AvailabilitySubmitRequest):
     venue = _get_venue_or_404(venue_token)
     staff = _get_staff_by_pin(venue["id"], payload.pin)
 
-    period = _get_current_period(venue["id"])
-    if not period:
-        raise HTTPException(status_code=404, detail="No availability period is currently open")
+    period = _get_or_create_current_period(venue["id"])
 
     supabase = get_supabase()
 

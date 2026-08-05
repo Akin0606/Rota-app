@@ -91,7 +91,13 @@ def close_availability_for_venue(venue: dict) -> Optional[dict]:
     ).execute()
 
     closed_period = {**period, "status": "closed"}
-    return run_solver_for_period(venue, closed_period, note=" (auto-generated after availability closed)")
+    result = run_solver_for_period(venue, closed_period, note=" (auto-generated after availability closed)")
+
+    # Guarantee continuity: as soon as a week closes, make sure the next week's
+    # collecting period exists so staff always have an open week to fill.
+    open_availability_for_venue(venue)
+
+    return result
 
 
 # Manager review email ---------------------------------------------------------
