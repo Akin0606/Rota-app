@@ -8,48 +8,56 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-body)", "IBM Plex Sans", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "Space Grotesk", "sans-serif"],
+      },
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        // Orange — reserved for primary actions and status only.
         accent: {
-          DEFAULT: "#3b82f6",
-          hover: "#2563eb",
-          light: "#eff6ff",
-          border: "#dbeafe",
+          DEFAULT: "#ff4d00",
+          hover: "#e64500",
+          light: "#1f1108", // accent-bg: dark tinted surface behind accent chips
+          border: "#7a2600", // accent-dim
         },
+        // Text
         ink: {
-          DEFAULT: "#1a1a1a",
-          label: "#374151",
-          muted: "#6b7280",
-          faint: "#9ca3af",
+          DEFAULT: "#f5f5f4", // text-primary
+          label: "#c9c9c7",
+          muted: "#8c8c8a", // text-secondary
+          faint: "#545452", // text-muted
         },
+        // Dark surfaces
         surface: {
-          DEFAULT: "#fafaf9",
-          page: "#f3f4f6",
-          card: "#ffffff",
-          subtle: "#f9fafb",
+          DEFAULT: "#141414",
+          page: "#0d0d0d",
+          card: "#141414",
+          subtle: "#1a1a1a", // surface-2
         },
+        // Status / shift-availability — tuned for contrast on #141414.
         avail: {
-          bg: "#dcfce7",
+          bg: "#10231a",
           border: "#22c55e",
-          text: "#16a34a",
+          text: "#4ade80",
         },
         unavail: {
-          bg: "#fee2e2",
-          border: "#ef4444",
-          text: "#ef4444",
+          bg: "#2a1113",
+          border: "#f87171",
+          text: "#f87171",
         },
         preferred: {
-          bg: "#fef9c3",
+          bg: "#241e0a",
           border: "#eab308",
-          text: "#ca8a04",
+          text: "#fbbf24",
         },
         unset: {
-          bg: "#f3f4f6",
-          border: "#e5e7eb",
-          text: "#9ca3af",
+          bg: "#1a1a1a",
+          border: "#2e2e2e",
+          text: "#6b6b69",
         },
-        warn: { bg: "#fef3c7", text: "#92400e", dot: "#f59e0b" },
+        warn: { bg: "#241c0a", text: "#fcd34d", dot: "#f59e0b" },
       },
       borderRadius: {
         card: "24px",
@@ -58,10 +66,10 @@ const config: Config = {
         input: "12px",
       },
       boxShadow: {
-        card: "0 8px 32px rgba(0,0,0,0.1)",
+        card: "0 8px 32px rgba(0,0,0,0.4)",
       },
       borderColor: {
-        hairline: "rgba(0,0,0,0.04)",
+        hairline: "#232323",
       },
       keyframes: {
         fadeIn: {

@@ -1,5 +1,5 @@
 """Transactional email sending via Resend, matching the app's visual branding
-(system-ui font, #3b82f6 accent, 16px card radius, subtle borders)."""
+(system-ui font, #FF4D00 orange accent, 16px card radius, subtle borders)."""
 
 from typing import Optional
 
@@ -23,7 +23,7 @@ def _shell(preheader: str, footer_note: str, body_html: str) -> str:
 <tr><td align="center">
 <table role="presentation" width="100%" style="max-width:480px;background:#ffffff;border-radius:16px;border:1px solid rgba(0,0,0,0.04);overflow:hidden;" cellpadding="0" cellspacing="0">
 <tr><td style="padding:24px 32px;border-bottom:1px solid rgba(0,0,0,0.04);">
-<span style="font-size:15px;font-weight:700;color:#3b82f6;letter-spacing:-0.01em;">Rota</span>
+<span style="font-size:16px;font-weight:700;color:#111827;letter-spacing:-0.02em;">crewplan<span style="color:#FF4D00;">.</span></span>
 </td></tr>
 <tr><td style="padding:32px;color:#111827;font-size:15px;line-height:1.6;">
 {body_html}
@@ -40,7 +40,7 @@ def _shell(preheader: str, footer_note: str, body_html: str) -> str:
 
 def _button(text: str, url: str) -> str:
     return (
-        f'<a href="{url}" style="display:inline-block;background:#3b82f6;color:#ffffff;'
+        f'<a href="{url}" style="display:inline-block;background:#FF4D00;color:#ffffff;'
         f"text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;"
         f'border-radius:10px;margin-top:8px;">{text}</a>'
     )
@@ -49,7 +49,7 @@ def _button(text: str, url: str) -> str:
 def _pin_badge(pin: str) -> str:
     return (
         '<div style="margin:24px 0;text-align:center;">'
-        '<span style="display:inline-block;background:#eff6ff;color:#3b82f6;font-size:32px;'
+        '<span style="display:inline-block;background:#fff1eb;color:#FF4D00;font-size:32px;'
         f'font-weight:700;letter-spacing:0.15em;padding:16px 32px;border-radius:12px;">{pin}</span>'
         "</div>"
     )
@@ -87,7 +87,7 @@ def send_magic_link_email(to_email: str, venue_name: str, magic_link_url: str) -
 {_button("Log in", magic_link_url)}
 <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">This link expires shortly and can only be used once. If you didn't request it, you can ignore this email.</p>
 """
-    html = _shell(f"Your login link for {venue_name}", f"Sent because you have a manager account for {venue_name} on Rota.", body)
+    html = _shell(f"Your login link for {venue_name}", f"Sent because you have a manager account for {venue_name} on Crewplan.", body)
     return _send(to_email, subject, html)
 
 
@@ -102,7 +102,7 @@ def send_staff_welcome_email(to_email: str, name: str, venue_name: str, pin: str
 {_button("Go to " + venue_name, venue_link_url)}
 <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">Keep this PIN private — it's how the rota identifies you.</p>
 """
-    html = _shell(f"Your PIN for {venue_name} is {pin}", f"Sent because you were added to the {venue_name} team on Rota.", body)
+    html = _shell(f"Your PIN for {venue_name} is {pin}", f"Sent because you were added to the {venue_name} team on Crewplan.", body)
     return _send(to_email, subject, html)
 
 
@@ -123,7 +123,7 @@ def _pin_email_html(name: str, venue_name: str, pin: str, venue_link_url: str, *
 {_button("Go to " + venue_name, venue_link_url)}
 <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">Keep this PIN private — it's how the rota identifies you.</p>
 """
-    html = _shell(subject, f"Sent because you're part of the {venue_name} team on Rota.", body)
+    html = _shell(subject, f"Sent because you're part of the {venue_name} team on Crewplan.", body)
     return subject, html
 
 
@@ -156,7 +156,7 @@ def send_availability_reminder_email(
 <p style="margin:0 0 16px;font-size:13px;color:#6b7280;">Deadline: <strong>{deadline_label}</strong></p>
 {_button("Submit availability", venue_link_url)}
 """
-    html = _shell(f"Availability needed for {week_label}", f"Sent because you're part of the {venue_name} team on Rota.", body)
+    html = _shell(f"Availability needed for {week_label}", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
     return _send(to_email, subject, html)
 
 
@@ -185,7 +185,7 @@ def send_manager_review_email(
 {conflicts_line}
 {_button("Review rota", review_link_url)}
 """
-    html = _shell(f"Rota ready to review for {week_label}", f"Sent because you manage {venue_name} on Rota.", body)
+    html = _shell(f"Rota ready to review for {week_label}", f"Sent because you manage {venue_name} on Crewplan.", body)
     return _send(to_email, subject, html)
 
 
@@ -219,7 +219,7 @@ def send_published_rota_email(
 </table>
 {_button("View full rota", rota_link_url)}
 """
-    html = _shell(f"Your rota for {week_label}", f"Sent because you're part of the {venue_name} team on Rota.", body)
+    html = _shell(f"Your rota for {week_label}", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
     return _send(to_email, subject, html)
 
 
@@ -237,5 +237,5 @@ def send_bulk_reminder_email(
 <p style="margin:0 0 16px;">Reminder: <strong>{pending_count}</strong> staff haven't submitted their availability yet.</p>
 {_button("Go to dashboard", dashboard_link_url)}
 """
-    html = _shell(f"{pending_count} staff haven't submitted availability", "Sent because you manage a venue on Rota.", body)
+    html = _shell(f"{pending_count} staff haven't submitted availability", "Sent because you manage a venue on Crewplan.", body)
     return _send(to_email, subject, html)

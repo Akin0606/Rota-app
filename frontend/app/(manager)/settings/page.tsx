@@ -211,7 +211,7 @@ export default function SettingsPage() {
                       <select
                         value={sh.start_time}
                         onChange={(e) => patchShiftLocal(sh.id, { start_time: e.target.value })}
-                        className="flex-1 rounded-lg border-[1.5px] border-accent-border bg-white px-2 py-2 text-[13px] outline-none"
+                        className="flex-1 rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-2 text-[13px] outline-none"
                       >
                         {START_TIMES.map((t) => (
                           <option key={t} value={t}>{t}</option>
@@ -221,7 +221,7 @@ export default function SettingsPage() {
                       <select
                         value={sh.end_time}
                         onChange={(e) => patchShiftLocal(sh.id, { end_time: e.target.value })}
-                        className="flex-1 rounded-lg border-[1.5px] border-accent-border bg-white px-2 py-2 text-[13px] outline-none"
+                        className="flex-1 rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-2 text-[13px] outline-none"
                       >
                         {END_TIMES.map((t) => (
                           <option key={t} value={t}>{t}</option>
@@ -277,7 +277,7 @@ export default function SettingsPage() {
               <select
                 value={rules.avail_opens_day}
                 onChange={(e) => setRules((r) => (r ? { ...r, avail_opens_day: e.target.value } : r))}
-                className="rounded-lg border-[1.5px] border-unset-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none"
+                className="rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-semibold text-ink outline-none"
               >
                 {DAY_NAMES.map((d) => (
                   <option key={d} value={d}>{d}</option>
@@ -288,7 +288,7 @@ export default function SettingsPage() {
               <select
                 value={rules.avail_closes_day}
                 onChange={(e) => setRules((r) => (r ? { ...r, avail_closes_day: e.target.value } : r))}
-                className="rounded-lg border-[1.5px] border-unset-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none"
+                className="rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-semibold text-ink outline-none"
               >
                 {DAY_NAMES.map((d) => (
                   <option key={d} value={d}>{d}</option>
@@ -307,7 +307,7 @@ export default function SettingsPage() {
               <select
                 value={rules.review_email_day}
                 onChange={(e) => setRules((r) => (r ? { ...r, review_email_day: e.target.value } : r))}
-                className="rounded-lg border-[1.5px] border-unset-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none"
+                className="rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-semibold text-ink outline-none"
               >
                 {DAY_NAMES.map((d) => (
                   <option key={d} value={d}>{d}</option>

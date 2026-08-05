@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import Toast from "@/components/toast";
+import Wordmark from "@/components/wordmark";
 import { ApiError, requestLoginCode, verifyLoginCode } from "@/lib/api";
 
 function VerifyCodeContent() {
@@ -66,10 +67,11 @@ function VerifyCodeContent() {
     <div className="mx-auto max-w-[420px] py-4">
       <div className="mx-4 animate-fadeIn overflow-hidden rounded-card bg-surface shadow-card">
         <div className="flex min-h-[500px] flex-col items-center justify-center px-6 py-10">
-          <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-avail-bg text-[28px]">
+          <Wordmark className="mb-5 text-[22px]" />
+          <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-accent-light text-[28px]">
             ✉️
           </div>
-          <div className="mb-1.5 text-2xl font-bold text-ink">Enter your code</div>
+          <div className="mb-1.5 font-display text-2xl font-bold text-ink">Enter your code</div>
           <div className="mb-8 text-center text-sm leading-relaxed text-ink-muted">
             Enter the code we sent to
             <br />

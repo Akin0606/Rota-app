@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import Wordmark from "@/components/wordmark";
 import {
   AdminApiError,
   clearAdminSecret,
@@ -62,7 +63,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return (
       <div className="mx-auto flex min-h-screen max-w-[380px] flex-col items-center justify-center px-6">
         <div className="w-full rounded-card border border-hairline bg-surface-card p-8 shadow-card">
-          <div className="mb-1.5 text-xl font-bold text-ink">Admin Console</div>
+          <Wordmark className="text-lg" />
+          <div className="mb-1.5 mt-3 font-display text-xl font-bold text-ink">Admin Console</div>
           <div className="mb-6 text-sm text-ink-faint">Enter the admin key to continue</div>
           <input
             type="password"
@@ -95,7 +97,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="border-b border-hairline bg-surface-card px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <div className="flex items-center gap-6">
-            <div className="text-sm font-bold text-ink">Rota Admin</div>
+            <div className="flex items-baseline gap-1.5">
+              <Wordmark className="text-[15px]" />
+              <span className="text-sm font-medium text-ink-faint">admin</span>
+            </div>
             <Link
               href="/admin"
               className={`text-[13px] font-medium ${venuesActive ? "text-accent" : "text-ink-muted"}`}

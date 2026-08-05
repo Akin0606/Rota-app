@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import Wordmark from "@/components/wordmark";
+
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: "📊", href: "/dashboard" },
   { key: "rota", label: "Rota", icon: "📅", href: "/rota" },
@@ -20,13 +22,10 @@ export default function Sidebar({ venueName, managerEmail }: SidebarProps) {
   const initials = managerEmail?.[0]?.toUpperCase() ?? "M";
 
   return (
-    <div className="hidden w-60 shrink-0 flex-col gap-1 border-r border-[#f0f0ef] bg-surface-card px-5 py-7 md:flex">
+    <div className="hidden w-60 shrink-0 flex-col gap-1 border-r border-hairline bg-surface-card px-5 py-7 md:flex">
       <div className="mb-7 flex items-center gap-2.5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-accent-light text-base font-extrabold text-accent">
-          R
-        </div>
         <div>
-          <div className="text-[15px] font-bold text-ink">Rota</div>
+          <Wordmark className="text-[19px]" />
           <div className="text-[11px] text-ink-faint">{venueName}</div>
         </div>
       </div>
@@ -51,7 +50,7 @@ export default function Sidebar({ venueName, managerEmail }: SidebarProps) {
 
       {managerEmail ? (
         <div className="flex items-center gap-2.5 rounded-[10px] bg-surface-subtle px-3.5 py-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-[#e0e7ff] text-xs font-bold text-accent">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-accent-light text-xs font-bold text-accent">
             {initials}
           </div>
           <div className="min-w-0">

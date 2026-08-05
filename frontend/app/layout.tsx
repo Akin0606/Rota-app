@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+
+import { ibmPlex, spaceGrotesk } from "@/lib/fonts";
+
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Rota",
-  description: "Rota scheduling for pubs and restaurants",
+  title: "Crewplan",
+  description: "Rotas that build themselves — scheduling for pubs and restaurants",
 };
 
 export default function RootLayout({
@@ -13,7 +16,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className={`min-h-screen antialiased ${spaceGrotesk.variable} ${ibmPlex.variable}`}>
+        {children}
+      </body>
     </html>
   );
 }

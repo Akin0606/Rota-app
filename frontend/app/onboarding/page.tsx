@@ -224,7 +224,7 @@ export default function OnboardingPage() {
                         <select
                           value={sh.start_time}
                           onChange={(e) => updateShift(i, { start_time: e.target.value })}
-                          className="flex-1 rounded-lg border-[1.5px] border-accent-border bg-white px-2 py-2 text-[13px] outline-none"
+                          className="flex-1 rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-2 text-[13px] outline-none"
                         >
                           {START_TIMES.map((t) => (
                             <option key={t} value={t}>{t}</option>
@@ -234,7 +234,7 @@ export default function OnboardingPage() {
                         <select
                           value={sh.end_time}
                           onChange={(e) => updateShift(i, { end_time: e.target.value })}
-                          className="flex-1 rounded-lg border-[1.5px] border-accent-border bg-white px-2 py-2 text-[13px] outline-none"
+                          className="flex-1 rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-2 text-[13px] outline-none"
                         >
                           {END_TIMES.map((t) => (
                             <option key={t} value={t}>{t}</option>
@@ -251,7 +251,7 @@ export default function OnboardingPage() {
                         {shifts.length > 1 && (
                           <button
                             onClick={() => deleteShift(i)}
-                            className="rounded-lg border border-unavail-border bg-white px-3 py-2 text-[13px] font-semibold text-unavail-text"
+                            className="rounded-lg border border-unavail-border bg-surface-subtle px-3 py-2 text-[13px] font-semibold text-unavail-text"
                           >
                             Delete
                           </button>
@@ -344,7 +344,7 @@ export default function OnboardingPage() {
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     placeholder="e.g. Priya Sharma"
-                    className="w-full rounded-[10px] border-[1.5px] border-unset-border bg-white px-3.5 py-2.5 text-sm outline-none"
+                    className="w-full rounded-[10px] border-[1.5px] border-unset-border bg-surface-subtle px-3.5 py-2.5 text-sm outline-none"
                   />
                 </div>
                 <div className="mb-2.5 flex gap-2">
@@ -354,7 +354,7 @@ export default function OnboardingPage() {
                       value={newEmail}
                       onChange={(e) => setNewEmail(e.target.value)}
                       placeholder="email@example.com"
-                      className="w-full rounded-[10px] border-[1.5px] border-unset-border bg-white px-3.5 py-2.5 text-sm outline-none"
+                      className="w-full rounded-[10px] border-[1.5px] border-unset-border bg-surface-subtle px-3.5 py-2.5 text-sm outline-none"
                     />
                   </div>
                   <div className="flex-1">
@@ -362,7 +362,7 @@ export default function OnboardingPage() {
                     <select
                       value={newRole}
                       onChange={(e) => setNewRole(e.target.value)}
-                      className="w-full rounded-[10px] border-[1.5px] border-unset-border bg-white px-3.5 py-2.5 text-sm outline-none"
+                      className="w-full rounded-[10px] border-[1.5px] border-unset-border bg-surface-subtle px-3.5 py-2.5 text-sm outline-none"
                     >
                       {ROLES.map((r) => (
                         <option key={r} value={r}>{r}</option>

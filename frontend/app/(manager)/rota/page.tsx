@@ -222,7 +222,7 @@ export default function RotaPage() {
               return (
                 <span
                   key={shiftId}
-                  className="rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-medium text-unavail-text"
+                  className="rounded-lg bg-surface-subtle px-2.5 py-1.5 text-[12px] font-medium text-unavail-text"
                 >
                   {shift.name}: {days.map((d) => DAY_LABELS[d]).join(", ")}
                 </span>

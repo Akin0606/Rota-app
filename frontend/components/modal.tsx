@@ -18,7 +18,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[380px] rounded-[20px] bg-white p-7 shadow-[0_20px_60px_rgba(0,0,0,0.15)]"
+        className="w-full max-w-[380px] rounded-[20px] border border-hairline bg-surface-card p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 text-lg font-bold text-ink">{title}</div>

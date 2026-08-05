@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import Wordmark from "@/components/wordmark";
 import { ApiError, requestLoginCode } from "@/lib/api";
 
 export default function LoginPage() {
@@ -32,10 +33,8 @@ export default function LoginPage() {
     <div className="mx-auto max-w-[420px] py-4">
       <div className="mx-4 animate-fadeIn overflow-hidden rounded-card bg-surface shadow-card">
         <div className="flex min-h-[500px] flex-col items-center justify-center px-6 py-10">
-          <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-[18px] bg-accent-light">
-            <span className="text-[28px] font-extrabold text-accent">R</span>
-          </div>
-          <div className="mb-1.5 text-2xl font-bold text-ink">Welcome back</div>
+          <Wordmark className="mb-6 text-[26px]" />
+          <div className="mb-1.5 font-display text-2xl font-bold text-ink">Welcome back</div>
           <div className="mb-8 text-sm text-ink-faint">Sign in to manage your rota</div>
 
           <div className="mb-4 w-full">
