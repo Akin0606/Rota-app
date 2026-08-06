@@ -131,7 +131,13 @@ export default function SettingsPage() {
     try {
       await Promise.all([
         venue && venueName.trim() && venueName !== venue.name ? updateVenue(venueName.trim()) : null,
-        updateRules(rules),
+        // The availability-window datetimes are owned by Scheduler now; Settings
+        // only saves these venue-level rules.
+        updateRules({
+          max_hours_per_week: rules.max_hours_per_week,
+          min_rest_hours: rules.min_rest_hours,
+          review_email_day: rules.review_email_day,
+        }),
       ]);
       showToast("Settings saved!");
     } catch (err) {
@@ -335,38 +341,18 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Availability window */}
+        {/* Availability window + notifications */}
         <div className="rounded-panel border border-hairline bg-surface-card p-6">
-          <div className="mb-1 text-base font-bold text-ink">Availability Window</div>
+          <div className="mb-1 text-base font-bold text-ink">Availability &amp; Notifications</div>
           <div className="mb-4 text-[13px] text-ink-faint">
-            Set the exact date &amp; time for each step. Staff are emailed automatically at each
-            point, and the window rolls forward a week after it closes.
+            The availability window is now automatic — it opens, reminds and closes itself around each
+            week&apos;s shifts. Adjust the timing in{" "}
+            <a href="/scheduler" className="font-semibold text-accent">
+              Scheduler
+            </a>
+            .
           </div>
           <div className="flex flex-col gap-3.5">
-            <RuleRow label="Opens">
-              <input
-                type="datetime-local"
-                value={dtLocal(rules.avail_opens_at)}
-                onChange={(e) => setRules((r) => (r ? { ...r, avail_opens_at: e.target.value } : r))}
-                className="rounded-lg border-[1.5px] border-unset-border px-3 py-2 text-sm font-semibold text-ink outline-none"
-              />
-            </RuleRow>
-            <RuleRow label="Reminder">
-              <input
-                type="datetime-local"
-                value={dtLocal(rules.avail_reminder_at)}
-                onChange={(e) => setRules((r) => (r ? { ...r, avail_reminder_at: e.target.value } : r))}
-                className="rounded-lg border-[1.5px] border-unset-border px-3 py-2 text-sm font-semibold text-ink outline-none"
-              />
-            </RuleRow>
-            <RuleRow label="Closes">
-              <input
-                type="datetime-local"
-                value={dtLocal(rules.avail_closes_at)}
-                onChange={(e) => setRules((r) => (r ? { ...r, avail_closes_at: e.target.value } : r))}
-                className="rounded-lg border-[1.5px] border-unset-border px-3 py-2 text-sm font-semibold text-ink outline-none"
-              />
-            </RuleRow>
             <RuleRow label="Manager review email">
               <select
                 value={rules.review_email_day}
@@ -393,12 +379,6 @@ export default function SettingsPage() {
       <Toast message={toast} />
     </div>
   );
-}
-
-// A stored datetime ("YYYY-MM-DDTHH:MM:SS" or null) trimmed to what a
-// datetime-local input expects ("YYYY-MM-DDTHH:MM").
-function dtLocal(value: string | null): string {
-  return (value ?? "").slice(0, 16);
 }
 
 function RuleRow({ label, children }: { label: string; children: React.ReactNode }) {

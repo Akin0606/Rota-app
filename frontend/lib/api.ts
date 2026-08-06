@@ -349,6 +349,66 @@ export function updateRules(rules: Partial<SchedulingRules>): Promise<Scheduling
   });
 }
 
+// --- Scheduler (automated 72-hour notice window) ----------------------------
+
+export type SchedulerWeek = {
+  week_start: string;
+  week_label: string;
+  opens_at: string;
+  reminder_at: string;
+  closes_at: string;
+  earliest_shift_at: string;
+  notice_hours: number;
+  is_override: boolean;
+};
+
+export type SchedulerConfig = {
+  open_offset_hours: number;
+  reminder_offset_hours: number;
+  notice_buffer_hours: number;
+  legal_notice_hours: number;
+  earliest_shift_label: string | null;
+  has_shifts: boolean;
+  weeks: SchedulerWeek[];
+};
+
+export type SchedulerOverrideResponse = {
+  status: "saved" | "needs_confirm";
+  notice_hours: number | null;
+  legal_notice_hours: number;
+  config: SchedulerConfig | null;
+};
+
+export function getScheduler(): Promise<SchedulerConfig> {
+  return authedRequest(`/api/scheduler`);
+}
+
+export function updateScheduler(
+  offsets: Partial<Pick<SchedulerConfig, "open_offset_hours" | "reminder_offset_hours" | "notice_buffer_hours">>,
+): Promise<SchedulerConfig> {
+  return authedRequest(`/api/scheduler`, {
+    method: "PUT",
+    body: JSON.stringify(offsets),
+  });
+}
+
+export function setScheduleOverride(
+  weekStart: string,
+  closeAt: string,
+  confirm = false,
+): Promise<SchedulerOverrideResponse> {
+  return authedRequest(`/api/scheduler/override`, {
+    method: "POST",
+    body: JSON.stringify({ week_start: weekStart, close_at: closeAt, confirm }),
+  });
+}
+
+export function clearScheduleOverride(weekStart: string): Promise<SchedulerConfig> {
+  return authedRequest(`/api/scheduler/override?week_start=${encodeURIComponent(weekStart)}`, {
+    method: "DELETE",
+  });
+}
+
 export function updateShift(
   id: string,
   shift: Partial<{

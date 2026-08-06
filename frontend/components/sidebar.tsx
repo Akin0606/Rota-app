@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: "📊", href: "/dashboard" },
   { key: "rota", label: "Rota", icon: "📅", href: "/rota" },
   { key: "team", label: "Team", icon: "👥", href: "/team" },
+  { key: "scheduler", label: "Scheduler", icon: "⏱️", href: "/scheduler" },
   { key: "settings", label: "Settings", icon: "⚙️", href: "/settings" },
 ];
 
