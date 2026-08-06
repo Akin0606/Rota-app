@@ -430,4 +430,41 @@ export function publishRota(periodId: string): Promise<RotaSummary> {
   return authedRequest(`/api/rota/${periodId}/publish`, { method: "POST" });
 }
 
+// Fetches a rota export (PDF/Excel) with auth and hands back the blob plus the
+// server-provided filename, so the caller can trigger a browser download.
+export async function fetchRotaExport(
+  periodId: string,
+  format: "pdf" | "xlsx",
+  orientation: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const supabase = createClient();
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  const res = await fetch(
+    `${API_URL}/api/rota/${periodId}/export.${format}?orientation=${orientation}`,
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      cache: "no-store",
+    },
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.detail || `Export failed (${res.status})`);
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition") || "";
+  const match = cd.match(/filename="?([^"]+)"?/);
+  return { blob, filename: match?.[1] ?? `rota.${format}` };
+}
+
+export function emailRota(
+  periodId: string,
+  body: { target: "staff" | "manager"; orientation: string },
+): Promise<EmailDelivery> {
+  return authedRequest(`/api/rota/${periodId}/email`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export { ApiError };

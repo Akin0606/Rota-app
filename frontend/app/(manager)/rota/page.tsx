@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import LoadingScreen from "@/components/loading-screen";
+import PublishPanel from "@/components/publish-panel";
 import RotaDayView from "@/components/rota-day-view";
 import RotaGrid, { RotaOrientation } from "@/components/rota-grid";
 import StatusBanner from "@/components/status-banner";
@@ -52,6 +53,7 @@ export default function RotaPage() {
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<EmailDelivery | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -189,8 +191,8 @@ export default function RotaPage() {
       // Persist the delivery outcome so email failures are never silent — a
       // transient toast alone hid the fact that no staff emails were going out.
       setPublishResult(result.email ?? { sent: 0, failed: 0, skipped_no_email: 0, errors: [] });
-      const sent = result.email?.sent ?? 0;
-      showToast(sent > 0 ? `Rota published — ${sent} emailed` : "Rota published");
+      // Open the options panel so the manager can download/share the rota.
+      setPanelOpen(true);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not publish rota");
     } finally {
@@ -240,13 +242,22 @@ export default function RotaPage() {
           >
             {generating ? "Generating…" : "Auto-fill"}
           </button>
-          <button
-            onClick={handlePublish}
-            disabled={publishing || !period || period.status === "published"}
-            className="rounded-[10px] bg-accent px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
-          >
-            {period?.status === "published" ? "Published" : publishing ? "Publishing…" : "Publish Rota"}
-          </button>
+          {period?.status === "published" ? (
+            <button
+              onClick={() => setPanelOpen(true)}
+              className="rounded-[10px] bg-accent px-4 py-2.5 text-[13px] font-semibold text-white"
+            >
+              Share / Export
+            </button>
+          ) : (
+            <button
+              onClick={handlePublish}
+              disabled={publishing || !period}
+              className="rounded-[10px] bg-accent px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
+            >
+              {publishing ? "Publishing…" : "Publish Rota"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -400,6 +411,15 @@ export default function RotaPage() {
           />
         </div>
       </div>
+
+      <PublishPanel
+        open={panelOpen}
+        onClose={() => setPanelOpen(false)}
+        periodId={period?.id ?? null}
+        orientation={orientation}
+        weekLabel={formatWeekRange(selectedWeek)}
+        publishResult={publishResult}
+      />
 
       <Toast message={toast} />
     </div>
