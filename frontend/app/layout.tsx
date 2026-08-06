@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import AuthHashHandler from "@/components/auth-hash-handler";
 import { ibmPlex, spaceGrotesk } from "@/lib/fonts";
 
 import "./globals.css";
@@ -27,6 +28,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`min-h-screen antialiased ${spaceGrotesk.variable} ${ibmPlex.variable}`}>
+        <AuthHashHandler />
         {children}
       </body>
     </html>
