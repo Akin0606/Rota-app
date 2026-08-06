@@ -352,6 +352,18 @@ class StaffRotaOut(BaseModel):
     team: list[StaffRotaTeamMemberOut] = []
 
 
+class AdminStatsOut(BaseModel):
+    """At-a-glance operational stats across all venues, for the admin home."""
+
+    total_venues: int
+    active_venues: int
+    inactive_venues: int
+    stale_venues: int
+    total_staff: int
+    open_periods: int
+    published_rotas: int
+
+
 class AdminVenueRotaOut(BaseModel):
     """Read-only snapshot of a venue's current rota, for the admin console."""
 

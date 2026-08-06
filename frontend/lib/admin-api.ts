@@ -93,8 +93,22 @@ export type AdminActivity = {
   created_at: string;
 };
 
+export type AdminStats = {
+  total_venues: number;
+  active_venues: number;
+  inactive_venues: number;
+  stale_venues: number;
+  total_staff: number;
+  open_periods: number;
+  published_rotas: number;
+};
+
 export function listAdminVenues(): Promise<AdminVenue[]> {
   return adminRequest("/api/admin/venues");
+}
+
+export function getAdminStats(): Promise<AdminStats> {
+  return adminRequest("/api/admin/stats");
 }
 
 export function addAdminManager(email: string): Promise<AdminManager> {

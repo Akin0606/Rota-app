@@ -6,7 +6,14 @@ import Link from "next/link";
 import Modal from "@/components/modal";
 import StatusBanner from "@/components/status-banner";
 import Toast from "@/components/toast";
-import { AdminApiError, AdminVenue, addAdminManager, listAdminVenues } from "@/lib/admin-api";
+import {
+  AdminApiError,
+  AdminStats,
+  AdminVenue,
+  addAdminManager,
+  getAdminStats,
+  listAdminVenues,
+} from "@/lib/admin-api";
 
 // A live venue with no activity in the last 14 days is worth a nudge.
 const STALE_DAYS = 14;
@@ -18,6 +25,7 @@ function isStale(lastActiveAt: string | null): boolean {
 
 export default function AdminVenuesPage() {
   const [venues, setVenues] = useState<AdminVenue[]>([]);
+  const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -41,6 +49,12 @@ export default function AdminVenuesPage() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    // Stats are best-effort — a failure here shouldn't blank the whole page.
+    getAdminStats()
+      .then((res) => {
+        if (!cancelled) setStats(res);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -98,6 +112,18 @@ export default function AdminVenuesPage() {
           + Add Manager
         </button>
       </div>
+
+      {stats && (
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          <Stat label="Venues" value={stats.total_venues} />
+          <Stat label="Active" value={stats.active_venues} />
+          <Stat label="Inactive" value={stats.inactive_venues} tone={stats.inactive_venues > 0 ? "warn" : undefined} />
+          <Stat label="Stale" value={stats.stale_venues} tone={stats.stale_venues > 0 ? "warn" : undefined} />
+          <Stat label="Staff" value={stats.total_staff} />
+          <Stat label="Open weeks" value={stats.open_periods} />
+          <Stat label="Published" value={stats.published_rotas} />
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-panel border border-hairline bg-surface-card">
         {venues.length === 0 ? (
@@ -212,6 +238,17 @@ export default function AdminVenuesPage() {
       </Modal>
 
       <Toast message={toast} />
+    </div>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: number; tone?: "warn" }) {
+  return (
+    <div className="rounded-panel border border-hairline bg-surface-card px-4 py-3">
+      <div className={`text-2xl font-bold ${tone === "warn" ? "text-warn-text" : "text-ink"}`}>
+        {value}
+      </div>
+      <div className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</div>
     </div>
   );
 }

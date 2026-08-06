@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -8,6 +9,7 @@ from models.schemas import (
     AdminActivityOut,
     AdminCreateManagerRequest,
     AdminManagerOut,
+    AdminStatsOut,
     AdminVenueDetailOut,
     AdminVenueOut,
     AdminVenueRotaOut,
@@ -20,6 +22,9 @@ from routers.rota import _build_summary, run_solver_for_period
 from routers.staff import _generate_unique_pin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
+
+# A live venue with no activity in this many days counts as "stale".
+STALE_DAYS = 14
 
 
 def require_admin(x_admin_secret: str = Header(default="")) -> None:
@@ -125,6 +130,62 @@ def list_venues():
         )
 
     return rows
+
+
+@router.get("/stats", response_model=AdminStatsOut, dependencies=[Depends(require_admin)])
+def get_stats():
+    """At-a-glance operational stats across all venues."""
+    supabase = get_supabase()
+
+    venues = supabase.table("venues").select("id, is_active").execute().data
+    active = sum(1 for v in venues if v.get("is_active", True))
+
+    staff = supabase.table("staff_members").select("id").eq("is_active", True).execute().data
+
+    periods = supabase.table("availability_periods").select("venue_id, status").execute().data
+    open_periods = sum(1 for p in periods if p["status"] == "collecting")
+    published = sum(1 for p in periods if p["status"] == "published")
+
+    # Stale: an active venue whose most recent activity is older than STALE_DAYS.
+    activity = (
+        supabase.table("activity_log")
+        .select("venue_id, created_at")
+        .order("created_at", desc=True)
+        .limit(2000)
+        .execute()
+        .data
+    )
+    last_active: dict[str, str] = {}
+    for a in activity:
+        if a.get("venue_id"):
+            last_active.setdefault(a["venue_id"], a["created_at"])
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=STALE_DAYS)
+    stale = 0
+    for v in venues:
+        if not v.get("is_active", True):
+            continue
+        ts = last_active.get(v["id"])
+        if not ts:
+            continue
+        try:
+            when = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            if when < cutoff:
+                stale += 1
+        except ValueError:
+            continue
+
+    return {
+        "total_venues": len(venues),
+        "active_venues": active,
+        "inactive_venues": len(venues) - active,
+        "stale_venues": stale,
+        "total_staff": len(staff),
+        "open_periods": open_periods,
+        "published_rotas": published,
+    }
 
 
 def _create_manager_account(email: str) -> str:
