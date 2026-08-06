@@ -75,6 +75,12 @@ def generate_rota(
     shifts_by_id = {sh["id"]: sh for sh in shifts}
     duration = {shid: shift_duration_hours(sh) for shid, sh in shifts_by_id.items()}
 
+    def _min_staff(shid) -> int:
+        return max(0, int(shifts_by_id[shid].get("min_staff", 1) or 0))
+
+    def _max_staff(shid) -> int:
+        return max(1, int(shifts_by_id[shid].get("max_staff", 99) or 1))
+
     availability: dict[tuple, int] = {}
     for sub in submissions:
         if sub.get("shift_id") is None:
@@ -99,6 +105,15 @@ def generate_rota(
             vars_today = [x[(sid, d, shid)] for shid in shift_ids if (sid, d, shid) in x]
             if vars_today:
                 model.Add(sum(vars_today) <= 1)
+
+    # Per-(day, shift) staffing: vars for everyone available for that slot.
+    slot_vars: dict[tuple, list] = {}
+    for (sid, d, shid), var in x.items():
+        slot_vars.setdefault((d, shid), []).append(var)
+
+    # Hard: never assign more than max_staff to a single shift on a day.
+    for (d, shid), vars_here in slot_vars.items():
+        model.Add(sum(vars_here) <= _max_staff(shid))
 
     max_hours_scaled = int(round(max_hours * 10))
 
@@ -129,8 +144,21 @@ def generate_rota(
                     if gap < min_rest:
                         model.Add(x[(sid, d, shid_a)] + x[(sid, d + 1, shid_b)] <= 1)
 
-    # Objective: maximize weighted preference satisfaction, then softly
-    # balance total hours across staff as a tie-breaker.
+    # Coverage: reward filling each demanded slot up to its min_staff target.
+    # The target is capped at how many people are actually available, so the
+    # solver isn't chasing an impossible headcount — genuine shortfalls are
+    # flagged as under-covered conflicts after solving instead.
+    coverage_terms = []
+    for (d, shid), vars_here in slot_vars.items():
+        target = min(_min_staff(shid), len(vars_here))
+        if target <= 0:
+            continue
+        covered = model.NewIntVar(0, target, f"cov_{d}_{shid}")
+        model.Add(covered <= sum(vars_here))
+        coverage_terms.append(covered)
+
+    # Objective: meet min_staff coverage first (dominant weight), then maximize
+    # weighted preference satisfaction, then softly balance hours as a tie-break.
     preference_terms = [
         (3 if availability[(sid, d, shid)] == PREFERRED else 1) * var
         for (sid, d, shid), var in x.items()
@@ -147,6 +175,8 @@ def generate_rota(
     objective = fairness_penalty
     if preference_terms:
         objective = sum(preference_terms) * 100 - fairness_penalty
+    if coverage_terms:
+        objective = sum(coverage_terms) * 100000 + objective
     model.Maximize(objective)
 
     solver = cp_model.CpSolver()

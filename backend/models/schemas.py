@@ -10,6 +10,8 @@ class ShiftOut(BaseModel):
     end_time: str
     color: str
     sort_order: int
+    min_staff: int = 1
+    max_staff: int = 2
 
 
 class StaffOut(BaseModel):
@@ -121,6 +123,8 @@ class ShiftCreateRequest(BaseModel):
     end_time: str
     color: str
     sort_order: int = 0
+    min_staff: int = Field(default=1, ge=0)
+    max_staff: int = Field(default=2, ge=1)
 
 
 class StaffCreateRequest(BaseModel):
@@ -174,6 +178,8 @@ class ShiftUpdateRequest(BaseModel):
     end_time: Optional[str] = None
     color: Optional[str] = None
     sort_order: Optional[int] = None
+    min_staff: Optional[int] = Field(default=None, ge=0)
+    max_staff: Optional[int] = Field(default=None, ge=1)
 
 
 class SchedulingRulesUpdateRequest(BaseModel):
@@ -199,6 +205,17 @@ class UncoveredSlot(BaseModel):
     shift_id: str
 
 
+class UnderCoveredSlot(BaseModel):
+    """A demanded shift slot that has some cover but fewer people than the
+    manager's min_staff for that shift. Distinct from UncoveredSlot, which is a
+    slot with willing staff but nobody assigned at all."""
+
+    day_index: int
+    shift_id: str
+    assigned: int
+    required: int
+
+
 class EmailDeliveryOut(BaseModel):
     """Per-recipient outcome of a batch email send (e.g. publishing a rota),
     so the frontend can surface partial failures instead of them being silently
@@ -215,8 +232,12 @@ class RotaSummaryOut(BaseModel):
     status: str
     assignments: list[AssignmentOut]
     total_hours: float
+    # Total conflict count: uncovered slots + under-covered slots.
     conflicts: int
+    # Demanded slots with willing staff but nobody assigned at all.
     uncovered: list[UncoveredSlot]
+    # Demanded slots below the shift's min_staff (but not empty).
+    under_covered: list[UnderCoveredSlot] = []
     warnings: list[str] = []
     # Present only on the publish response — how the staff notification emails
     # actually landed. None for read/generate/edit responses.

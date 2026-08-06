@@ -89,23 +89,43 @@ def _build_summary(venue_id: str, period: dict, warnings: list[str] | None = Non
         if a["shift_id"] in shifts_by_id
     )
 
+    # A slot is "demanded" if at least one person marked themselves
+    # available/preferred for it — that's the only signal we have for which
+    # (day, shift) combinations the venue actually needs covering.
     demand_slots = {
         (s["day_index"], s["shift_id"])
         for s in submissions
         if s["shift_id"] and s["status"] in (AVAILABLE, PREFERRED)
     }
-    assigned_slots = {(a["day_index"], a["shift_id"]) for a in assignments}
-    uncovered = [
-        {"day_index": d, "shift_id": shid} for (d, shid) in sorted(demand_slots - assigned_slots)
-    ]
+    assigned_count: dict[tuple, int] = {}
+    for a in assignments:
+        key = (a["day_index"], a["shift_id"])
+        assigned_count[key] = assigned_count.get(key, 0) + 1
+
+    # Two distinct conflict types, kept separate so the builder can surface both:
+    #  - uncovered:      demanded slot with nobody assigned at all.
+    #  - under_covered:  demanded slot with some cover, but below the shift's
+    #                    min_staff.
+    uncovered = []
+    under_covered = []
+    for (d, shid) in sorted(demand_slots):
+        count = assigned_count.get((d, shid), 0)
+        required = int((shifts_by_id.get(shid) or {}).get("min_staff", 1) or 0)
+        if count == 0:
+            uncovered.append({"day_index": d, "shift_id": shid})
+        elif count < required:
+            under_covered.append(
+                {"day_index": d, "shift_id": shid, "assigned": count, "required": required}
+            )
 
     return {
         "period_id": period["id"],
         "status": period["status"],
         "assignments": assignments,
         "total_hours": round(total_hours, 1),
-        "conflicts": len(uncovered),
+        "conflicts": len(uncovered) + len(under_covered),
         "uncovered": uncovered,
+        "under_covered": under_covered,
         "warnings": warnings or [],
     }
 

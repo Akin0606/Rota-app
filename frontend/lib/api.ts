@@ -9,6 +9,8 @@ export type Shift = {
   end_time: string;
   color: string;
   sort_order: number;
+  min_staff: number;
+  max_staff: number;
 };
 
 export type AvailabilityEntry = {
@@ -289,6 +291,8 @@ export function createShift(shift: {
   end_time: string;
   color: string;
   sort_order: number;
+  min_staff?: number;
+  max_staff?: number;
 }): Promise<Shift> {
   return authedRequest(`/api/shifts`, {
     method: "POST",
@@ -341,7 +345,15 @@ export function updateRules(rules: Partial<SchedulingRules>): Promise<Scheduling
 
 export function updateShift(
   id: string,
-  shift: Partial<{ name: string; start_time: string; end_time: string; color: string; sort_order: number }>,
+  shift: Partial<{
+    name: string;
+    start_time: string;
+    end_time: string;
+    color: string;
+    sort_order: number;
+    min_staff: number;
+    max_staff: number;
+  }>,
 ): Promise<Shift> {
   return authedRequest(`/api/shifts/${id}`, {
     method: "PUT",
@@ -403,6 +415,7 @@ export type RotaSummary = {
   total_hours: number;
   conflicts: number;
   uncovered: { day_index: number; shift_id: string }[];
+  under_covered: { day_index: number; shift_id: string; assigned: number; required: number }[];
   warnings: string[];
   // Present only on the publish response.
   email?: EmailDelivery | null;

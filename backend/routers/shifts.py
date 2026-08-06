@@ -50,6 +50,8 @@ def create_shift(payload: ShiftCreateRequest, manager: dict = Depends(get_curren
                 "end_time": payload.end_time,
                 "color": payload.color,
                 "sort_order": payload.sort_order,
+                "min_staff": payload.min_staff,
+                "max_staff": payload.max_staff,
             }
         )
         .execute()
@@ -64,12 +66,21 @@ def update_shift(
     manager: dict = Depends(get_current_manager),
 ):
     venue = get_manager_venue(manager["id"])
-    _get_shift_or_404(venue["id"], shift_id)
+    existing = _get_shift_or_404(venue["id"], shift_id)
     supabase = get_supabase()
 
     updates = payload.model_dump(exclude_unset=True)
     if not updates:
-        return _get_shift_or_404(venue["id"], shift_id)
+        return existing
+
+    # Validate the staffing range against the merged (existing + incoming) values
+    # so a partial update can't leave max_staff below min_staff.
+    merged_min = updates.get("min_staff", existing.get("min_staff", 1))
+    merged_max = updates.get("max_staff", existing.get("max_staff", 2))
+    if merged_max < merged_min:
+        raise HTTPException(
+            status_code=400, detail="Max staff can't be lower than min staff."
+        )
 
     return (
         supabase.table("shifts")

@@ -228,6 +228,14 @@ export default function RotaPage() {
     days.push(u.day_index);
     uncoveredByShift.set(u.shift_id, days);
   }
+  // Under-covered: below the shift's min_staff (but not empty). Grouped as
+  // "Day (2/3)" so the manager sees how short each slot is.
+  const underCoveredByShift = new Map<string, { day: number; assigned: number; required: number }[]>();
+  for (const u of summary?.under_covered ?? []) {
+    const list = underCoveredByShift.get(u.shift_id) ?? [];
+    list.push({ day: u.day_index, assigned: u.assigned, required: u.required });
+    underCoveredByShift.set(u.shift_id, list);
+  }
   const shiftsById = new Map(shifts.map((s) => [s.id, s]));
 
   return (
@@ -294,8 +302,7 @@ export default function RotaPage() {
         {summary && summary.conflicts > 0 && (
           <div className="inline-flex items-center gap-2 rounded-full bg-unavail-bg px-3.5 py-1.5 text-xs font-semibold text-unavail-text">
             <span className="h-1.5 w-1.5 rounded-full bg-unavail-border" />
-            {summary.conflicts} conflict{summary.conflicts === 1 ? "" : "s"} — willing staff couldn&apos;t be
-            scheduled
+            {summary.conflicts} coverage conflict{summary.conflicts === 1 ? "" : "s"}
           </div>
         )}
       </div>
@@ -346,9 +353,12 @@ export default function RotaPage() {
         </div>
       )}
 
-      {summary && summary.conflicts > 0 && (
+      {summary && uncoveredByShift.size > 0 && (
         <div className="mb-5 rounded-panel border border-unavail-border bg-unavail-bg p-4">
-          <div className="mb-2 text-[13px] font-semibold text-unavail-text">Uncovered shifts</div>
+          <div className="mb-1 text-[13px] font-semibold text-unavail-text">Uncovered shifts</div>
+          <div className="mb-2 text-[12px] text-unavail-text">
+            Willing staff couldn&apos;t be scheduled — nobody assigned.
+          </div>
           <div className="flex flex-wrap gap-2">
             {Array.from(uncoveredByShift.entries()).map(([shiftId, days]) => {
               const shift = shiftsById.get(shiftId);
@@ -359,6 +369,32 @@ export default function RotaPage() {
                   className="rounded-lg bg-surface-subtle px-2.5 py-1.5 text-[12px] font-medium text-unavail-text"
                 >
                   {shift.name}: {days.map((d) => DAY_LABELS[d]).join(", ")}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {summary && underCoveredByShift.size > 0 && (
+        <div className="mb-5 rounded-panel border border-warn-dot bg-warn-bg p-4">
+          <div className="mb-1 text-[13px] font-semibold text-warn-text">Under-staffed shifts</div>
+          <div className="mb-2 text-[12px] text-warn-text">
+            Below the minimum staffing you set — not enough available staff to reach it.
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {Array.from(underCoveredByShift.entries()).map(([shiftId, slots]) => {
+              const shift = shiftsById.get(shiftId);
+              if (!shift) return null;
+              return (
+                <span
+                  key={shiftId}
+                  className="rounded-lg bg-surface-subtle px-2.5 py-1.5 text-[12px] font-medium text-warn-text"
+                >
+                  {shift.name}:{" "}
+                  {slots
+                    .map((s) => `${DAY_LABELS[s.day]} (${s.assigned}/${s.required})`)
+                    .join(", ")}
                 </span>
               );
             })}

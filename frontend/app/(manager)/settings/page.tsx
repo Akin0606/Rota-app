@@ -69,15 +69,21 @@ export default function SettingsPage() {
   }
 
   async function handleShiftDone(shift: Shift) {
+    if (shift.max_staff < shift.min_staff) {
+      showToast("Max staff can't be below min staff");
+      return;
+    }
     try {
       await updateShift(shift.id, {
         name: shift.name,
         start_time: shift.start_time,
         end_time: shift.end_time,
+        min_staff: shift.min_staff,
+        max_staff: shift.max_staff,
       });
       setEditingShiftId(null);
-    } catch {
-      showToast("Could not save shift");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not save shift");
     }
   }
 
@@ -90,6 +96,8 @@ export default function SettingsPage() {
         end_time: "5:00pm",
         color,
         sort_order: shifts.length,
+        min_staff: 1,
+        max_staff: 2,
       });
       setShifts((prev) => [...prev, created]);
       setEditingShiftId(created.id);
@@ -241,6 +249,33 @@ export default function SettingsPage() {
                         ))}
                       </select>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] text-ink-label">Staff needed</span>
+                      <label className="flex items-center gap-1 text-[12px] text-ink-faint">
+                        min
+                        <input
+                          type="number"
+                          min={0}
+                          value={sh.min_staff}
+                          onChange={(e) =>
+                            patchShiftLocal(sh.id, { min_staff: Math.max(0, Number(e.target.value)) })
+                          }
+                          className="w-[52px] rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-1.5 text-center text-[13px] font-semibold outline-none"
+                        />
+                      </label>
+                      <label className="flex items-center gap-1 text-[12px] text-ink-faint">
+                        max
+                        <input
+                          type="number"
+                          min={1}
+                          value={sh.max_staff}
+                          onChange={(e) =>
+                            patchShiftLocal(sh.id, { max_staff: Math.max(1, Number(e.target.value)) })
+                          }
+                          className="w-[52px] rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-1.5 text-center text-[13px] font-semibold outline-none"
+                        />
+                      </label>
+                    </div>
                   </div>
                   <button
                     onClick={() => handleShiftDone(sh)}
@@ -255,7 +290,8 @@ export default function SettingsPage() {
                   <div className="flex-1">
                     <div className="text-sm font-semibold text-ink">{sh.name}</div>
                     <div className="text-xs text-ink-faint">
-                      {sh.start_time} – {sh.end_time}
+                      {sh.start_time} – {sh.end_time} · {sh.min_staff}
+                      {sh.max_staff !== sh.min_staff ? `–${sh.max_staff}` : ""} staff
                     </div>
                   </div>
                   <button
