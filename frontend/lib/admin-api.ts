@@ -131,6 +131,39 @@ export function setVenueActive(id: string, isActive: boolean): Promise<AdminVenu
   });
 }
 
+export type AdminShift = {
+  id: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+  color: string;
+  sort_order: number;
+  min_staff: number;
+  max_staff: number;
+};
+
+export type AdminRotaAssignment = {
+  staff_id: string;
+  day_index: number;
+  shift_id: string | null;
+};
+
+export type AdminVenueRota = {
+  venue_name: string;
+  period: { id: string; week_start: string; status: string } | null;
+  shifts: AdminShift[];
+  staff: { id: string; name: string; role: string }[];
+  summary: {
+    assignments: AdminRotaAssignment[];
+    total_hours: number;
+    conflicts: number;
+  } | null;
+};
+
+export function getAdminVenueRota(id: string): Promise<AdminVenueRota> {
+  return adminRequest(`/api/admin/venues/${id}/rota`);
+}
+
 export function listAdminActivity(limit = 50): Promise<AdminActivity[]> {
   return adminRequest(`/api/admin/activity?limit=${limit}`);
 }

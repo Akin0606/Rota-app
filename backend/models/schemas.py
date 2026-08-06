@@ -352,6 +352,16 @@ class StaffRotaOut(BaseModel):
     team: list[StaffRotaTeamMemberOut] = []
 
 
+class AdminVenueRotaOut(BaseModel):
+    """Read-only snapshot of a venue's current rota, for the admin console."""
+
+    venue_name: str
+    period: Optional[PeriodOut] = None
+    shifts: list[ShiftOut] = []
+    staff: list[StaffRotaTeamMemberOut] = []
+    summary: Optional[RotaSummaryOut] = None
+
+
 class AdminActivityOut(BaseModel):
     id: str
     venue_id: str

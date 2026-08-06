@@ -10,12 +10,13 @@ from models.schemas import (
     AdminManagerOut,
     AdminVenueDetailOut,
     AdminVenueOut,
+    AdminVenueRotaOut,
     AdminVenueUpdateRequest,
     RotaSummaryOut,
     StaffManagerOut,
     WaitlistEntryOut,
 )
-from routers.rota import run_solver_for_period
+from routers.rota import _build_summary, run_solver_for_period
 from routers.staff import _generate_unique_pin
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -301,6 +302,50 @@ def list_all_activity(limit: int = Query(default=50, le=200)):
         r["staff_name"] = staff_by_id.get(r["staff_id"]) if r.get("staff_id") else None
 
     return rows
+
+
+@router.get(
+    "/venues/{venue_id}/rota",
+    response_model=AdminVenueRotaOut,
+    dependencies=[Depends(require_admin)],
+)
+def get_venue_rota(venue_id: str):
+    """Read-only view of a venue's current (latest) rota, for admin support."""
+    supabase = get_supabase()
+    venue = _get_venue_or_404(venue_id)
+
+    shifts = (
+        supabase.table("shifts")
+        .select("*")
+        .eq("venue_id", venue_id)
+        .order("sort_order")
+        .execute()
+        .data
+    )
+    staff = (
+        supabase.table("staff_members")
+        .select("id, name, role")
+        .eq("venue_id", venue_id)
+        .eq("is_active", True)
+        .order("name")
+        .execute()
+        .data
+    )
+
+    period = _latest_period(venue_id)
+    summary = _build_summary(venue_id, period) if period else None
+
+    return {
+        "venue_name": venue["name"],
+        "period": (
+            {"id": period["id"], "week_start": str(period["week_start"]), "status": period["status"]}
+            if period
+            else None
+        ),
+        "shifts": shifts,
+        "staff": staff,
+        "summary": summary,
+    }
 
 
 @router.post(

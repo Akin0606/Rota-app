@@ -4,13 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
+import AdminRotaView from "@/components/admin-rota-view";
 import Toast from "@/components/toast";
 import {
   AdminApiError,
   AdminVenueDetail,
+  AdminVenueRota,
   adminGenerateRota,
   adminResetPin,
   getAdminVenueDetail,
+  getAdminVenueRota,
   setVenueActive,
 } from "@/lib/admin-api";
 import { formatWeekRange } from "@/lib/utils";
@@ -26,6 +29,9 @@ export default function AdminVenueDetailPage() {
   const [generating, setGenerating] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  const [rota, setRota] = useState<AdminVenueRota | null>(null);
+  const [rotaLoading, setRotaLoading] = useState(false);
+  const [showRota, setShowRota] = useState(false);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -63,11 +69,30 @@ export default function AdminVenueDetailPage() {
     try {
       await adminGenerateRota(venue.id);
       showToast("Solver triggered — rota regenerated");
+      setRota(null); // cached view is now stale
       setReloadToken((n) => n + 1);
     } catch (err) {
       showToast(err instanceof AdminApiError ? err.message : "Could not trigger solver");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleViewRota() {
+    if (showRota) {
+      setShowRota(false);
+      return;
+    }
+    setShowRota(true);
+    if (rota) return;
+    setRotaLoading(true);
+    try {
+      setRota(await getAdminVenueRota(venueId));
+    } catch (err) {
+      showToast(err instanceof AdminApiError ? err.message : "Could not load rota");
+      setShowRota(false);
+    } finally {
+      setRotaLoading(false);
     }
   }
 
@@ -146,6 +171,12 @@ export default function AdminVenueDetailPage() {
           {generating ? "Running solver…" : "Trigger solver"}
         </button>
         <button
+          onClick={handleViewRota}
+          className="rounded-lg border border-hairline bg-surface-card px-3.5 py-2 text-xs font-semibold text-ink-muted"
+        >
+          {showRota ? "Hide rota" : "View rota"}
+        </button>
+        <button
           onClick={handleToggleActive}
           disabled={togglingActive}
           className={`rounded-lg px-3.5 py-2 text-xs font-semibold text-white disabled:opacity-50 ${
@@ -155,6 +186,32 @@ export default function AdminVenueDetailPage() {
           {togglingActive ? "Saving…" : venue.is_active ? "Disable venue" : "Enable venue"}
         </button>
       </div>
+
+      {showRota && (
+        <div className="mb-6 overflow-hidden rounded-panel border border-hairline bg-surface-card">
+          <div className="flex items-center justify-between border-b border-surface-page px-5 py-3">
+            <div className="text-sm font-bold text-ink">
+              Current rota{rota?.period ? ` · ${formatWeekRange(rota.period.week_start)}` : ""}
+            </div>
+            {rota?.summary && rota.summary.conflicts > 0 && (
+              <span className="rounded-full bg-unavail-bg px-2.5 py-1 text-[11px] font-semibold text-unavail-text">
+                {rota.summary.conflicts} conflict{rota.summary.conflicts === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+          {rotaLoading ? (
+            <div className="p-6 text-center text-sm text-ink-muted">Loading rota…</div>
+          ) : !rota?.period ? (
+            <div className="p-6 text-center text-sm text-ink-faint">
+              This venue has no rota period yet.
+            </div>
+          ) : (
+            <div className="p-3">
+              <AdminRotaView rota={rota} />
+            </div>
+          )}
+        </div>
+      )}
 
       {venue.period && (
         <div className="mb-6 text-sm text-ink-muted">
