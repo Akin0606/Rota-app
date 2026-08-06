@@ -249,32 +249,40 @@ export default function SettingsPage() {
                         ))}
                       </select>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[12px] text-ink-label">Staff needed</span>
-                      <label className="flex items-center gap-1 text-[12px] text-ink-faint">
-                        min
-                        <input
-                          type="number"
-                          min={0}
-                          value={sh.min_staff}
-                          onChange={(e) =>
-                            patchShiftLocal(sh.id, { min_staff: Math.max(0, Number(e.target.value)) })
-                          }
-                          className="w-[52px] rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-1.5 text-center text-[13px] font-semibold outline-none"
-                        />
-                      </label>
-                      <label className="flex items-center gap-1 text-[12px] text-ink-faint">
-                        max
-                        <input
-                          type="number"
-                          min={1}
-                          value={sh.max_staff}
-                          onChange={(e) =>
-                            patchShiftLocal(sh.id, { max_staff: Math.max(1, Number(e.target.value)) })
-                          }
-                          className="w-[52px] rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-1.5 text-center text-[13px] font-semibold outline-none"
-                        />
-                      </label>
+                    <div className="mt-1 border-t border-accent-border pt-2.5">
+                      <div className="mb-1.5 text-[12px] font-semibold text-ink-label">
+                        Staff per shift
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 text-[13px] text-ink-muted">
+                          Min
+                          <input
+                            type="number"
+                            min={0}
+                            value={sh.min_staff}
+                            onChange={(e) =>
+                              patchShiftLocal(sh.id, { min_staff: Math.max(0, Number(e.target.value)) })
+                            }
+                            className="w-[60px] rounded-lg border-[1.5px] border-accent-border bg-surface px-2 py-2 text-center text-sm font-semibold text-ink outline-none"
+                          />
+                        </label>
+                        <label className="flex items-center gap-2 text-[13px] text-ink-muted">
+                          Max
+                          <input
+                            type="number"
+                            min={1}
+                            value={sh.max_staff}
+                            onChange={(e) =>
+                              patchShiftLocal(sh.id, { max_staff: Math.max(1, Number(e.target.value)) })
+                            }
+                            className="w-[60px] rounded-lg border-[1.5px] border-accent-border bg-surface px-2 py-2 text-center text-sm font-semibold text-ink outline-none"
+                          />
+                        </label>
+                      </div>
+                      <div className="mt-1.5 text-[11px] text-ink-faint">
+                        The rota never puts more than <span className="font-semibold">Max</span> people on
+                        this shift, and aims for at least <span className="font-semibold">Min</span>.
+                      </div>
                     </div>
                   </div>
                   <button
