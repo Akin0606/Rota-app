@@ -13,7 +13,9 @@ router = APIRouter(prefix="/api/venue", tags=["venue"])
 
 @router.get("", response_model=VenueOut)
 def get_venue(manager: dict = Depends(get_current_manager)):
-    return get_manager_venue(manager["id"])
+    # Readable even when inactive, so the app can show a clear "inactive" screen
+    # rather than redirecting as if the account has no venue.
+    return get_manager_venue(manager["id"], require_active=False)
 
 
 @router.post("", response_model=VenueOut)

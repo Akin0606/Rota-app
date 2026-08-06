@@ -225,6 +225,7 @@ export type Venue = {
   manager_email: string;
   link_token: string;
   created_at: string;
+  is_active: boolean;
 };
 
 export type Period = {

@@ -50,6 +50,8 @@ export type AdminVenue = {
   staff_count: number;
   period_status: string | null;
   pending: boolean;
+  is_active: boolean;
+  last_active_at: string | null;
 };
 
 export type AdminManager = {
@@ -75,6 +77,7 @@ export type AdminVenueDetail = {
   manager_email: string;
   created_at: string;
   link_token: string;
+  is_active: boolean;
   staff: AdminStaff[];
   period: { id: string; week_start: string; status: string } | null;
 };
@@ -119,6 +122,13 @@ export function inviteWaitlistEntry(id: string): Promise<AdminManager> {
 
 export function getAdminVenueDetail(id: string): Promise<AdminVenueDetail> {
   return adminRequest(`/api/admin/venues/${id}`);
+}
+
+export function setVenueActive(id: string, isActive: boolean): Promise<AdminVenueDetail> {
+  return adminRequest(`/api/admin/venues/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_active: isActive }),
+  });
 }
 
 export function listAdminActivity(limit = 50): Promise<AdminActivity[]> {

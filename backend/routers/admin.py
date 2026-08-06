@@ -10,6 +10,7 @@ from models.schemas import (
     AdminManagerOut,
     AdminVenueDetailOut,
     AdminVenueOut,
+    AdminVenueUpdateRequest,
     RotaSummaryOut,
     StaffManagerOut,
     WaitlistEntryOut,
@@ -69,6 +70,20 @@ def list_venues():
     for p in all_periods:
         latest_status.setdefault(p["venue_id"], p["status"])
 
+    # Most recent activity per venue, for spotting stale venues.
+    activity = (
+        supabase.table("activity_log")
+        .select("venue_id, created_at")
+        .order("created_at", desc=True)
+        .limit(2000)
+        .execute()
+        .data
+    )
+    last_active: dict[str, str] = {}
+    for a in activity:
+        if a.get("venue_id"):
+            last_active.setdefault(a["venue_id"], a["created_at"])
+
     rows = [
         {
             "id": v["id"],
@@ -78,6 +93,8 @@ def list_venues():
             "staff_count": staff_counts.get(v["id"], 0),
             "period_status": latest_status.get(v["id"]),
             "pending": False,
+            "is_active": v.get("is_active", True),
+            "last_active_at": last_active.get(v["id"]),
         }
         for v in venues
     ]
@@ -217,6 +234,7 @@ def get_venue_detail(venue_id: str):
         "manager_email": venue["manager_email"],
         "created_at": venue["created_at"],
         "link_token": venue["link_token"],
+        "is_active": venue.get("is_active", True),
         "staff": staff,
         "period": (
             {"id": period["id"], "week_start": str(period["week_start"]), "status": period["status"]}
@@ -224,6 +242,33 @@ def get_venue_detail(venue_id: str):
             else None
         ),
     }
+
+
+@router.patch(
+    "/venues/{venue_id}",
+    response_model=AdminVenueDetailOut,
+    dependencies=[Depends(require_admin)],
+)
+def set_venue_active(venue_id: str, payload: AdminVenueUpdateRequest):
+    """Enables or disables a venue. When disabled, manager login and staff PIN
+    entry for this venue are blocked. This is the hook a payment gateway can flip
+    automatically later."""
+    supabase = get_supabase()
+    venue = _get_venue_or_404(venue_id)
+
+    supabase.table("venues").update({"is_active": payload.is_active}).eq("id", venue_id).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue_id,
+            "action": "venue_activated" if payload.is_active else "venue_deactivated",
+            "detail": (
+                f"Venue {'enabled' if payload.is_active else 'disabled'} via admin console"
+            ),
+        }
+    ).execute()
+
+    return get_venue_detail(venue_id)
 
 
 @router.get("/activity", response_model=list[AdminActivityOut], dependencies=[Depends(require_admin)])

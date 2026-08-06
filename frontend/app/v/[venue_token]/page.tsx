@@ -15,6 +15,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
   const [venueName, setVenueName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [inactiveMsg, setInactiveMsg] = useState<string | null>(null);
   const [pin, setPin] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -22,7 +23,13 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
   useEffect(() => {
     getVenueInfo(venue_token)
       .then((res) => setVenueName(res.venue_name))
-      .catch(() => setNotFound(true))
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 403) {
+          setInactiveMsg(err.message);
+        } else {
+          setNotFound(true);
+        }
+      })
       .finally(() => setLoading(false));
   }, [venue_token]);
 
@@ -62,6 +69,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
   }
 
   if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
+  if (inactiveMsg) return <CenteredMessage>{inactiveMsg}</CenteredMessage>;
   if (notFound) return <CenteredMessage>This link isn&apos;t valid.</CenteredMessage>;
 
   return (

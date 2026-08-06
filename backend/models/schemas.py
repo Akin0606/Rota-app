@@ -113,6 +113,7 @@ class VenueOut(BaseModel):
     manager_email: str
     link_token: str
     created_at: str
+    is_active: bool = True
 
 
 class VenueCreateRequest(BaseModel):
@@ -274,6 +275,14 @@ class AdminVenueOut(BaseModel):
     staff_count: int
     period_status: Optional[str] = None
     pending: bool = False
+    is_active: bool = True
+    # Most recent activity_log timestamp for the venue (for spotting stale
+    # venues). None if the venue has no activity yet.
+    last_active_at: Optional[str] = None
+
+
+class AdminVenueUpdateRequest(BaseModel):
+    is_active: bool
 
 
 class WaitlistRequest(BaseModel):
@@ -316,6 +325,7 @@ class AdminVenueDetailOut(BaseModel):
     manager_email: str
     created_at: str
     link_token: str
+    is_active: bool = True
     staff: list[AdminStaffOut]
     period: Optional[PeriodOut] = None
 

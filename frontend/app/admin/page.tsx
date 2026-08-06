@@ -8,6 +8,14 @@ import StatusBanner from "@/components/status-banner";
 import Toast from "@/components/toast";
 import { AdminApiError, AdminVenue, addAdminManager, listAdminVenues } from "@/lib/admin-api";
 
+// A live venue with no activity in the last 14 days is worth a nudge.
+const STALE_DAYS = 14;
+function isStale(lastActiveAt: string | null): boolean {
+  if (!lastActiveAt) return false;
+  const last = new Date(lastActiveAt).getTime();
+  return Date.now() - last > STALE_DAYS * 24 * 60 * 60 * 1000;
+}
+
 export default function AdminVenuesPage() {
   const [venues, setVenues] = useState<AdminVenue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,7 +117,12 @@ export default function AdminVenuesPage() {
                   {new Date(v.created_at).toLocaleDateString()}
                 </div>
                 <div className="w-20 text-xs text-ink-muted">{v.staff_count} staff</div>
-                <div className="w-40">
+                <div className="flex w-44 flex-wrap items-center gap-1.5">
+                  {!v.pending && !v.is_active && (
+                    <span className="inline-block rounded-full bg-unavail-bg px-2.5 py-1 text-[11px] font-semibold text-unavail-text">
+                      Inactive
+                    </span>
+                  )}
                   {v.pending ? (
                     <span className="inline-block rounded-full bg-warn-bg px-2.5 py-1 text-[11px] font-semibold text-warn-text">
                       Awaiting onboarding
@@ -118,6 +131,11 @@ export default function AdminVenuesPage() {
                     <StatusBanner status={v.period_status} />
                   ) : (
                     <span className="text-xs text-ink-faint">No period</span>
+                  )}
+                  {!v.pending && isStale(v.last_active_at) && (
+                    <span className="inline-block rounded-full bg-surface-page px-2.5 py-1 text-[11px] font-semibold text-ink-faint">
+                      Stale
+                    </span>
                   )}
                 </div>
               </>
@@ -133,7 +151,9 @@ export default function AdminVenuesPage() {
               <Link
                 key={v.id}
                 href={`/admin/venues/${v.id}`}
-                className={`flex flex-wrap items-center gap-3 px-5 py-4 hover:bg-surface-subtle ${border}`}
+                className={`flex flex-wrap items-center gap-3 px-5 py-4 hover:bg-surface-subtle ${border} ${
+                  v.is_active ? "" : "opacity-60"
+                }`}
               >
                 {inner}
               </Link>

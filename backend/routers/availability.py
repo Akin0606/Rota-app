@@ -15,6 +15,7 @@ from models.schemas import (
     WeekAvailabilityRequest,
 )
 from services import email_service, rate_limit, schedule_windows
+from services.auth_service import INACTIVE_VENUE_MESSAGE
 
 # PIN auth: block a venue_token + IP after this many wrong PINs in the window.
 PIN_MAX_ATTEMPTS = 5
@@ -39,7 +40,10 @@ def _get_venue_or_404(venue_token: str) -> dict:
     )
     if not res.data:
         raise HTTPException(status_code=404, detail="Venue link not found")
-    return res.data[0]
+    venue = res.data[0]
+    if not venue.get("is_active", True):
+        raise HTTPException(status_code=403, detail=INACTIVE_VENUE_MESSAGE)
+    return venue
 
 
 def _get_staff_by_pin(venue_id: str, pin: str) -> dict:

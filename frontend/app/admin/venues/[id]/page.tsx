@@ -11,6 +11,7 @@ import {
   adminGenerateRota,
   adminResetPin,
   getAdminVenueDetail,
+  setVenueActive,
 } from "@/lib/admin-api";
 import { formatWeekRange } from "@/lib/utils";
 
@@ -23,6 +24,7 @@ export default function AdminVenueDetailPage() {
   const [error, setError] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [togglingActive, setTogglingActive] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
   function showToast(msg: string) {
@@ -69,6 +71,24 @@ export default function AdminVenueDetailPage() {
     }
   }
 
+  async function handleToggleActive() {
+    if (!venue) return;
+    const next = !venue.is_active;
+    if (!next && !confirm(`Disable ${venue.name}? Manager and staff access will be blocked immediately.`)) {
+      return;
+    }
+    setTogglingActive(true);
+    try {
+      const updated = await setVenueActive(venue.id, next);
+      setVenue(updated);
+      showToast(next ? "Venue enabled" : "Venue disabled");
+    } catch (err) {
+      showToast(err instanceof AdminApiError ? err.message : "Could not update venue");
+    } finally {
+      setTogglingActive(false);
+    }
+  }
+
   async function handleResetPin(staffId: string, name: string) {
     try {
       const updated = await adminResetPin(staffId);
@@ -94,7 +114,16 @@ export default function AdminVenueDetailPage() {
       <Link href="/admin" className="mb-4 inline-block text-[13px] font-medium text-accent">
         ← Back to venues
       </Link>
-      <div className="mb-1 text-2xl font-bold text-ink">{venue.name}</div>
+      <div className="mb-1 flex flex-wrap items-center gap-2.5">
+        <span className="text-2xl font-bold text-ink">{venue.name}</span>
+        <span
+          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+            venue.is_active ? "bg-avail-bg text-avail-text" : "bg-unavail-bg text-unavail-text"
+          }`}
+        >
+          {venue.is_active ? "Active" : "Inactive"}
+        </span>
+      </div>
       <div className="mb-6 text-sm text-ink-faint">
         {venue.manager_email} · created {new Date(venue.created_at).toLocaleDateString()}
       </div>
@@ -115,6 +144,15 @@ export default function AdminVenueDetailPage() {
           className="rounded-lg border border-hairline bg-surface-card px-3.5 py-2 text-xs font-semibold text-ink-muted disabled:opacity-50"
         >
           {generating ? "Running solver…" : "Trigger solver"}
+        </button>
+        <button
+          onClick={handleToggleActive}
+          disabled={togglingActive}
+          className={`rounded-lg px-3.5 py-2 text-xs font-semibold text-white disabled:opacity-50 ${
+            venue.is_active ? "bg-unavail-text" : "bg-avail-text"
+          }`}
+        >
+          {togglingActive ? "Saving…" : venue.is_active ? "Disable venue" : "Enable venue"}
         </button>
       </div>
 
