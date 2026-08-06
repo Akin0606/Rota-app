@@ -100,7 +100,7 @@ export function pinStorageKey(venueToken: string): string {
   return `rota_pin_${venueToken}`;
 }
 
-function parseClock(text: string): { h: number; m: number } | null {
+function parseClock(text: string): { h: number; m: number; suffix: string } | null {
   const match = text.trim().toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
   if (!match) return null;
   let h = parseInt(match[1], 10);
@@ -108,7 +108,8 @@ function parseClock(text: string): { h: number; m: number } | null {
   if (match[3] === "pm" && h < 12) h += 12;
   if (match[3] === "am" && h === 12) h = 0;
   if (h > 23 || m > 59) return null;
-  return { h, m };
+  const suffix = match[3] || (h >= 12 ? "pm" : "am");
+  return { h, m, suffix };
 }
 
 // Duration of a shift in hours from free-text start/end times (e.g. "7:00am"
@@ -121,6 +122,25 @@ export function shiftDurationHours(start: string, end: string): number | null {
   let mins = e.h * 60 + e.m - (s.h * 60 + s.m);
   if (mins <= 0) mins += 24 * 60;
   return Math.round((mins / 60) * 10) / 10;
+}
+
+// "2:00pm"/"6:00pm" -> "2–6pm"; "9am"/"5pm" -> "9am–5pm". Falls back to the raw
+// values joined with an en dash when either side isn't a parseable clock time
+// (e.g. "close"). Mirrors the backend's compact_time_range for PDF/Excel export.
+export function compactTimeRange(start: string, end: string): string {
+  const s = parseClock(start);
+  const e = parseClock(end);
+  if (!s || !e) {
+    return [start?.trim(), end?.trim()].filter(Boolean).join("–");
+  }
+  const label = (h: number, m: number, has12: boolean) => {
+    const disp = has12 ? h : h % 12 || 12;
+    return m ? `${disp}:${String(m).padStart(2, "0")}` : `${disp}`;
+  };
+  if (s.suffix && e.suffix && s.suffix === e.suffix) {
+    return `${label(s.h, s.m, false)}–${label(e.h, e.m, false)}${e.suffix}`;
+  }
+  return `${label(s.h, s.m, true)}${s.suffix}–${label(e.h, e.m, true)}${e.suffix}`;
 }
 
 function pad(n: number): string {

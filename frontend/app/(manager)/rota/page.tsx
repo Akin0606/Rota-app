@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import LoadingScreen from "@/components/loading-screen";
 import RotaDayView from "@/components/rota-day-view";
-import RotaGrid from "@/components/rota-grid";
+import RotaGrid, { RotaOrientation } from "@/components/rota-grid";
 import StatusBanner from "@/components/status-banner";
 import Toast from "@/components/toast";
 import {
@@ -45,6 +45,7 @@ export default function RotaPage() {
   const [staff, setStaff] = useState<StaffManager[]>([]);
   const [summary, setSummary] = useState<RotaSummary | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<string>(WEEK_OPTIONS[0].weekStart);
+  const [orientation, setOrientation] = useState<RotaOrientation>("staff-rows");
   const [loading, setLoading] = useState(true);
   const [rotaLoading, setRotaLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -354,6 +355,29 @@ export default function RotaPage() {
         </div>
       )}
 
+      {/* Axis toggle — desktop grid only (mobile uses the day view) */}
+      <div className="mb-3 hidden items-center gap-2 md:flex">
+        <span className="text-[12px] font-medium text-ink-faint">Layout</span>
+        <div className="inline-flex rounded-[10px] border border-hairline bg-surface-card p-0.5">
+          {(
+            [
+              { value: "staff-rows", label: "Staff × Days" },
+              { value: "day-rows", label: "Days × Staff" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setOrientation(opt.value)}
+              className={`rounded-[8px] px-3 py-1.5 text-[12px] font-semibold transition ${
+                orientation === opt.value ? "bg-accent text-white" : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className={rotaLoading ? "opacity-50 transition-opacity" : "transition-opacity"}>
         <div className="hidden md:block">
           <RotaGrid
@@ -361,6 +385,7 @@ export default function RotaPage() {
             shifts={shifts}
             staff={staff}
             assignments={summary?.assignments ?? []}
+            orientation={orientation}
             onAdd={handleAdd}
             onRemove={handleRemove}
           />
