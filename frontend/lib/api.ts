@@ -256,6 +256,11 @@ export type Activity = {
 export type SchedulingRules = {
   max_hours_per_week: number;
   min_rest_hours: number;
+  // Real datetimes for the availability window (naive local wall-clock,
+  // "YYYY-MM-DDTHH:MM[:SS]").
+  avail_opens_at: string | null;
+  avail_reminder_at: string | null;
+  avail_closes_at: string | null;
   avail_opens_day: string;
   avail_closes_day: string;
   avail_closes_time: string;

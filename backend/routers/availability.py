@@ -14,7 +14,7 @@ from models.schemas import (
     WeekAvailabilityOut,
     WeekAvailabilityRequest,
 )
-from services import email_service, rate_limit
+from services import email_service, rate_limit, schedule_windows
 
 # PIN auth: block a venue_token + IP after this many wrong PINs in the window.
 PIN_MAX_ATTEMPTS = 5
@@ -22,6 +22,8 @@ PIN_WINDOW_SECONDS = 15 * 60
 # Forgot-PIN: cap requests per venue + email to curb enumeration/abuse.
 FORGOT_MAX_REQUESTS = 3
 FORGOT_WINDOW_SECONDS = 60 * 60
+
+DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 router = APIRouter(prefix="/api/availability", tags=["availability"])
 
@@ -186,14 +188,26 @@ def _get_rules(venue_id: str) -> dict:
     supabase = get_supabase()
     res = (
         supabase.table("scheduling_rules")
-        .select("avail_closes_day, avail_closes_time")
+        .select("avail_closes_at, avail_closes_day, avail_closes_time")
         .eq("venue_id", venue_id)
         .limit(1)
         .execute()
     )
-    return res.data[0] if res.data else {
-        "avail_closes_day": "Wednesday",
-        "avail_closes_time": "23:00",
+    fallback = {"avail_closes_day": "Wednesday", "avail_closes_time": "23:00"}
+    if not res.data:
+        return fallback
+
+    row = res.data[0]
+    # Keep the staff-facing day/time in step with the real close datetime.
+    dt = schedule_windows.parse(row.get("avail_closes_at"))
+    if dt:
+        return {
+            "avail_closes_day": DAY_NAMES[dt.weekday()],
+            "avail_closes_time": dt.strftime("%H:%M"),
+        }
+    return {
+        "avail_closes_day": row.get("avail_closes_day") or fallback["avail_closes_day"],
+        "avail_closes_time": row.get("avail_closes_time") or fallback["avail_closes_time"],
     }
 
 

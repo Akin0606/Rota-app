@@ -172,6 +172,48 @@ def send_availability_reminder_email(
     return _send(to_email, subject, html)
 
 
+# 4b. Availability window opens (to staff) -----------------------------------
+
+def send_availability_open_email(
+    to_email: str,
+    name: str,
+    venue_name: str,
+    week_label: str,
+    venue_link_url: str,
+    deadline_label: str,
+    pin: str,
+) -> dict:
+    subject = f"Availability is now open for {week_label}"
+    body = f"""
+<p style="margin:0 0 8px;">Hi {name},</p>
+<p style="margin:0 0 16px;">Availability is now open for <strong>{week_label}</strong> at {venue_name}. Log yours using your PIN below.</p>
+{_pin_badge(pin)}
+<p style="margin:0 0 16px;font-size:13px;color:#6b7280;">Please submit by <strong>{deadline_label}</strong>.</p>
+{_button("Log your availability", venue_link_url)}
+"""
+    html = _shell(f"Availability open for {week_label}", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
+    return _send(to_email, subject, html)
+
+
+# 4c. Availability window closes (to staff) ----------------------------------
+
+def send_availability_closed_email(
+    to_email: str,
+    name: str,
+    venue_name: str,
+    week_label: str,
+    rota_link_url: str,
+) -> dict:
+    subject = f"The rota for {week_label} is now locked"
+    body = f"""
+<p style="margin:0 0 8px;">Hi {name},</p>
+<p style="margin:0 0 16px;">Availability for <strong>{week_label}</strong> at {venue_name} has closed and the rota is now locked. You'll be notified once it's published.</p>
+{_button("View the rota", rota_link_url)}
+"""
+    html = _shell(f"Availability closed for {week_label}", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
+    return _send(to_email, subject, html)
+
+
 # 5. Manager review -----------------------------------------------------------
 
 def send_manager_review_email(

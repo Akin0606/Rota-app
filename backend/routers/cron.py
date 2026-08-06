@@ -7,7 +7,7 @@ from config import get_settings
 from database import get_supabase
 from routers.rota import _build_summary, run_solver_for_period
 from routers.staff import _reminder_context
-from services import email_service
+from services import cron_scheduler, email_service, schedule_windows
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])
 
@@ -20,6 +20,30 @@ def require_cron(x_cron_secret: str = Header(default="")) -> None:
 
 def _all_venues() -> list[dict]:
     return get_supabase().table("venues").select("*").execute().data
+
+
+def _active_staff(venue_id: str) -> list[dict]:
+    return (
+        get_supabase()
+        .table("staff_members")
+        .select("id, name, email, pin")
+        .eq("venue_id", venue_id)
+        .eq("is_active", True)
+        .execute()
+        .data
+    )
+
+
+def _venue_rules(venue_id: str) -> dict:
+    res = (
+        get_supabase()
+        .table("scheduling_rules")
+        .select("*")
+        .eq("venue_id", venue_id)
+        .limit(1)
+        .execute()
+    )
+    return res.data[0] if res.data else {}
 
 
 # Open availability -----------------------------------------------------------
@@ -59,7 +83,33 @@ def open_availability_for_venue(venue: dict) -> Optional[dict]:
         }
     ).execute()
 
+    _send_open_emails(venue, next_monday)
+
     return period
+
+
+def _send_open_emails(venue: dict, week_monday: date) -> None:
+    """Tells every active staff member availability has opened for the week."""
+    settings = get_settings()
+    week_label = f"w/c {week_monday.strftime('%d %b %Y')}"
+    deadline_label = (
+        schedule_windows.format_deadline(_venue_rules(venue["id"]).get("avail_closes_at"))
+        or "soon"
+    )
+    venue_link_url = f"{settings.frontend_url}/v/{venue['link_token']}"
+
+    for member in _active_staff(venue["id"]):
+        if not member.get("email"):
+            continue
+        email_service.send_availability_open_email(
+            to_email=member["email"],
+            name=member["name"],
+            venue_name=venue["name"],
+            week_label=week_label,
+            venue_link_url=venue_link_url,
+            deadline_label=deadline_label,
+            pin=member["pin"],
+        )
 
 
 # Close availability + auto-generate ------------------------------------------
@@ -93,11 +143,48 @@ def close_availability_for_venue(venue: dict) -> Optional[dict]:
     closed_period = {**period, "status": "closed"}
     result = run_solver_for_period(venue, closed_period, note=" (auto-generated after availability closed)")
 
+    _send_closed_emails(venue, period["week_start"])
+
+    # Roll the availability window forward a week so its three trigger points
+    # recur, then rebuild the scheduled jobs off the new datetimes.
+    _advance_window(venue["id"])
+
     # Guarantee continuity: as soon as a week closes, make sure the next week's
     # collecting period exists so staff always have an open week to fill.
     open_availability_for_venue(venue)
 
     return result
+
+
+def _send_closed_emails(venue: dict, week_start) -> None:
+    """Tells every active staff member the week's availability has locked."""
+    settings = get_settings()
+    week_label = f"w/c {date.fromisoformat(str(week_start)).strftime('%d %b %Y')}"
+    rota_link_url = f"{settings.frontend_url}/v/{venue['link_token']}/rota"
+    for member in _active_staff(venue["id"]):
+        if not member.get("email"):
+            continue
+        email_service.send_availability_closed_email(
+            to_email=member["email"],
+            name=member["name"],
+            venue_name=venue["name"],
+            week_label=week_label,
+            rota_link_url=rota_link_url,
+        )
+
+
+def _advance_window(venue_id: str) -> None:
+    """Moves the three availability-window datetimes forward one week (in
+    lockstep) and refreshes the scheduled jobs so they fire again next cycle."""
+    rules = _venue_rules(venue_id)
+    patch = {}
+    for key in ("avail_opens_at", "avail_reminder_at", "avail_closes_at"):
+        advanced = schedule_windows.advance_week(rules.get(key))
+        if advanced:
+            patch[key] = advanced
+    if patch:
+        get_supabase().table("scheduling_rules").update(patch).eq("venue_id", venue_id).execute()
+    cron_scheduler.refresh_jobs()
 
 
 # Manager review email ---------------------------------------------------------

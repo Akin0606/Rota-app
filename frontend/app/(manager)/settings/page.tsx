@@ -320,35 +320,33 @@ export default function SettingsPage() {
 
         {/* Availability window */}
         <div className="rounded-panel border border-hairline bg-surface-card p-6">
-          <div className="mb-4 text-base font-bold text-ink">Availability Window</div>
+          <div className="mb-1 text-base font-bold text-ink">Availability Window</div>
+          <div className="mb-4 text-[13px] text-ink-faint">
+            Set the exact date &amp; time for each step. Staff are emailed automatically at each
+            point, and the window rolls forward a week after it closes.
+          </div>
           <div className="flex flex-col gap-3.5">
             <RuleRow label="Opens">
-              <select
-                value={rules.avail_opens_day}
-                onChange={(e) => setRules((r) => (r ? { ...r, avail_opens_day: e.target.value } : r))}
-                className="rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-semibold text-ink outline-none"
-              >
-                {DAY_NAMES.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
+              <input
+                type="datetime-local"
+                value={dtLocal(rules.avail_opens_at)}
+                onChange={(e) => setRules((r) => (r ? { ...r, avail_opens_at: e.target.value } : r))}
+                className="rounded-lg border-[1.5px] border-unset-border px-3 py-2 text-sm font-semibold text-ink outline-none"
+              />
+            </RuleRow>
+            <RuleRow label="Reminder">
+              <input
+                type="datetime-local"
+                value={dtLocal(rules.avail_reminder_at)}
+                onChange={(e) => setRules((r) => (r ? { ...r, avail_reminder_at: e.target.value } : r))}
+                className="rounded-lg border-[1.5px] border-unset-border px-3 py-2 text-sm font-semibold text-ink outline-none"
+              />
             </RuleRow>
             <RuleRow label="Closes">
-              <select
-                value={rules.avail_closes_day}
-                onChange={(e) => setRules((r) => (r ? { ...r, avail_closes_day: e.target.value } : r))}
-                className="rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-semibold text-ink outline-none"
-              >
-                {DAY_NAMES.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-            </RuleRow>
-            <RuleRow label="Closes at">
               <input
-                type="time"
-                value={rules.avail_closes_time}
-                onChange={(e) => setRules((r) => (r ? { ...r, avail_closes_time: e.target.value } : r))}
+                type="datetime-local"
+                value={dtLocal(rules.avail_closes_at)}
+                onChange={(e) => setRules((r) => (r ? { ...r, avail_closes_at: e.target.value } : r))}
                 className="rounded-lg border-[1.5px] border-unset-border px-3 py-2 text-sm font-semibold text-ink outline-none"
               />
             </RuleRow>
@@ -378,6 +376,12 @@ export default function SettingsPage() {
       <Toast message={toast} />
     </div>
   );
+}
+
+// A stored datetime ("YYYY-MM-DDTHH:MM:SS" or null) trimmed to what a
+// datetime-local input expects ("YYYY-MM-DDTHH:MM").
+function dtLocal(value: string | null): string {
+  return (value ?? "").slice(0, 16);
 }
 
 function RuleRow({ label, children }: { label: string; children: React.ReactNode }) {

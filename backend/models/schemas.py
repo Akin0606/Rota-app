@@ -38,6 +38,12 @@ class RulesOut(BaseModel):
 class SchedulingRulesOut(BaseModel):
     max_hours_per_week: int
     min_rest_hours: int
+    # Real datetimes for the availability window (naive Europe/London wall-clock,
+    # "YYYY-MM-DDTHH:MM[:SS]"). These drive the scheduler and the emails.
+    avail_opens_at: Optional[str] = None
+    avail_reminder_at: Optional[str] = None
+    avail_closes_at: Optional[str] = None
+    # Legacy day-of-week fields, kept for backward compatibility.
     avail_opens_day: str
     avail_closes_day: str
     avail_closes_time: str
@@ -185,6 +191,10 @@ class ShiftUpdateRequest(BaseModel):
 class SchedulingRulesUpdateRequest(BaseModel):
     max_hours_per_week: Optional[int] = Field(default=None, ge=1)
     min_rest_hours: Optional[int] = Field(default=None, ge=0)
+    # Availability window datetimes (naive Europe/London wall-clock strings).
+    avail_opens_at: Optional[str] = None
+    avail_reminder_at: Optional[str] = None
+    avail_closes_at: Optional[str] = None
     avail_opens_day: Optional[str] = None
     avail_closes_day: Optional[str] = None
     avail_closes_time: Optional[str] = None

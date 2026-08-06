@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from database import get_supabase
 from models.schemas import VenueCreateRequest, VenueOut, VenueUpdateRequest
-from services import cron_scheduler
+from services import cron_scheduler, schedule_windows
 from services.auth_service import get_current_manager, get_manager_venue
 from services.pin_service import generate_venue_token
 
@@ -59,7 +59,9 @@ def create_venue(payload: VenueCreateRequest, manager: dict = Depends(get_curren
         .data[0]
     )
 
-    supabase.table("scheduling_rules").insert({"venue_id": venue["id"]}).execute()
+    supabase.table("scheduling_rules").insert(
+        {"venue_id": venue["id"], **schedule_windows.default_window()}
+    ).execute()
 
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
