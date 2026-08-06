@@ -333,6 +333,32 @@ def set_venue_active(venue_id: str, payload: AdminVenueUpdateRequest):
     return get_venue_detail(venue_id)
 
 
+@router.post(
+    "/venues/{venue_id}/login-link",
+    response_model=AdminManagerOut,
+    dependencies=[Depends(require_admin)],
+)
+def create_support_login_link(venue_id: str):
+    """Mints a one-time magic login link for the venue's manager, so the founder
+    can sign in as them to reproduce/diagnose an issue. Desktop support use — the
+    link establishes the manager's session on click."""
+    supabase = get_supabase()
+    venue = _get_venue_or_404(venue_id)
+
+    try:
+        link = supabase.auth.admin.generate_link(
+            {"type": "magiclink", "email": venue["manager_email"]}
+        )
+        action_link = getattr(getattr(link, "properties", None), "action_link", None)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not create login link: {exc}")
+
+    if not action_link:
+        raise HTTPException(status_code=500, detail="Could not create login link")
+
+    return {"email": venue["manager_email"], "status": "link_created", "login_url": action_link}
+
+
 @router.delete("/venues/{venue_id}", dependencies=[Depends(require_admin)])
 def delete_venue(venue_id: str):
     """Permanently deletes a venue and all related data. Foreign-key cascades

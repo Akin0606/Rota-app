@@ -13,6 +13,7 @@ import {
   AdminVenueRota,
   adminGenerateRota,
   adminResetPin,
+  createSupportLoginLink,
   deleteAdminVenue,
   getAdminVenueDetail,
   getAdminVenueRota,
@@ -38,6 +39,8 @@ export default function AdminVenueDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
+  const [loginLink, setLoginLink] = useState<string | null>(null);
+  const [linkLoading, setLinkLoading] = useState(false);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -120,6 +123,19 @@ export default function AdminVenueDetailPage() {
     }
   }
 
+  async function handleSupportLogin() {
+    if (!venue) return;
+    setLinkLoading(true);
+    try {
+      const res = await createSupportLoginLink(venue.id);
+      setLoginLink(res.login_url);
+    } catch (err) {
+      showToast(err instanceof AdminApiError ? err.message : "Could not create login link");
+    } finally {
+      setLinkLoading(false);
+    }
+  }
+
   async function handleDelete() {
     if (!venue || deleteConfirm !== venue.name) return;
     setDeleting(true);
@@ -193,6 +209,13 @@ export default function AdminVenueDetailPage() {
           className="rounded-lg border border-hairline bg-surface-card px-3.5 py-2 text-xs font-semibold text-ink-muted"
         >
           {showRota ? "Hide rota" : "View rota"}
+        </button>
+        <button
+          onClick={handleSupportLogin}
+          disabled={linkLoading}
+          className="rounded-lg border border-hairline bg-surface-card px-3.5 py-2 text-xs font-semibold text-ink-muted disabled:opacity-50"
+        >
+          {linkLoading ? "Creating…" : "Support login"}
         </button>
         <button
           onClick={handleToggleActive}
@@ -295,6 +318,36 @@ export default function AdminVenueDetailPage() {
           Delete venue
         </button>
       </div>
+
+      <Modal open={!!loginLink} onClose={() => setLoginLink(null)} title="Support login link">
+        <div className="mb-3 text-[13px] text-ink-muted">
+          One-time link that signs you in as{" "}
+          <span className="font-semibold text-ink">{venue.manager_email}</span> for support. Open it
+          in a private window and don&apos;t share it — it grants access to their account.
+        </div>
+        <div className="mb-4 break-all rounded-[10px] border border-hairline bg-surface-subtle px-3.5 py-2.5 text-[12px] text-ink-label">
+          {loginLink}
+        </div>
+        <div className="flex gap-2.5">
+          <button
+            onClick={() => {
+              if (loginLink) navigator.clipboard.writeText(loginLink);
+              showToast("Link copied");
+            }}
+            className="flex-1 rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-white"
+          >
+            Copy link
+          </button>
+          <a
+            href={loginLink ?? "#"}
+            target="_blank"
+            rel="noreferrer"
+            className="flex-1 rounded-xl bg-surface-subtle py-3.5 text-center text-sm font-semibold text-ink-muted"
+          >
+            Open
+          </a>
+        </div>
+      </Modal>
 
       <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete venue">
         <div className="mb-3 text-[13px] text-ink-muted">

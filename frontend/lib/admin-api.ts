@@ -182,6 +182,10 @@ export function deleteAdminVenue(id: string): Promise<{ status: string; name: st
   return adminRequest(`/api/admin/venues/${id}`, { method: "DELETE" });
 }
 
+export function createSupportLoginLink(id: string): Promise<AdminManager> {
+  return adminRequest(`/api/admin/venues/${id}/login-link`, { method: "POST" });
+}
+
 export function listAdminActivity(limit = 50): Promise<AdminActivity[]> {
   return adminRequest(`/api/admin/activity?limit=${limit}`);
 }
