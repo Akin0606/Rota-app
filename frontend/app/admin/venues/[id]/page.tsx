@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import AdminRotaView from "@/components/admin-rota-view";
+import Modal from "@/components/modal";
 import Toast from "@/components/toast";
 import {
   AdminApiError,
@@ -12,6 +13,7 @@ import {
   AdminVenueRota,
   adminGenerateRota,
   adminResetPin,
+  deleteAdminVenue,
   getAdminVenueDetail,
   getAdminVenueRota,
   setVenueActive,
@@ -20,6 +22,7 @@ import { formatWeekRange } from "@/lib/utils";
 
 export default function AdminVenueDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const venueId = params.id;
 
   const [venue, setVenue] = useState<AdminVenueDetail | null>(null);
@@ -32,6 +35,9 @@ export default function AdminVenueDetailPage() {
   const [rota, setRota] = useState<AdminVenueRota | null>(null);
   const [rotaLoading, setRotaLoading] = useState(false);
   const [showRota, setShowRota] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -111,6 +117,18 @@ export default function AdminVenueDetailPage() {
       showToast(err instanceof AdminApiError ? err.message : "Could not update venue");
     } finally {
       setTogglingActive(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!venue || deleteConfirm !== venue.name) return;
+    setDeleting(true);
+    try {
+      await deleteAdminVenue(venue.id);
+      router.push("/admin");
+    } catch (err) {
+      showToast(err instanceof AdminApiError ? err.message : "Could not delete venue");
+      setDeleting(false);
     }
   }
 
@@ -260,6 +278,52 @@ export default function AdminVenueDetailPage() {
           ))
         )}
       </div>
+
+      <div className="mt-8 rounded-panel border border-unavail-border bg-unavail-bg p-5">
+        <div className="mb-1 text-sm font-bold text-unavail-text">Danger zone</div>
+        <div className="mb-3 text-[13px] text-unavail-text">
+          Permanently delete this venue and all its data — staff, shifts, periods, availability,
+          rota assignments and activity. This cannot be undone.
+        </div>
+        <button
+          onClick={() => {
+            setDeleteConfirm("");
+            setDeleteOpen(true);
+          }}
+          className="rounded-lg bg-unavail-text px-3.5 py-2 text-xs font-semibold text-white"
+        >
+          Delete venue
+        </button>
+      </div>
+
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete venue">
+        <div className="mb-3 text-[13px] text-ink-muted">
+          This permanently removes <span className="font-semibold text-ink">{venue.name}</span> and
+          every record tied to it. To confirm, type the venue name below.
+        </div>
+        <input
+          value={deleteConfirm}
+          onChange={(e) => setDeleteConfirm(e.target.value)}
+          placeholder={venue.name}
+          autoFocus
+          className="mb-4 w-full rounded-[10px] border-[1.5px] border-unset-border px-3.5 py-2.5 text-sm outline-none focus:border-accent"
+        />
+        <div className="flex gap-2.5">
+          <button
+            onClick={() => setDeleteOpen(false)}
+            className="flex-1 rounded-xl bg-unset-bg py-3.5 text-center text-sm font-semibold text-ink-muted"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={deleting || deleteConfirm !== venue.name}
+            className="flex-1 rounded-xl bg-unavail-text py-3.5 text-center text-sm font-semibold text-white disabled:opacity-40"
+          >
+            {deleting ? "Deleting…" : "Delete permanently"}
+          </button>
+        </div>
+      </Modal>
 
       <Toast message={toast} />
     </div>

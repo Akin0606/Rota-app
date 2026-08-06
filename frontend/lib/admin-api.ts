@@ -164,6 +164,10 @@ export function getAdminVenueRota(id: string): Promise<AdminVenueRota> {
   return adminRequest(`/api/admin/venues/${id}/rota`);
 }
 
+export function deleteAdminVenue(id: string): Promise<{ status: string; name: string }> {
+  return adminRequest(`/api/admin/venues/${id}`, { method: "DELETE" });
+}
+
 export function listAdminActivity(limit = 50): Promise<AdminActivity[]> {
   return adminRequest(`/api/admin/activity?limit=${limit}`);
 }

@@ -272,6 +272,19 @@ def set_venue_active(venue_id: str, payload: AdminVenueUpdateRequest):
     return get_venue_detail(venue_id)
 
 
+@router.delete("/venues/{venue_id}", dependencies=[Depends(require_admin)])
+def delete_venue(venue_id: str):
+    """Permanently deletes a venue and all related data. Foreign-key cascades
+    remove shifts, staff, scheduling rules, periods, submissions, assignments
+    and activity log for the venue (see migrations 001/007/008)."""
+    supabase = get_supabase()
+    venue = _get_venue_or_404(venue_id)
+
+    supabase.table("venues").delete().eq("id", venue_id).execute()
+
+    return {"status": "deleted", "name": venue["name"]}
+
+
 @router.get("/activity", response_model=list[AdminActivityOut], dependencies=[Depends(require_admin)])
 def list_all_activity(limit: int = Query(default=50, le=200)):
     supabase = get_supabase()
