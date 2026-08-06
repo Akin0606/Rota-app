@@ -69,7 +69,11 @@ export default function SettingsPage() {
   }
 
   async function handleShiftDone(shift: Shift) {
-    if (shift.max_staff < shift.min_staff) {
+    // Clamp to valid bounds only on save, so the fields can be cleared while
+    // typing without snapping to a value.
+    const minStaff = Math.max(0, shift.min_staff || 0);
+    const maxStaff = Math.max(1, shift.max_staff || 0);
+    if (maxStaff < minStaff) {
       showToast("Max staff can't be below min staff");
       return;
     }
@@ -78,9 +82,10 @@ export default function SettingsPage() {
         name: shift.name,
         start_time: shift.start_time,
         end_time: shift.end_time,
-        min_staff: shift.min_staff,
-        max_staff: shift.max_staff,
+        min_staff: minStaff,
+        max_staff: maxStaff,
       });
+      patchShiftLocal(shift.id, { min_staff: minStaff, max_staff: maxStaff });
       setEditingShiftId(null);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not save shift");
@@ -261,7 +266,9 @@ export default function SettingsPage() {
                             min={0}
                             value={sh.min_staff}
                             onChange={(e) =>
-                              patchShiftLocal(sh.id, { min_staff: Math.max(0, Number(e.target.value)) })
+                              patchShiftLocal(sh.id, {
+                                min_staff: e.target.value === "" ? 0 : Number(e.target.value),
+                              })
                             }
                             className="w-[60px] rounded-lg border-[1.5px] border-accent-border bg-surface px-2 py-2 text-center text-sm font-semibold text-ink outline-none"
                           />
@@ -273,7 +280,9 @@ export default function SettingsPage() {
                             min={1}
                             value={sh.max_staff}
                             onChange={(e) =>
-                              patchShiftLocal(sh.id, { max_staff: Math.max(1, Number(e.target.value)) })
+                              patchShiftLocal(sh.id, {
+                                max_staff: e.target.value === "" ? 0 : Number(e.target.value),
+                              })
                             }
                             className="w-[60px] rounded-lg border-[1.5px] border-accent-border bg-surface px-2 py-2 text-center text-sm font-semibold text-ink outline-none"
                           />
