@@ -7,7 +7,7 @@ from config import get_settings
 from database import get_supabase
 from routers.rota import _build_summary, run_solver_for_period
 from routers.staff import _reminder_context
-from services import cron_scheduler, email_service, schedule_windows
+from services import cron_scheduler, email_service, notice_window, schedule_windows
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])
 
@@ -34,34 +34,32 @@ def _active_staff(venue_id: str) -> list[dict]:
     )
 
 
-def _venue_rules(venue_id: str) -> dict:
-    res = (
-        get_supabase()
-        .table("scheduling_rules")
-        .select("*")
-        .eq("venue_id", venue_id)
-        .limit(1)
-        .execute()
-    )
-    return res.data[0] if res.data else {}
-
-
 # Open availability -----------------------------------------------------------
 
-def open_availability_for_venue(venue: dict) -> Optional[dict]:
-    """Creates next week's availability period for a venue, if it doesn't
-    already exist. Safe to call repeatedly (idempotent) so both the raw
-    endpoint and the per-venue scheduler can share this."""
-    supabase = get_supabase()
+def _target_open_week(venue_id: str) -> date:
+    """The Monday of the week availability should currently be collecting for —
+    the active notice window's week, falling back to next Monday for a venue with
+    no shifts to derive a window from."""
+    window = notice_window.compute_for_venue(venue_id)
+    if window:
+        return window["week_monday"]
     today = date.today()
     this_monday = today - timedelta(days=today.weekday())
-    next_monday = this_monday + timedelta(days=7)
+    return this_monday + timedelta(days=7)
+
+
+def open_availability_for_venue(venue: dict) -> Optional[dict]:
+    """Creates the current notice window's availability period for a venue, if it
+    doesn't already exist. Safe to call repeatedly (idempotent) so both the raw
+    endpoint and the per-venue scheduler can share this."""
+    supabase = get_supabase()
+    target_monday = _target_open_week(venue["id"])
 
     existing = (
         supabase.table("availability_periods")
         .select("id")
         .eq("venue_id", venue["id"])
-        .eq("week_start", next_monday.isoformat())
+        .eq("week_start", target_monday.isoformat())
         .limit(1)
         .execute()
     )
@@ -70,7 +68,7 @@ def open_availability_for_venue(venue: dict) -> Optional[dict]:
 
     period = (
         supabase.table("availability_periods")
-        .insert({"venue_id": venue["id"], "week_start": next_monday.isoformat(), "status": "collecting"})
+        .insert({"venue_id": venue["id"], "week_start": target_monday.isoformat(), "status": "collecting"})
         .execute()
         .data[0]
     )
@@ -79,11 +77,11 @@ def open_availability_for_venue(venue: dict) -> Optional[dict]:
         {
             "venue_id": venue["id"],
             "action": "availability_opened",
-            "detail": f"Availability opened for week of {next_monday.isoformat()}",
+            "detail": f"Availability opened for week of {target_monday.isoformat()}",
         }
     ).execute()
 
-    _send_open_emails(venue, next_monday)
+    _send_open_emails(venue, target_monday)
 
     return period
 
@@ -93,7 +91,7 @@ def _send_open_emails(venue: dict, week_monday: date) -> None:
     settings = get_settings()
     week_label = f"w/c {week_monday.strftime('%d %b %Y')}"
     deadline_label = (
-        schedule_windows.format_deadline(_venue_rules(venue["id"]).get("avail_closes_at"))
+        schedule_windows.format_deadline_dt(notice_window.close_for_week(venue["id"], week_monday))
         or "soon"
     )
     venue_link_url = f"{settings.frontend_url}/v/{venue['link_token']}"
@@ -145,13 +143,14 @@ def close_availability_for_venue(venue: dict) -> Optional[dict]:
 
     _send_closed_emails(venue, period["week_start"])
 
-    # Roll the availability window forward a week so its three trigger points
-    # recur, then rebuild the scheduled jobs off the new datetimes.
-    _advance_window(venue["id"])
-
     # Guarantee continuity: as soon as a week closes, make sure the next week's
-    # collecting period exists so staff always have an open week to fill.
+    # collecting period exists so staff always have an open week to fill. This
+    # computes the new active window (now that this week's close has passed).
     open_availability_for_venue(venue)
+
+    # Rebuild the scheduled jobs so the next week's open/reminder/close fire. The
+    # window is derived, not stored, so there's nothing to advance by hand.
+    cron_scheduler.refresh_jobs()
 
     return result
 
@@ -171,20 +170,6 @@ def _send_closed_emails(venue: dict, week_start) -> None:
             week_label=week_label,
             rota_link_url=rota_link_url,
         )
-
-
-def _advance_window(venue_id: str) -> None:
-    """Moves the three availability-window datetimes forward one week (in
-    lockstep) and refreshes the scheduled jobs so they fire again next cycle."""
-    rules = _venue_rules(venue_id)
-    patch = {}
-    for key in ("avail_opens_at", "avail_reminder_at", "avail_closes_at"):
-        advanced = schedule_windows.advance_week(rules.get(key))
-        if advanced:
-            patch[key] = advanced
-    if patch:
-        get_supabase().table("scheduling_rules").update(patch).eq("venue_id", venue_id).execute()
-    cron_scheduler.refresh_jobs()
 
 
 # Manager review email ---------------------------------------------------------

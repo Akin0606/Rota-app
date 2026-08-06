@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,7 +12,7 @@ from models.schemas import (
     StaffManagerOut,
     StaffUpdateRequest,
 )
-from services import email_service, schedule_windows
+from services import email_service, notice_window, schedule_windows
 from services.auth_service import get_current_manager, get_manager_venue
 from services.pin_service import generate_pin
 
@@ -221,25 +221,11 @@ def _reminder_context(venue: dict, period_id: Optional[str]) -> tuple[str, str]:
     week_start = date.fromisoformat(str(period_res.data[0]["week_start"]))
     week_label = f"w/c {week_start.strftime('%d %b %Y')}"
 
-    rules_res = (
-        supabase.table("scheduling_rules")
-        .select("avail_closes_at, avail_closes_day, avail_closes_time")
-        .eq("venue_id", venue["id"])
-        .limit(1)
-        .execute()
+    # The close deadline is derived from this week's notice window.
+    deadline_label = (
+        schedule_windows.format_deadline_dt(notice_window.close_for_week(venue["id"], week_start))
+        or "soon"
     )
-    if not rules_res.data:
-        return week_label, "soon"
-
-    row = rules_res.data[0]
-    # Prefer the real close datetime; fall back to the legacy day/time.
-    deadline_label = schedule_windows.format_deadline(row.get("avail_closes_at"))
-    if not deadline_label:
-        closes_day = row.get("avail_closes_day", "Wednesday")
-        closes_time = row.get("avail_closes_time", "23:00")
-        day_index = email_service.DAY_NAMES.index(closes_day) if closes_day in email_service.DAY_NAMES else 2
-        deadline_date = week_start + timedelta(days=day_index)
-        deadline_label = f"{deadline_date.strftime('%A %d %b')}, {closes_time}"
 
     return week_label, deadline_label
 

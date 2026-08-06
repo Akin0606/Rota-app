@@ -1,16 +1,15 @@
-"""Wires the /api/cron/* job functions to run automatically at the real
-datetimes each venue configured in its scheduling_rules (avail_opens_at,
-avail_reminder_at, avail_closes_at), using an in-process APScheduler instance.
+"""Wires the /api/cron/* job functions to run automatically at each venue's
+computed notice window (see services.notice_window / services.schedule_windows).
 
-Each window trigger is a one-shot DateTrigger; when a venue's availability
-closes, the close handler advances all three datetimes by a week and calls
-refresh_jobs(), so the window recurs weekly on concrete, displayable dates.
-Jobs are rebuilt from the database at startup and after any rules/venue change.
+For every venue we work out the active collection week and its open / reminder /
+close datetimes from that week's earliest shift, then schedule a one-shot
+DateTrigger for each point still in the future. When a venue's availability
+closes, the close handler calls refresh_jobs() again, which recomputes the next
+week's window — so the cadence repeats automatically with nothing stored per
+week. Jobs are rebuilt from the database at startup and after any relevant change.
 """
 
 import logging
-import math
-from datetime import timedelta
 from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -18,7 +17,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from database import get_supabase
-from services import schedule_windows
+from services import notice_window, schedule_windows
 
 logger = logging.getLogger("cron_scheduler")
 
@@ -50,38 +49,10 @@ def _run_safely(fn, venue: dict) -> None:
         logger.exception("Scheduled job %s failed for venue %s", fn.__name__, venue.get("id"))
 
 
-def _heal_past_window(rules: dict) -> dict:
-    """If a venue's close datetime is in the past (e.g. the server was down
-    through a whole cycle), roll the whole window forward in lockstep by whole
-    weeks until it's in the future, and persist. Keeps opens/reminder/closes in
-    sync and stops a missed cycle from freezing the schedule forever."""
-    closes = schedule_windows.parse(rules.get("avail_closes_at"))
-    if not closes:
-        return rules
-    now = schedule_windows.now_london()
-    if closes > now:
-        return rules
-
-    weeks = math.ceil((now - closes).total_seconds() / (7 * 86400)) or 1
-    shift = timedelta(days=7 * weeks)
-    patch = {}
-    for key in ("avail_opens_at", "avail_reminder_at", "avail_closes_at"):
-        dt = schedule_windows.parse(rules.get(key))
-        if dt:
-            new_val = (dt + shift).strftime(schedule_windows.FMT)
-            patch[key] = new_val
-            rules[key] = new_val
-    if patch:
-        get_supabase().table("scheduling_rules").update(patch).eq(
-            "venue_id", rules["venue_id"]
-        ).execute()
-    return rules
-
-
 def refresh_jobs() -> None:
-    """Clears and rebuilds every venue's scheduled jobs from its current
-    scheduling_rules row. Call this at startup and after any rules/venue
-    change."""
+    """Clears and rebuilds every venue's scheduled jobs from its current shifts,
+    rules and week overrides. Call this at startup and after any change that
+    could move the window (rules, shifts, overrides, availability close)."""
     if _scheduler is None:
         return
 
@@ -100,35 +71,58 @@ def refresh_jobs() -> None:
     supabase = get_supabase()
     venues = supabase.table("venues").select("*").execute().data
     rules_rows = supabase.table("scheduling_rules").select("*").execute().data
+    shift_rows = supabase.table("shifts").select("venue_id, start_time").execute().data
+    override_rows = (
+        supabase.table("schedule_week_overrides").select("venue_id, week_start, close_at").execute().data
+    )
+
     rules_by_venue = {r["venue_id"]: r for r in rules_rows}
+    shifts_by_venue: dict[str, list[dict]] = {}
+    for row in shift_rows:
+        shifts_by_venue.setdefault(row["venue_id"], []).append(row)
+    overrides_by_venue: dict[str, list[dict]] = {}
+    for row in override_rows:
+        overrides_by_venue.setdefault(row["venue_id"], []).append(row)
 
     now = schedule_windows.now_london()
+    scheduled = 0
 
     for venue in venues:
-        rules = rules_by_venue.get(venue["id"])
-        if not rules:
-            continue
+        rules = rules_by_venue.get(venue["id"], {})
+        shifts = shifts_by_venue.get(venue["id"], [])
+        overrides = notice_window.overrides_map(overrides_by_venue.get(venue["id"], []))
+        off = notice_window.offsets_from_rules(rules)
 
-        rules = _heal_past_window(rules)
-
-        window_jobs = (
-            ("open", "avail_opens_at", open_availability_for_venue),
-            ("remind", "avail_reminder_at", send_reminders_for_venue),
-            ("close", "avail_closes_at", close_availability_for_venue),
+        window = schedule_windows.compute_window(
+            now=now,
+            earliest_minutes=schedule_windows.earliest_shift_minutes(shifts),
+            override_close_by_week=overrides,
+            **off,
         )
-        for prefix, key, fn in window_jobs:
-            run_at = schedule_windows.to_london_aware(rules.get(key))
-            # Only schedule points still in the future for this cycle; ones that
-            # already passed fired earlier (the close handler rolls the window).
-            if not run_at or run_at.replace(tzinfo=None) <= now:
-                continue
-            _scheduler.add_job(
-                _run_safely,
-                args=[fn, venue],
-                trigger=DateTrigger(run_date=run_at),
-                id=f"{prefix}_{venue['id']}",
-                replace_existing=True,
+
+        if window:
+            # If we're already inside the window (e.g. the server started after
+            # the open point passed), make sure the collecting period exists.
+            if window["opens_at"] <= now < window["closes_at"]:
+                _run_safely(open_availability_for_venue, venue)
+
+            window_jobs = (
+                ("open", window["opens_at"], open_availability_for_venue),
+                ("remind", window["reminder_at"], send_reminders_for_venue),
+                ("close", window["closes_at"], close_availability_for_venue),
             )
+            for prefix, run_at_naive, fn in window_jobs:
+                if run_at_naive <= now:
+                    continue
+                run_at = run_at_naive.replace(tzinfo=schedule_windows.LONDON)
+                _scheduler.add_job(
+                    _run_safely,
+                    args=[fn, venue],
+                    trigger=DateTrigger(run_date=run_at),
+                    id=f"{prefix}_{venue['id']}",
+                    replace_existing=True,
+                )
+                scheduled += 1
 
         # Manager review email stays on its legacy weekly day/time.
         review_day = _DAY_TO_APS.get(rules.get("review_email_day", "Saturday"), "sat")
@@ -141,7 +135,7 @@ def refresh_jobs() -> None:
             replace_existing=True,
         )
 
-    logger.info("Scheduled jobs refreshed for %d venue(s)", len(venues))
+    logger.info("Scheduled window jobs refreshed for %d venue(s), %d timed jobs", len(venues), scheduled)
 
 
 def start_scheduler() -> None:

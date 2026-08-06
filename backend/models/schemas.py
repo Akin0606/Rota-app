@@ -203,6 +203,53 @@ class SchedulingRulesUpdateRequest(BaseModel):
     review_email_time: Optional[str] = None
 
 
+class SchedulerWeekOut(BaseModel):
+    """One upcoming rota week with its computed notice window, for the Scheduler
+    preview and the week-override dropdown."""
+
+    week_start: str
+    week_label: str
+    opens_at: str
+    reminder_at: str
+    closes_at: str
+    earliest_shift_at: str
+    notice_hours: float
+    is_override: bool
+
+
+class SchedulerConfigOut(BaseModel):
+    # Relative offsets (hours) that define the window each week.
+    open_offset_hours: int
+    reminder_offset_hours: int
+    notice_buffer_hours: int
+    # The fixed legal minimum (72h), for display.
+    legal_notice_hours: int
+    earliest_shift_label: Optional[str] = None
+    has_shifts: bool
+    weeks: list[SchedulerWeekOut] = []
+
+
+class SchedulerConfigUpdateRequest(BaseModel):
+    open_offset_hours: Optional[int] = Field(default=None, ge=0)
+    reminder_offset_hours: Optional[int] = Field(default=None, ge=0)
+    notice_buffer_hours: Optional[int] = Field(default=None, ge=0)
+
+
+class SchedulerOverrideRequest(BaseModel):
+    week_start: str
+    close_at: str
+    # Managers must explicitly confirm when a close time leaves under the legal
+    # minimum notice; the first attempt returns needs_confirm instead of saving.
+    confirm: bool = False
+
+
+class SchedulerOverrideResponse(BaseModel):
+    status: Literal["saved", "needs_confirm"]
+    notice_hours: Optional[float] = None
+    legal_notice_hours: int = 72
+    config: Optional[SchedulerConfigOut] = None
+
+
 class AssignmentOut(BaseModel):
     id: str
     staff_id: str

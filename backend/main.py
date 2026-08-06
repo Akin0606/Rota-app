@@ -11,6 +11,7 @@ from routers import (
     periods,
     rota,
     rules,
+    scheduler,
     shifts,
     staff,
     venue,
@@ -50,6 +51,7 @@ app.include_router(staff.router)
 app.include_router(periods.router)
 app.include_router(activity.router)
 app.include_router(rules.router)
+app.include_router(scheduler.router)
 app.include_router(rota.router)
 app.include_router(admin.router)
 app.include_router(cron.router)

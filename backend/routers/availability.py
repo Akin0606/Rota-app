@@ -14,7 +14,7 @@ from models.schemas import (
     WeekAvailabilityOut,
     WeekAvailabilityRequest,
 )
-from services import email_service, rate_limit, schedule_windows
+from services import email_service, notice_window, rate_limit
 from services.auth_service import INACTIVE_VENUE_MESSAGE
 
 # PIN auth: block a venue_token + IP after this many wrong PINs in the window.
@@ -189,29 +189,17 @@ def _get_shifts(venue_id: str) -> list[dict]:
 
 
 def _get_rules(venue_id: str) -> dict:
-    supabase = get_supabase()
-    res = (
-        supabase.table("scheduling_rules")
-        .select("avail_closes_at, avail_closes_day, avail_closes_time")
-        .eq("venue_id", venue_id)
-        .limit(1)
-        .execute()
-    )
+    """Staff-facing close deadline (day + time) for the week currently open. The
+    close is derived from that week's notice window, so it stays accurate as the
+    formula recalculates each week."""
     fallback = {"avail_closes_day": "Wednesday", "avail_closes_time": "23:00"}
-    if not res.data:
+    window = notice_window.compute_for_venue(venue_id)
+    if not window:
         return fallback
-
-    row = res.data[0]
-    # Keep the staff-facing day/time in step with the real close datetime.
-    dt = schedule_windows.parse(row.get("avail_closes_at"))
-    if dt:
-        return {
-            "avail_closes_day": DAY_NAMES[dt.weekday()],
-            "avail_closes_time": dt.strftime("%H:%M"),
-        }
+    dt = window["closes_at"]
     return {
-        "avail_closes_day": row.get("avail_closes_day") or fallback["avail_closes_day"],
-        "avail_closes_time": row.get("avail_closes_time") or fallback["avail_closes_time"],
+        "avail_closes_day": DAY_NAMES[dt.weekday()],
+        "avail_closes_time": dt.strftime("%H:%M"),
     }
 
 
