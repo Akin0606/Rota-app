@@ -6,3 +6,5 @@ python-dotenv==1.0.1
 ortools==9.15.6755
 resend==2.35.0
 apscheduler==3.10.4
+fpdf2==2.8.1
+openpyxl==3.1.5

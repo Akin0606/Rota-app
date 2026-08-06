@@ -230,6 +230,11 @@ class AssignmentEditRequest(BaseModel):
     action: Literal["add", "remove"]
 
 
+class RotaEmailRequest(BaseModel):
+    target: Literal["staff", "manager"]
+    orientation: Literal["staff-rows", "day-rows"] = "staff-rows"
+
+
 class AdminVenueOut(BaseModel):
     id: str
     name: str

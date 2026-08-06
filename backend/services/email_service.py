@@ -55,7 +55,12 @@ def _pin_badge(pin: str) -> str:
     )
 
 
-def _send(to_email: Optional[str], subject: str, html: str) -> dict:
+def _send(
+    to_email: Optional[str],
+    subject: str,
+    html: str,
+    attachments: Optional[list[dict]] = None,
+) -> dict:
     if not to_email:
         return {"status": "skipped", "reason": "no recipient email"}
 
@@ -64,18 +69,25 @@ def _send(to_email: Optional[str], subject: str, html: str) -> dict:
         return {"status": "skipped", "reason": "RESEND_API_KEY not configured"}
 
     resend.api_key = settings.resend_api_key
+    params = {
+        "from": settings.resend_from_email,
+        "to": [to_email],
+        "subject": subject,
+        "html": html,
+    }
+    if attachments:
+        params["attachments"] = attachments
     try:
-        result = resend.Emails.send(
-            {
-                "from": settings.resend_from_email,
-                "to": [to_email],
-                "subject": subject,
-                "html": html,
-            }
-        )
+        result = resend.Emails.send(params)
         return {"status": "sent", "id": result.get("id") if isinstance(result, dict) else None}
     except Exception as exc:
         return {"status": "error", "error": str(exc)}
+
+
+def pdf_attachment(filename: str, content: bytes) -> dict:
+    """A Resend attachment spec for a PDF. Resend's Python SDK takes the raw
+    bytes as a list of ints."""
+    return {"filename": filename, "content": list(content), "content_type": "application/pdf"}
 
 
 # 1. Magic-link login (manager auth) ----------------------------------------
@@ -198,6 +210,7 @@ def send_published_rota_email(
     week_label: str,
     shifts: list[dict],
     rota_link_url: str,
+    attachments: Optional[list[dict]] = None,
 ) -> dict:
     subject = f"Your rota for {week_label}"
 
@@ -220,7 +233,27 @@ def send_published_rota_email(
 {_button("View full rota", rota_link_url)}
 """
     html = _shell(f"Your rota for {week_label}", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
-    return _send(to_email, subject, html)
+    return _send(to_email, subject, html, attachments=attachments)
+
+
+def send_manager_rota_email(
+    to_email: str,
+    venue_name: str,
+    week_label: str,
+    total_shifts: int,
+    dashboard_link_url: str,
+    attachments: Optional[list[dict]] = None,
+) -> dict:
+    """Emails the manager the full published rota, with the branded PDF attached
+    (triggered from the publish options panel)."""
+    subject = f"Rota for {week_label} — {venue_name}"
+    body = f"""
+<p style="margin:0 0 16px;">Here's the published rota for <strong>{week_label}</strong> at {venue_name}.</p>
+<p style="margin:0 0 16px;font-size:13px;color:#6b7280;">{total_shifts} shift{"s" if total_shifts != 1 else ""} assigned. The full rota is attached as a PDF.</p>
+{_button("Open in Crewplan", dashboard_link_url)}
+"""
+    html = _shell(f"Rota for {week_label}", f"Sent because you manage {venue_name} on Crewplan.", body)
+    return _send(to_email, subject, html, attachments=attachments)
 
 
 # 7. Bulk reminder (to manager) ----------------------------------------------

@@ -1,15 +1,49 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from config import get_settings
 from database import get_supabase
-from models.schemas import AssignmentEditRequest, RotaSummaryOut
-from services import email_service
+from models.schemas import (
+    AssignmentEditRequest,
+    EmailDeliveryOut,
+    RotaEmailRequest,
+    RotaSummaryOut,
+)
+from services import email_service, rota_export
 from services.auth_service import get_current_manager, get_manager_venue
 from services.solver import AVAILABLE, PREFERRED, generate_rota, shift_duration_hours
 
 router = APIRouter(prefix="/api/rota", tags=["rota"])
+
+VALID_ORIENTATIONS = ("staff-rows", "day-rows")
+
+
+def _gather_export_data(venue_id: str, period_id: str) -> tuple[list[dict], list[dict], list[dict]]:
+    """Shifts (by sort_order), active staff (by name), and assignments for a
+    period — the shared input for PDF/Excel export and the rota emails."""
+    supabase = get_supabase()
+    shifts = sorted(
+        supabase.table("shifts").select("*").eq("venue_id", venue_id).execute().data,
+        key=lambda s: (s.get("sort_order", 0), s.get("name", "")),
+    )
+    staff = sorted(
+        supabase.table("staff_members")
+        .select("id, name, email")
+        .eq("venue_id", venue_id)
+        .eq("is_active", True)
+        .execute()
+        .data,
+        key=lambda s: s.get("name", "").lower(),
+    )
+    assignments = (
+        supabase.table("rota_assignments")
+        .select("staff_id, day_index, shift_id")
+        .eq("period_id", period_id)
+        .execute()
+        .data
+    )
+    return shifts, staff, assignments
 
 
 def _get_period_or_404(venue_id: str, period_id: str) -> dict:
@@ -216,10 +250,16 @@ def edit_assignment(
     return _build_summary(venue["id"], period)
 
 
-def _send_published_rota_emails(venue: dict, period: dict, assignments: list[dict]) -> dict:
+def _send_published_rota_emails(
+    venue: dict,
+    period: dict,
+    assignments: list[dict],
+    attachment: dict | None = None,
+) -> dict:
     """Emails each staff member the shifts they were assigned. Returns delivery
     stats ({sent, failed, skipped_no_email, errors}) so the caller can surface
-    partial failures instead of them being silently swallowed."""
+    partial failures instead of them being silently swallowed. When `attachment`
+    is provided (the branded rota PDF), it's attached to every email."""
     stats = {"sent": 0, "failed": 0, "skipped_no_email": 0, "errors": []}
     if not assignments:
         return stats
@@ -281,6 +321,7 @@ def _send_published_rota_emails(venue: dict, period: dict, assignments: list[dic
             week_label=week_label,
             shifts=shift_rows,
             rota_link_url=venue_link,
+            attachments=[attachment] if attachment else None,
         )
         if result.get("status") == "sent":
             stats["sent"] += 1
@@ -314,3 +355,109 @@ def publish(period_id: str, manager: dict = Depends(get_current_manager)):
     summary["email"] = _send_published_rota_emails(venue, updated_period, summary["assignments"])
 
     return summary
+
+
+def _normalise_orientation(orientation: str) -> str:
+    return orientation if orientation in VALID_ORIENTATIONS else "staff-rows"
+
+
+def _export_filename(venue: dict, period: dict, ext: str) -> str:
+    week = str(period["week_start"])
+    slug = "".join(c if c.isalnum() else "-" for c in venue["name"].lower()).strip("-") or "rota"
+    return f"{slug}-rota-{week}.{ext}"
+
+
+@router.get("/{period_id}/export.pdf")
+def export_pdf(
+    period_id: str,
+    orientation: str = Query("staff-rows"),
+    manager: dict = Depends(get_current_manager),
+):
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+    shifts, staff, assignments = _gather_export_data(venue["id"], period_id)
+    pdf = rota_export.build_rota_pdf(
+        venue_name=venue["name"],
+        week_start=date.fromisoformat(str(period["week_start"])),
+        shifts=shifts,
+        staff=staff,
+        assignments=assignments,
+        orientation=_normalise_orientation(orientation),
+    )
+    filename = _export_filename(venue, period, "pdf")
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{period_id}/export.xlsx")
+def export_xlsx(
+    period_id: str,
+    orientation: str = Query("staff-rows"),
+    manager: dict = Depends(get_current_manager),
+):
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+    shifts, staff, assignments = _gather_export_data(venue["id"], period_id)
+    xlsx = rota_export.build_rota_xlsx(
+        venue_name=venue["name"],
+        week_start=date.fromisoformat(str(period["week_start"])),
+        shifts=shifts,
+        staff=staff,
+        assignments=assignments,
+        orientation=_normalise_orientation(orientation),
+    )
+    filename = _export_filename(venue, period, "xlsx")
+    return Response(
+        content=xlsx,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/{period_id}/email", response_model=EmailDeliveryOut)
+def email_rota(
+    period_id: str,
+    payload: RotaEmailRequest,
+    manager: dict = Depends(get_current_manager),
+):
+    """Emails the current rota with the branded PDF attached, either to all
+    staff (each gets their own shifts) or to the manager (full rota). Used by
+    the publish options panel."""
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+    settings = get_settings()
+
+    shifts, staff, assignments = _gather_export_data(venue["id"], period_id)
+    orientation = _normalise_orientation(payload.orientation)
+    week_start = date.fromisoformat(str(period["week_start"]))
+    pdf = rota_export.build_rota_pdf(
+        venue_name=venue["name"],
+        week_start=week_start,
+        shifts=shifts,
+        staff=staff,
+        assignments=assignments,
+        orientation=orientation,
+    )
+    attachment = email_service.pdf_attachment(_export_filename(venue, period, "pdf"), pdf)
+    week_label = f"w/c {week_start.strftime('%d %b %Y')}"
+
+    if payload.target == "manager":
+        result = email_service.send_manager_rota_email(
+            to_email=venue["manager_email"],
+            venue_name=venue["name"],
+            week_label=week_label,
+            total_shifts=len(assignments),
+            dashboard_link_url=f"{settings.frontend_url}/rota",
+            attachments=[attachment],
+        )
+        if result.get("status") == "sent":
+            return EmailDeliveryOut(sent=1)
+        return EmailDeliveryOut(
+            failed=1, errors=[result.get("error") or result.get("reason") or "unknown error"]
+        )
+
+    stats = _send_published_rota_emails(venue, period, assignments, attachment=attachment)
+    return EmailDeliveryOut(**stats)
