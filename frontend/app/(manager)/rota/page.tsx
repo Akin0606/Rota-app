@@ -9,6 +9,7 @@ import StatusBanner from "@/components/status-banner";
 import Toast from "@/components/toast";
 import {
   ApiError,
+  EmailDelivery,
   Period,
   RotaSummary,
   Shift,
@@ -49,6 +50,7 @@ export default function RotaPage() {
   const [error, setError] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [publishResult, setPublishResult] = useState<EmailDelivery | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -183,7 +185,11 @@ export default function RotaPage() {
       const result = await publishRota(period.id);
       setSummary(result);
       setPeriods((prev) => prev.map((x) => (x.id === period.id ? { ...x, status: result.status } : x)));
-      showToast("Rota published! Staff can now view it.");
+      // Persist the delivery outcome so email failures are never silent — a
+      // transient toast alone hid the fact that no staff emails were going out.
+      setPublishResult(result.email ?? { sent: 0, failed: 0, skipped_no_email: 0, errors: [] });
+      const sent = result.email?.sent ?? 0;
+      showToast(sent > 0 ? `Rota published — ${sent} emailed` : "Rota published");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not publish rota");
     } finally {
@@ -281,6 +287,45 @@ export default function RotaPage() {
           </div>
         )}
       </div>
+
+      {publishResult && (
+        <div
+          className={`mb-5 rounded-panel border p-4 ${
+            publishResult.failed > 0
+              ? "border-unavail-border bg-unavail-bg"
+              : "border-hairline bg-surface-card"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div
+                className={`text-[13px] font-semibold ${
+                  publishResult.failed > 0 ? "text-unavail-text" : "text-ink-label"
+                }`}
+              >
+                Rota published.{" "}
+                {publishResult.sent > 0 && `${publishResult.sent} staff emailed. `}
+                {publishResult.failed > 0 && `${publishResult.failed} email${publishResult.failed === 1 ? "" : "s"} failed. `}
+                {publishResult.skipped_no_email > 0 &&
+                  `${publishResult.skipped_no_email} ${publishResult.skipped_no_email === 1 ? "has" : "have"} no email on file.`}
+              </div>
+              {publishResult.errors.length > 0 && (
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-[12px] text-unavail-text">
+                  {publishResult.errors.map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <button
+              onClick={() => setPublishResult(null)}
+              className="shrink-0 text-[13px] text-ink-faint hover:text-ink"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {!period && (
         <div className="mb-5 rounded-panel border border-hairline bg-surface-card p-4 text-[13px] text-ink-muted">

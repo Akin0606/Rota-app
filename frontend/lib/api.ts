@@ -389,6 +389,13 @@ export type AssignmentOut = {
   manually_assigned: boolean;
 };
 
+export type EmailDelivery = {
+  sent: number;
+  failed: number;
+  skipped_no_email: number;
+  errors: string[];
+};
+
 export type RotaSummary = {
   period_id: string;
   status: string;
@@ -397,6 +404,8 @@ export type RotaSummary = {
   conflicts: number;
   uncovered: { day_index: number; shift_id: string }[];
   warnings: string[];
+  // Present only on the publish response.
+  email?: EmailDelivery | null;
 };
 
 export function getRota(periodId: string): Promise<RotaSummary> {

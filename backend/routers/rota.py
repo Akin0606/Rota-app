@@ -216,9 +216,13 @@ def edit_assignment(
     return _build_summary(venue["id"], period)
 
 
-def _send_published_rota_emails(venue: dict, period: dict, assignments: list[dict]) -> None:
+def _send_published_rota_emails(venue: dict, period: dict, assignments: list[dict]) -> dict:
+    """Emails each staff member the shifts they were assigned. Returns delivery
+    stats ({sent, failed, skipped_no_email, errors}) so the caller can surface
+    partial failures instead of them being silently swallowed."""
+    stats = {"sent": 0, "failed": 0, "skipped_no_email": 0, "errors": []}
     if not assignments:
-        return
+        return stats
 
     supabase = get_supabase()
     settings = get_settings()
@@ -246,7 +250,7 @@ def _send_published_rota_emails(venue: dict, period: dict, assignments: list[dic
 
     for staff_id, staff_assignments in by_staff.items():
         member = staff_by_id.get(staff_id)
-        if not member or not member.get("email"):
+        if not member:
             continue
 
         shift_rows = []
@@ -266,7 +270,11 @@ def _send_published_rota_emails(venue: dict, period: dict, assignments: list[dic
         if not shift_rows:
             continue
 
-        email_service.send_published_rota_email(
+        if not member.get("email"):
+            stats["skipped_no_email"] += 1
+            continue
+
+        result = email_service.send_published_rota_email(
             to_email=member["email"],
             name=member["name"],
             venue_name=venue["name"],
@@ -274,6 +282,14 @@ def _send_published_rota_emails(venue: dict, period: dict, assignments: list[dic
             shifts=shift_rows,
             rota_link_url=venue_link,
         )
+        if result.get("status") == "sent":
+            stats["sent"] += 1
+        else:
+            stats["failed"] += 1
+            reason = result.get("error") or result.get("reason") or "unknown error"
+            stats["errors"].append(f"{member['name']}: {reason}")
+
+    return stats
 
 
 @router.post("/{period_id}/publish", response_model=RotaSummaryOut)
@@ -295,6 +311,6 @@ def publish(period_id: str, manager: dict = Depends(get_current_manager)):
     updated_period = {**period, "status": "published"}
     summary = _build_summary(venue["id"], updated_period)
 
-    _send_published_rota_emails(venue, updated_period, summary["assignments"])
+    summary["email"] = _send_published_rota_emails(venue, updated_period, summary["assignments"])
 
     return summary

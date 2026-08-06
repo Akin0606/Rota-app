@@ -199,6 +199,17 @@ class UncoveredSlot(BaseModel):
     shift_id: str
 
 
+class EmailDeliveryOut(BaseModel):
+    """Per-recipient outcome of a batch email send (e.g. publishing a rota),
+    so the frontend can surface partial failures instead of them being silently
+    swallowed."""
+
+    sent: int = 0
+    failed: int = 0
+    skipped_no_email: int = 0
+    errors: list[str] = []
+
+
 class RotaSummaryOut(BaseModel):
     period_id: str
     status: str
@@ -207,6 +218,9 @@ class RotaSummaryOut(BaseModel):
     conflicts: int
     uncovered: list[UncoveredSlot]
     warnings: list[str] = []
+    # Present only on the publish response — how the staff notification emails
+    # actually landed. None for read/generate/edit responses.
+    email: Optional[EmailDeliveryOut] = None
 
 
 class AssignmentEditRequest(BaseModel):
