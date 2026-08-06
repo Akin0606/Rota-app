@@ -94,9 +94,14 @@ export default function CrewplanLanding() {
             <a href="#features">Features</a>
             <a href="#roadmap">Roadmap</a>
           </div>
-          <a href="#waitlist" className="nav-cta">
-            Join waitlist
-          </a>
+          <div className="nav-actions">
+            <a href="/login" className="nav-login">
+              Log in
+            </a>
+            <a href="#waitlist" className="nav-cta">
+              Join waitlist
+            </a>
+          </div>
         </div>
       </nav>
 

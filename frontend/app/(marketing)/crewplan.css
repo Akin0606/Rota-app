@@ -87,6 +87,20 @@
 .crewplan .nav-links a:hover {
   color: var(--text-primary);
 }
+.crewplan .nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.crewplan .nav-login {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: color 0.15s;
+}
+.crewplan .nav-login:hover {
+  color: var(--text-primary);
+}
 .crewplan .nav-cta {
   background: var(--accent);
   color: #fff;
