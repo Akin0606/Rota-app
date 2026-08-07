@@ -86,6 +86,9 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
             <Link href={`/v/${venue_token}/availability`} className="mt-6 text-[13px] font-semibold text-accent">
               ← Back to availability
             </Link>
+            <Link href={`/v/${venue_token}/hub`} className="mt-2 text-[13px] font-semibold text-ink-faint">
+              ← Hub
+            </Link>
           </div>
         </div>
       </div>
@@ -112,6 +115,9 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
     <div className="mx-auto max-w-[420px] py-4">
       <div className="mx-4 animate-fadeIn overflow-hidden rounded-card bg-surface shadow-card">
         <div className="px-6 pb-7 pt-5">
+          <Link href={`/v/${venue_token}/hub`} className="text-[13px] font-semibold text-accent">
+            ← Hub
+          </Link>
           <div className="py-2 pb-4 text-center">
             <div className="text-xs font-medium uppercase tracking-wide text-ink-faint">{data.venue_name}</div>
             <div className="mt-1 text-[22px] font-bold text-ink">Your Rota</div>

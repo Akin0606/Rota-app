@@ -54,7 +54,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
     try {
       await authenticatePin(venue_token, pin);
       sessionStorage.setItem(pinStorageKey(venue_token), pin);
-      router.push(`/v/${venue_token}/availability`);
+      router.push(`/v/${venue_token}/hub`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
         showToast(err.message);

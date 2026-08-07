@@ -37,6 +37,12 @@ export default function SubmittedPage({ params }: { params: { venue_token: strin
           >
             Edit Availability
           </Link>
+          <Link
+            href={`/v/${venue_token}/hub`}
+            className="mt-4 block text-center text-[13px] font-semibold text-ink-faint"
+          >
+            ← Hub
+          </Link>
         </div>
       </div>
     </div>

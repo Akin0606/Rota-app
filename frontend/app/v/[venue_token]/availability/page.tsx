@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import AvailabilityGrid from "@/components/availability-grid";
 import Toast from "@/components/toast";
@@ -186,6 +187,9 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
     <div className="mx-auto max-w-[420px] py-4">
       <div className="mx-4 overflow-hidden rounded-card bg-surface shadow-card">
         <div className="px-6 pb-7 pt-5">
+          <Link href={`/v/${venue_token}/hub`} className="text-[13px] font-semibold text-accent">
+            ← Hub
+          </Link>
           <div className="py-2 pb-4 text-center">
             <div className="text-xs font-medium uppercase tracking-wide text-ink-faint">
               {data.venue_name}
