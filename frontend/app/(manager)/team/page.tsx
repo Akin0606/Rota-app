@@ -31,9 +31,10 @@ type FormState = {
   email: string;
   phone: string;
   role: string;
+  isUnder18: boolean;
 };
 
-const EMPTY_FORM: FormState = { name: "", email: "", phone: "", role: "Server" };
+const EMPTY_FORM: FormState = { name: "", email: "", phone: "", role: "Server", isUnder18: false };
 
 export default function TeamPage() {
   const [venue, setVenue] = useState<Venue | null>(null);
@@ -107,6 +108,7 @@ export default function TeamPage() {
       email: member.email ?? "",
       phone: member.phone ?? "",
       role: member.role,
+      isUnder18: member.is_under_18,
     });
     setModalMode("edit");
   }
@@ -129,6 +131,7 @@ export default function TeamPage() {
           email: form.email.trim() || null,
           phone: form.phone.trim() || null,
           role: form.role,
+          is_under_18: form.isUnder18,
         });
         setStaff((prev) => [...prev, created]);
         showToast(`${created.name.split(" ")[0]} added — PIN ${created.pin}`);
@@ -138,6 +141,7 @@ export default function TeamPage() {
           email: form.email.trim() || null,
           phone: form.phone.trim() || null,
           role: form.role,
+          is_under_18: form.isUnder18,
         });
         setStaff((prev) => prev.map((m) => (m.id === editingId ? { ...m, ...updated } : m)));
         showToast(`${updated.name.split(" ")[0]} updated`);
@@ -272,7 +276,14 @@ export default function TeamPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-ink">{member.name}</div>
-                      <div className="text-xs text-ink-faint">{member.role}</div>
+                      <div className="flex items-center gap-1.5 text-xs text-ink-faint">
+                        {member.role}
+                        {member.is_under_18 && (
+                          <span className="rounded-full bg-warn-bg px-1.5 py-0.5 text-[10px] font-semibold text-warn-text">
+                            Under 18
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {member.submitted !== null && member.is_active && (
                       <span
@@ -390,6 +401,15 @@ export default function TeamPage() {
             ))}
           </div>
         </div>
+        <label className="mb-5 flex items-center gap-2.5 text-sm text-ink-label">
+          <input
+            type="checkbox"
+            checked={form.isUnder18}
+            onChange={(e) => setForm((f) => ({ ...f, isUnder18: e.target.checked }))}
+            className="h-4 w-4 accent-accent"
+          />
+          This staff member is under 18
+        </label>
         <div className="flex gap-2.5">
           <button
             onClick={closeModal}

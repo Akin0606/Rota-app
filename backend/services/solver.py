@@ -13,6 +13,16 @@ UNAVAILABLE = 2
 PREFERRED = 3
 
 DAYS = range(7)
+DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+# UK Working Time Regulations minimums for 16-17 year-olds. Stricter than the
+# venue's adult rules and never toggleable — always applied when a staff
+# member's is_under_18 flag is set.
+UNDER18_MAX_HOURS_PER_DAY = 8.0
+UNDER18_MAX_HOURS_PER_WEEK = 40.0
+UNDER18_MIN_REST_HOURS = 12.0
+UNDER18_NIGHT_SAFE_START = 6.0  # 6am — shifts may not start before this
+UNDER18_NIGHT_SAFE_END = 22.0  # 10pm — shifts may not run past this
 
 
 def _parse_hour(time_str: str) -> float:
@@ -35,12 +45,24 @@ def _parse_hour(time_str: str) -> float:
     return h + m / 60
 
 
-def shift_duration_hours(shift: dict) -> float:
+def _shift_bounds(shift: dict) -> tuple[float, float]:
+    """(start, end) as 24h floats, end pushed past 24 if the shift crosses midnight."""
     start = _parse_hour(shift["start_time"])
     end = _parse_hour(shift["end_time"])
     if end <= start:
         end += 24
+    return start, end
+
+
+def shift_duration_hours(shift: dict) -> float:
+    start, end = _shift_bounds(shift)
     return end - start
+
+
+def _shift_touches_night_hours(shift: dict) -> bool:
+    """True if any part of the shift falls between 22:00 and 06:00."""
+    start, end = _shift_bounds(shift)
+    return not (start >= UNDER18_NIGHT_SAFE_START and end <= UNDER18_NIGHT_SAFE_END)
 
 
 def _rest_gap_hours(shift_a: dict, shift_b: dict) -> float:
@@ -57,7 +79,7 @@ def generate_rota(
     rules: dict,
 ) -> dict:
     """
-    staff: [{id, ...}] active staff members
+    staff: [{id, name, is_under_18, ...}] active staff members
     shifts: [{id, name, start_time, end_time}]
     submissions: [{staff_id, day_index, shift_id, status}] (shift_id may be
         None for day-level notes — those are ignored here)
@@ -66,7 +88,9 @@ def generate_rota(
     Returns {
         "assignments": [{"staff_id", "day_index", "shift_id"}],
         "uncovered": [{"day_index", "shift_id"}],
-        "warnings": [str],
+        "warnings": [str],  # under-18 availability that legally can't be used at all
+        "info": [str],      # non-blocking notes on under-18 hours trimmed by the weekly
+                             # cap or the 2-consecutive-days-off rule
     }
     """
     max_hours = rules.get("max_hours_per_week", 48)
@@ -75,12 +99,16 @@ def generate_rota(
 
     shifts_by_id = {sh["id"]: sh for sh in shifts}
     duration = {shid: shift_duration_hours(sh) for shid, sh in shifts_by_id.items()}
+    touches_night = {shid: _shift_touches_night_hours(sh) for shid, sh in shifts_by_id.items()}
 
     def _min_staff(shid) -> int:
         return max(0, int(shifts_by_id[shid].get("min_staff", 1) or 0))
 
     def _max_staff(shid) -> int:
         return max(1, int(shifts_by_id[shid].get("max_staff", 99) or 1))
+
+    is_under18 = {s["id"]: bool(s.get("is_under_18")) for s in staff}
+    names = {s["id"]: s.get("name") or "Staff member" for s in staff}
 
     availability: dict[tuple, int] = {}
     for sub in submissions:
@@ -93,12 +121,81 @@ def generate_rota(
 
     model = cp_model.CpModel()
 
+    warnings: list[str] = []
+    info: list[str] = []
+
+    # Build the assignable-variable set. For under-18 staff, shifts that are
+    # illegal for them outright (too long, or touching night hours) never get
+    # a variable at all — same effect as an availability filter, and it means
+    # the solver literally cannot assign them there.
     x: dict[tuple, cp_model.IntVar] = {}
     for sid in staff_ids:
+        under18 = is_under18.get(sid, False)
         for d in DAYS:
             for shid in shift_ids:
-                if availability.get((sid, d, shid), 0) in (AVAILABLE, PREFERRED):
-                    x[(sid, d, shid)] = model.NewBoolVar(f"x_{sid}_{d}_{shid}")
+                if availability.get((sid, d, shid), 0) not in (AVAILABLE, PREFERRED):
+                    continue
+                shift = shifts_by_id[shid]
+                if under18 and duration[shid] > UNDER18_MAX_HOURS_PER_DAY:
+                    warnings.append(
+                        f"{names[sid]} (under 18): available for '{shift['name']}' on {DAY_NAMES[d]} "
+                        f"({duration[shid]:.1f}h) — over the {UNDER18_MAX_HOURS_PER_DAY:.0f}h daily limit "
+                        f"for under-18s, so this slot can't be used for them."
+                    )
+                    continue
+                if under18 and touches_night[shid]:
+                    warnings.append(
+                        f"{names[sid]} (under 18): available for '{shift['name']}' on {DAY_NAMES[d]}, which "
+                        f"falls between 10pm and 6am — under-18s can't work night hours, so this slot can't "
+                        f"be used for them."
+                    )
+                    continue
+                x[(sid, d, shid)] = model.NewBoolVar(f"x_{sid}_{d}_{shid}")
+
+    # Under-18 deterministic notes: computed straight from each person's own
+    # legally-eligible slots (x membership), independent of what the solver
+    # ends up choosing, so these are never a guess about the solve outcome.
+    for sid in staff_ids:
+        if not is_under18.get(sid, False):
+            continue
+
+        eligible_by_day: dict[int, list[str]] = {}
+        for d in DAYS:
+            for shid in shift_ids:
+                if (sid, d, shid) in x:
+                    eligible_by_day.setdefault(d, []).append(shid)
+
+        if not eligible_by_day:
+            if any(availability.get((sid, d, shid), 0) in (AVAILABLE, PREFERRED) for d in DAYS for shid in shift_ids):
+                warnings.append(
+                    f"{names[sid]} (under 18): none of their submitted availability is usable under the "
+                    f"under-18 rules (max {UNDER18_MAX_HOURS_PER_DAY:.0f}h/day, no shifts between 10pm-6am) "
+                    f"— they won't be scheduled at all this week."
+                )
+            continue
+
+        # Best-case hours if they worked their longest eligible option every
+        # eligible day — a true upper bound, so exceeding the weekly cap here
+        # is a certainty, not a maybe.
+        max_possible_hours = sum(max(duration[shid] for shid in shids) for shids in eligible_by_day.values())
+        weekly_cap = min(max_hours, UNDER18_MAX_HOURS_PER_WEEK)
+        if max_possible_hours > weekly_cap:
+            info.append(
+                f"{names[sid]} (under 18): up to {max_possible_hours:.1f}h of legally-eligible availability "
+                f"this week, above the {weekly_cap:.0f}h weekly cap for under-18s — some of it won't be used."
+            )
+
+        # If every possible 2-day window has an eligible slot on at least one
+        # side, there's no "free" gap in their own availability — the
+        # mandatory 2 consecutive days off will definitely cost them some of
+        # it, regardless of what the optimiser picks.
+        eligible_days = set(eligible_by_day.keys())
+        has_natural_gap = any(d not in eligible_days and (d + 1) not in eligible_days for d in range(6))
+        if not has_natural_gap:
+            info.append(
+                f"{names[sid]} (under 18): available across the week with no natural 2-day gap — the "
+                f"required 2 consecutive days off for under-18s means some availability won't be used."
+            )
 
     # Hard: at most one shift per staff per day
     for sid in staff_ids:
@@ -116,6 +213,25 @@ def generate_rota(
             if week_vars:
                 model.Add(sum(week_vars) <= 6)
 
+    # Hard, under-18 only: at least one *2-consecutive-day* off window in the
+    # week (48h continuous rest) — stricter than the general day-off rule
+    # above, which both still apply. window_off[d] being true forces both
+    # day d and day d+1 fully clear; requiring at least one true window
+    # forces the solver to actually leave one such window open.
+    for sid in staff_ids:
+        if not is_under18.get(sid, False):
+            continue
+        window_off_vars = []
+        for d in range(6):
+            window_vars = [
+                x[(sid, dd, shid)] for dd in (d, d + 1) for shid in shift_ids if (sid, dd, shid) in x
+            ]
+            window_off = model.NewBoolVar(f"weekoff_{sid}_{d}")
+            if window_vars:
+                model.Add(sum(window_vars) == 0).OnlyEnforceIf(window_off)
+            window_off_vars.append(window_off)
+        model.Add(sum(window_off_vars) >= 1)
+
     # Per-(day, shift) staffing: vars for everyone available for that slot.
     slot_vars: dict[tuple, list] = {}
     for (sid, d, shid), var in x.items():
@@ -127,7 +243,9 @@ def generate_rota(
 
     max_hours_scaled = int(round(max_hours * 10))
 
-    # Hard: max hours per week (scaled x10 to keep everything integer)
+    # Hard: max hours per week (scaled x10 to keep everything integer).
+    # Under-18 staff get the stricter of the venue's cap and the 40h legal
+    # weekly maximum.
     total_hours_vars = []
     for sid in staff_ids:
         terms = [
@@ -136,13 +254,18 @@ def generate_rota(
             for shid in shift_ids
             if (sid, d, shid) in x
         ]
-        total = model.NewIntVar(0, max_hours_scaled, f"hours_{sid}")
+        cap_hours = min(max_hours, UNDER18_MAX_HOURS_PER_WEEK) if is_under18.get(sid, False) else max_hours
+        cap_scaled = int(round(cap_hours * 10))
+        total = model.NewIntVar(0, cap_scaled, f"hours_{sid}")
         model.Add(total == (sum(terms) if terms else 0))
-        model.Add(total <= max_hours_scaled)
+        model.Add(total <= cap_scaled)
         total_hours_vars.append(total)
 
-    # Hard: minimum rest between shifts on consecutive days
+    # Hard: minimum rest between shifts on consecutive days. Under-18 staff
+    # get the stricter 12h minimum instead of the venue's adult min_rest.
     for sid in staff_ids:
+        under18 = is_under18.get(sid, False)
+        threshold = UNDER18_MIN_REST_HOURS if under18 else min_rest
         for d in range(6):
             for shid_a in shift_ids:
                 if (sid, d, shid_a) not in x:
@@ -151,8 +274,15 @@ def generate_rota(
                     if (sid, d + 1, shid_b) not in x:
                         continue
                     gap = _rest_gap_hours(shifts_by_id[shid_a], shifts_by_id[shid_b])
-                    if gap < min_rest:
+                    if gap < threshold:
                         model.Add(x[(sid, d, shid_a)] + x[(sid, d + 1, shid_b)] <= 1)
+                        if under18:
+                            warnings.append(
+                                f"{names[sid]} (under 18): can't work both '{shifts_by_id[shid_a]['name']}' "
+                                f"on {DAY_NAMES[d]} and '{shifts_by_id[shid_b]['name']}' on {DAY_NAMES[d + 1]}"
+                                f" — only {gap:.1f}h rest between them, short of the "
+                                f"{UNDER18_MIN_REST_HOURS:.0f}h minimum for under-18s."
+                            )
 
     # Coverage: reward filling each demanded slot up to its min_staff target.
     # The target is capped at how many people are actually available, so the
@@ -194,7 +324,6 @@ def generate_rota(
     status = solver.Solve(model)
 
     assignments = []
-    warnings = []
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         for (sid, d, shid), var in x.items():
             if solver.Value(var):
@@ -210,4 +339,4 @@ def generate_rota(
         {"day_index": d, "shift_id": shid} for (d, shid) in sorted(demand_slots - assigned_slots)
     ]
 
-    return {"assignments": assignments, "uncovered": uncovered, "warnings": warnings}
+    return {"assignments": assignments, "uncovered": uncovered, "warnings": warnings, "info": info}

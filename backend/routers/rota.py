@@ -61,7 +61,12 @@ def _get_period_or_404(venue_id: str, period_id: str) -> dict:
     return res.data[0]
 
 
-def _build_summary(venue_id: str, period: dict, warnings: list[str] | None = None) -> dict:
+def _build_summary(
+    venue_id: str,
+    period: dict,
+    warnings: list[str] | None = None,
+    info: list[str] | None = None,
+) -> dict:
     supabase = get_supabase()
 
     shifts = supabase.table("shifts").select("*").eq("venue_id", venue_id).execute().data
@@ -127,6 +132,7 @@ def _build_summary(venue_id: str, period: dict, warnings: list[str] | None = Non
         "uncovered": uncovered,
         "under_covered": under_covered,
         "warnings": warnings or [],
+        "info": info or [],
     }
 
 
@@ -146,7 +152,7 @@ def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
 
     staff = (
         supabase.table("staff_members")
-        .select("id")
+        .select("id, name, is_under_18")
         .eq("venue_id", venue["id"])
         .eq("is_active", True)
         .execute()
@@ -230,7 +236,9 @@ def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
     ).execute()
 
     updated_period = {**period, "status": "generated"}
-    return _build_summary(venue["id"], updated_period, warnings=result["warnings"])
+    return _build_summary(
+        venue["id"], updated_period, warnings=result["warnings"], info=result.get("info", [])
+    )
 
 
 @router.post("/{period_id}/generate", response_model=RotaSummaryOut)

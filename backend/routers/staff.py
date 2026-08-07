@@ -101,6 +101,7 @@ def create_staff(payload: StaffCreateRequest, manager: dict = Depends(get_curren
                 "phone": payload.phone,
                 "role": payload.role,
                 "pin": pin,
+                "is_under_18": payload.is_under_18,
             }
         )
         .execute()

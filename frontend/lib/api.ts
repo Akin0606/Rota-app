@@ -242,6 +242,7 @@ export type StaffManager = {
   role: string;
   pin: string;
   is_active: boolean;
+  is_under_18: boolean;
   submitted: boolean | null;
 };
 
@@ -316,6 +317,7 @@ export function createStaff(staff: {
   email?: string | null;
   phone?: string | null;
   role: string;
+  is_under_18?: boolean;
 }): Promise<StaffManager> {
   return authedRequest(`/api/staff`, {
     method: "POST",
@@ -437,7 +439,14 @@ export function deleteShift(id: string): Promise<{ status: string }> {
 
 export function updateStaff(
   id: string,
-  staff: Partial<{ name: string; email: string | null; phone: string | null; role: string; is_active: boolean }>,
+  staff: Partial<{
+    name: string;
+    email: string | null;
+    phone: string | null;
+    role: string;
+    is_active: boolean;
+    is_under_18: boolean;
+  }>,
 ): Promise<StaffManager> {
   return authedRequest(`/api/staff/${id}`, {
     method: "PUT",
@@ -487,6 +496,7 @@ export type RotaSummary = {
   uncovered: { day_index: number; shift_id: string }[];
   under_covered: { day_index: number; shift_id: string; assigned: number; required: number }[];
   warnings: string[];
+  info: string[];
   // Present only on the publish response.
   email?: EmailDelivery | null;
 };

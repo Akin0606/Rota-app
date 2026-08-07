@@ -402,6 +402,28 @@ export default function RotaPage() {
         </div>
       )}
 
+      {summary && summary.warnings.length > 0 && (
+        <div className="mb-5 rounded-panel border border-unavail-border bg-unavail-bg p-4">
+          <div className="mb-1 text-[13px] font-semibold text-unavail-text">Under-18 availability not usable</div>
+          <ul className="list-disc space-y-1 pl-4 text-[12px] text-unavail-text">
+            {summary.warnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {summary && summary.info.length > 0 && (
+        <div className="mb-5 rounded-panel border border-hairline bg-surface-card p-4">
+          <div className="mb-1 text-[13px] font-semibold text-ink-label">Notes</div>
+          <ul className="list-disc space-y-1 pl-4 text-[12px] text-ink-faint">
+            {summary.info.map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Axis toggle — desktop grid only (mobile uses the day view) */}
       <div className="mb-3 hidden items-center gap-2 md:flex">
         <span className="text-[12px] font-medium text-ink-faint">Layout</span>

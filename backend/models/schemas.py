@@ -139,6 +139,7 @@ class StaffCreateRequest(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     role: str = Field(min_length=1)
+    is_under_18: bool = False
 
 
 class StaffManagerOut(BaseModel):
@@ -149,6 +150,7 @@ class StaffManagerOut(BaseModel):
     role: str
     pin: str
     is_active: bool
+    is_under_18: bool = False
     submitted: Optional[bool] = None
 
 
@@ -167,6 +169,7 @@ class StaffUpdateRequest(BaseModel):
     phone: Optional[str] = None
     role: Optional[str] = Field(default=None, min_length=1)
     is_active: Optional[bool] = None
+    is_under_18: Optional[bool] = None
 
 
 class RemindRequest(BaseModel):
@@ -307,6 +310,11 @@ class RotaSummaryOut(BaseModel):
     # Demanded slots below the shift's min_staff (but not empty).
     under_covered: list[UnderCoveredSlot] = []
     warnings: list[str] = []
+    # Non-blocking notes — e.g. an under-18's hours trimmed by the 40h weekly
+    # cap or the 2-consecutive-days-off rule. Distinct from warnings: these
+    # aren't a slot that couldn't be used at all, just context for why
+    # someone's scheduled less than they're available for.
+    info: list[str] = []
     # Present only on the publish response — how the staff notification emails
     # actually landed. None for read/generate/edit responses.
     email: Optional[EmailDeliveryOut] = None
