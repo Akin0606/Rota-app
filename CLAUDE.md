@@ -41,11 +41,12 @@ holiday requests → admin console controls (venue toggle, delete, rota view)
 - No way to create managers from admin console without editing Supabase manually
 
 ## Learnings (append after each session — most recent first)
+- Managers can now view actual submitted availability per week (read-only staff × day grid on the Rota page), not just a submitted/pending flag — and can clear a stale staff submission (whole-period, venue-scoped, confirm-gated).
+- Pattern: destructive endpoints (clear submission, edit assignment) return the recomputed summary directly in their response, so the frontend updates conflict counts/state live without a second round-trip or manual reload.
 - Under-18 rules are hardcoded non-toggleable legal minimums; adult rule breaches are warn-and-confirm (manager discretion), under-18 breaches are hard-blocked everywhere.
 - Compliance must be enforced at EVERY write path, not just the solver — the manual "+Add" endpoint bypassed all constraints until guarded.
 - _rest_gap_hours must use unrolled shift-end (_shift_bounds) for midnight-crossing shifts; raw end_time silently defeats the rest check.
 - Backend uses the service-role key (RLS bypassed), so every staff/shift lookup MUST be explicitly venue-scoped — nothing else catches a leak.
-- Known gap for later: no manager-facing "clear a submission" control; stale availability rows can't be removed from the UI.
 - Migrations now auto-apply on deploy via backend/scripts/migrate.py over DATABASE_URL — never paste SQL into Supabase again. Just add a numbered file to supabase/migrations/ and push.
 - Render build context must be repo root (Root Directory blank, Dockerfile Path backend/Dockerfile, Build Context ".") so the Dockerfile can COPY both backend/ and supabase/. Changing Render settings and Dockerfile paths must happen in the same commit or the build breaks.
 - Magic-link auth breaks in Gmail/Mail in-app browsers (PKCE failure) → OTP only
