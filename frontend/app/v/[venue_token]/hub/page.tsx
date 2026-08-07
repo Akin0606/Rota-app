@@ -204,8 +204,8 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
         {acceptTarget && (
           <>
             <div className="mb-5 text-sm leading-relaxed text-ink-muted">
-              If it's compliant with your hours and rest, you're on this shift right away. If it would breach
-              a rule, it goes to your manager for approval instead.
+              If it&apos;s compliant with your hours and rest, you&apos;re on this shift right away. If it would
+              breach a rule, it goes to your manager for approval instead.
             </div>
             <div className="flex items-center justify-end gap-3">
               <button

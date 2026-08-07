@@ -363,8 +363,9 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
         {claimTarget && (
           <>
             <div className="mb-5 text-sm leading-relaxed text-ink-muted">
-              If it's a straightforward like-for-like swap it's yours right away. If it needs a closer look
-              (different role, or it'd affect your hours/rest), it goes to your manager for approval instead.
+              If it&apos;s a straightforward like-for-like swap it&apos;s yours right away. If it needs a closer
+              look (different role, or it&apos;d affect your hours/rest), it goes to your manager for approval
+              instead.
             </div>
             <div className="flex items-center justify-end gap-3">
               <button

@@ -158,6 +158,7 @@ export default function RotaPage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period?.id]);
 
   function requestClearSubmission(staffId: string, staffName: string) {
