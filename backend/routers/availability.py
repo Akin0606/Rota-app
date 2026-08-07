@@ -430,7 +430,7 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
     supabase = get_supabase()
     assignments = (
         supabase.table("rota_assignments")
-        .select("id, staff_id, day_index, shift_id, drop_status")
+        .select("id, staff_id, day_index, shift_id, drop_status, claim_staff_id")
         .eq("period_id", period["id"])
         .execute()
         .data
