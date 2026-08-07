@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import AvailabilityPanel from "@/components/availability-panel";
 import LoadingScreen from "@/components/loading-screen";
 import PublishPanel from "@/components/publish-panel";
 import RotaDayView from "@/components/rota-day-view";
@@ -15,9 +16,12 @@ import {
   RotaSummary,
   Shift,
   StaffManager,
+  SubmissionEntry,
+  clearSubmission,
   createPeriod,
   editAssignment,
   generateRota,
+  getPeriodSubmissions,
   getRota,
   listPeriods,
   listShifts,
@@ -45,6 +49,9 @@ export default function RotaPage() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [staff, setStaff] = useState<StaffManager[]>([]);
   const [summary, setSummary] = useState<RotaSummary | null>(null);
+  const [submissions, setSubmissions] = useState<SubmissionEntry[]>([]);
+  const [clearTarget, setClearTarget] = useState<{ staffId: string; staffName: string } | null>(null);
+  const [clearingId, setClearingId] = useState<string | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<string>(WEEK_OPTIONS[0].weekStart);
   const [orientation, setOrientation] = useState<RotaOrientation>("staff-rows");
   const [loading, setLoading] = useState(true);
@@ -112,14 +119,20 @@ export default function RotaPage() {
     async function loadRota() {
       if (!period) {
         setSummary(null);
+        setSubmissions([]);
         return;
       }
       setRotaLoading(true);
       try {
-        const res = await getRota(period.id);
-        if (!cancelled) setSummary(res);
+        const [rotaRes, subsRes] = await Promise.all([getRota(period.id), getPeriodSubmissions(period.id)]);
+        if (cancelled) return;
+        setSummary(rotaRes);
+        setSubmissions(subsRes.submissions);
       } catch {
-        if (!cancelled) setSummary(null);
+        if (!cancelled) {
+          setSummary(null);
+          setSubmissions([]);
+        }
       } finally {
         if (!cancelled) setRotaLoading(false);
       }
@@ -129,6 +142,27 @@ export default function RotaPage() {
       cancelled = true;
     };
   }, [period?.id]);
+
+  function requestClearSubmission(staffId: string, staffName: string) {
+    setClearTarget({ staffId, staffName });
+  }
+
+  async function confirmClearSubmission() {
+    if (!period || !clearTarget) return;
+    const { staffId } = clearTarget;
+    setClearingId(staffId);
+    try {
+      const result = await clearSubmission(period.id, staffId);
+      setSummary(result);
+      setSubmissions((prev) => prev.filter((s) => s.staff_id !== staffId));
+      setClearTarget(null);
+      showToast("Availability submission cleared");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not clear submission");
+    } finally {
+      setClearingId(null);
+    }
+  }
 
   async function ensurePeriod(): Promise<Period | null> {
     if (period) return period;
@@ -453,6 +487,15 @@ export default function RotaPage() {
         </div>
       )}
 
+      {period && (
+        <AvailabilityPanel
+          shifts={shifts}
+          submissions={submissions}
+          clearingId={clearingId}
+          onRequestClear={requestClearSubmission}
+        />
+      )}
+
       {/* Axis toggle — desktop grid only (mobile uses the day view) */}
       <div className="mb-3 hidden items-center gap-2 md:flex">
         <span className="text-[12px] font-medium text-ink-faint">Layout</span>
@@ -533,6 +576,35 @@ export default function RotaPage() {
                 className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {addSaving ? "Saving…" : "Assign anyway"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm popup: clearing a staff member's whole submission for this period */}
+      {clearTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
+          <div className="w-full max-w-[440px] rounded-card border border-unavail-border bg-surface-card p-6">
+            <div className="mb-2 text-lg font-bold text-ink">Clear this submission?</div>
+            <div className="mb-4 text-sm text-ink-muted">
+              This removes all of <span className="font-semibold text-ink-label">{clearTarget.staffName}</span>
+              &apos;s submitted availability for this week. They&apos;ll need to resubmit — this can&apos;t be
+              undone.
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setClearTarget(null)}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmClearSubmission}
+                disabled={clearingId !== null}
+                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {clearingId ? "Clearing…" : "Clear submission"}
               </button>
             </div>
           </div>

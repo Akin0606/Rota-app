@@ -8,8 +8,10 @@ from models.schemas import (
     AssignmentEditRequest,
     AssignmentEditResponse,
     EmailDeliveryOut,
+    PeriodSubmissionsOut,
     RotaEmailRequest,
     RotaSummaryOut,
+    SubmissionEntryOut,
 )
 from services import email_service, rota_export
 from services.auth_service import get_current_manager, get_manager_venue
@@ -147,6 +149,91 @@ def _build_summary(
 def get_rota(period_id: str, manager: dict = Depends(get_current_manager)):
     venue = get_manager_venue(manager["id"])
     period = _get_period_or_404(venue["id"], period_id)
+    return _build_summary(venue["id"], period)
+
+
+@router.get("/{period_id}/submissions", response_model=PeriodSubmissionsOut)
+def get_submissions(period_id: str, manager: dict = Depends(get_current_manager)):
+    """Read-only view of every staff member's submitted availability for a
+    period, so a manager can see what's actually been submitted (not just the
+    submitted/pending flag) and spot stale rows."""
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+    supabase = get_supabase()
+
+    staff_names = {
+        s["id"]: s["name"]
+        for s in supabase.table("staff_members")
+        .select("id, name")
+        .eq("venue_id", venue["id"])
+        .execute()
+        .data
+    }
+
+    rows = (
+        supabase.table("availability_submissions")
+        .select("staff_id, day_index, shift_id, status, note")
+        .eq("period_id", period["id"])
+        .execute()
+        .data
+    )
+
+    submissions = [
+        SubmissionEntryOut(
+            staff_id=r["staff_id"],
+            staff_name=staff_names.get(r["staff_id"], "Unknown"),
+            day_index=r["day_index"],
+            shift_id=r["shift_id"],
+            status=r["status"],
+            note=r["note"],
+        )
+        for r in rows
+    ]
+
+    return PeriodSubmissionsOut(period_id=period["id"], submissions=submissions)
+
+
+@router.delete("/{period_id}/submissions/{staff_id}", response_model=RotaSummaryOut)
+def clear_submission(
+    period_id: str,
+    staff_id: str,
+    manager: dict = Depends(get_current_manager),
+):
+    """Clears a single staff member's whole availability submission for a
+    period (matches how staff submit — wholesale replace, not per-cell).
+    Returns the recomputed summary so the caller's conflict count reflects
+    the clear immediately, without a separate re-fetch."""
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+    supabase = get_supabase()
+
+    # Venue-scoped lookup first — a cross-tenant staff_id must never be
+    # actionable, and must never even reveal whether it exists.
+    staff_res = (
+        supabase.table("staff_members")
+        .select("id, name")
+        .eq("id", staff_id)
+        .eq("venue_id", venue["id"])
+        .limit(1)
+        .execute()
+    )
+    if not staff_res.data:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    staff = staff_res.data[0]
+
+    supabase.table("availability_submissions").delete().eq("period_id", period["id"]).eq(
+        "staff_id", staff_id
+    ).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": staff_id,
+            "action": "availability_cleared",
+            "detail": f"Cleared {staff['name']}'s availability submission for week of {period['week_start']}",
+        }
+    ).execute()
+
     return _build_summary(venue["id"], period)
 
 

@@ -535,6 +535,28 @@ export function publishRota(periodId: string): Promise<RotaSummary> {
   return authedRequest(`/api/rota/${periodId}/publish`, { method: "POST" });
 }
 
+export type SubmissionEntry = {
+  staff_id: string;
+  staff_name: string;
+  day_index: number;
+  shift_id: string | null;
+  status: 0 | 1 | 2 | 3;
+  note: string | null;
+};
+
+export type PeriodSubmissions = {
+  period_id: string;
+  submissions: SubmissionEntry[];
+};
+
+export function getPeriodSubmissions(periodId: string): Promise<PeriodSubmissions> {
+  return authedRequest(`/api/rota/${periodId}/submissions`);
+}
+
+export function clearSubmission(periodId: string, staffId: string): Promise<RotaSummary> {
+  return authedRequest(`/api/rota/${periodId}/submissions/${staffId}`, { method: "DELETE" });
+}
+
 // Fetches a rota export (PDF/Excel) with auth and hands back the blob plus the
 // server-provided filename, so the caller can trigger a browser download.
 export async function fetchRotaExport(

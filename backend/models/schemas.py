@@ -338,6 +338,20 @@ class AssignmentEditResponse(BaseModel):
     summary: Optional[RotaSummaryOut] = None
 
 
+class SubmissionEntryOut(BaseModel):
+    staff_id: str
+    staff_name: str
+    day_index: int
+    shift_id: Optional[str] = None
+    status: int
+    note: Optional[str] = None
+
+
+class PeriodSubmissionsOut(BaseModel):
+    period_id: str
+    submissions: list[SubmissionEntryOut] = []
+
+
 class RotaEmailRequest(BaseModel):
     target: Literal["staff", "manager"]
     orientation: Literal["staff-rows", "day-rows"] = "staff-rows"
