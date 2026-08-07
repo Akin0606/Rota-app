@@ -51,6 +51,7 @@ def _config_out(venue_id: str) -> SchedulerConfigOut:
         earliest_shift_label=data["earliest_shift_label"],
         has_shifts=data["earliest_minutes"] is not None,
         weeks=weeks,
+        require_day_off=data["require_day_off"],
     )
 
 
@@ -68,10 +69,31 @@ def update_scheduler(
     venue = get_manager_venue(manager["id"])
     supabase = get_supabase()
 
-    updates = payload.model_dump(exclude_unset=True)
+    updates = payload.model_dump(exclude_unset=True, exclude={"confirm"})
+
+    # Turning the day-off-in-7 rule off risks a Working Time Regulations
+    # breach — require explicit confirmation before it takes effect, same as
+    # the notice-window override below.
+    if updates.get("require_day_off") is False and not payload.confirm:
+        current = _config_out(venue["id"])
+        current.status = "needs_confirm"
+        return current
+
     if updates:
         updates["venue_id"] = venue["id"]
         supabase.table("scheduling_rules").upsert(updates, on_conflict="venue_id").execute()
+
+    if "require_day_off" in updates:
+        supabase.table("activity_log").insert(
+            {
+                "venue_id": venue["id"],
+                "action": "day_off_rule_changed",
+                "detail": (
+                    "1-day-off-in-7 rule turned "
+                    + ("on" if updates["require_day_off"] else "off (manager override)")
+                ),
+            }
+        ).execute()
 
     cron_scheduler.refresh_jobs()
     return _config_out(venue["id"])

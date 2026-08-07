@@ -176,12 +176,16 @@ def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
 
     rules_res = (
         supabase.table("scheduling_rules")
-        .select("max_hours_per_week, min_rest_hours")
+        .select("max_hours_per_week, min_rest_hours, require_day_off")
         .eq("venue_id", venue["id"])
         .limit(1)
         .execute()
     )
-    rules = rules_res.data[0] if rules_res.data else {"max_hours_per_week": 48, "min_rest_hours": 11}
+    rules = rules_res.data[0] if rules_res.data else {
+        "max_hours_per_week": 48,
+        "min_rest_hours": 11,
+        "require_day_off": True,
+    }
 
     result = generate_rota(staff, shifts, submissions, rules)
 

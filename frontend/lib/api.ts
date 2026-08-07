@@ -370,6 +370,8 @@ export type SchedulerConfig = {
   earliest_shift_label: string | null;
   has_shifts: boolean;
   weeks: SchedulerWeek[];
+  require_day_off: boolean;
+  status: "saved" | "needs_confirm";
 };
 
 export type SchedulerOverrideResponse = {
@@ -384,11 +386,13 @@ export function getScheduler(): Promise<SchedulerConfig> {
 }
 
 export function updateScheduler(
-  offsets: Partial<Pick<SchedulerConfig, "open_offset_hours" | "reminder_offset_hours" | "notice_buffer_hours">>,
+  changes: Partial<
+    Pick<SchedulerConfig, "open_offset_hours" | "reminder_offset_hours" | "notice_buffer_hours" | "require_day_off">
+  > & { confirm?: boolean },
 ): Promise<SchedulerConfig> {
   return authedRequest(`/api/scheduler`, {
     method: "PUT",
-    body: JSON.stringify(offsets),
+    body: JSON.stringify(changes),
   });
 }
 

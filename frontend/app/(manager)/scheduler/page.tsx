@@ -57,6 +57,11 @@ export default function SchedulerPage() {
   const [riskOpen, setRiskOpen] = useState(false);
   const [riskHours, setRiskHours] = useState<number | null>(null);
 
+  // 1-day-off-in-7 toggle state.
+  const [dayOffRequired, setDayOffRequired] = useState(true);
+  const [savingDayOff, setSavingDayOff] = useState(false);
+  const [dayOffRiskOpen, setDayOffRiskOpen] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -83,6 +88,7 @@ export default function SchedulerPage() {
     setOpenDays(Math.round(res.open_offset_hours / 24));
     setReminderHours(res.reminder_offset_hours);
     setBufferHours(res.notice_buffer_hours);
+    setDayOffRequired(res.require_day_off);
     // Default the override picker to the first upcoming week if unset.
     if (res.weeks.length && !overrideWeek) {
       setOverrideWeek(res.weeks[0].week_start);
@@ -160,6 +166,31 @@ export default function SchedulerPage() {
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not reset");
     }
+  }
+
+  async function submitDayOff(next: boolean, confirm: boolean) {
+    setSavingDayOff(true);
+    try {
+      const res = await updateScheduler({ require_day_off: next, confirm });
+      if (res.status === "needs_confirm") {
+        setDayOffRiskOpen(true);
+        return;
+      }
+      applyConfig(res);
+      setDayOffRiskOpen(false);
+      showToast(next ? "Day-off rule enabled" : "Day-off rule disabled");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not update setting");
+    } finally {
+      setSavingDayOff(false);
+    }
+  }
+
+  function handleToggleDayOff() {
+    const next = !dayOffRequired;
+    // Turning it on is always safe; turning it off goes through the backend's
+    // needs_confirm gate, which opens the risk popup below.
+    submitDayOff(next, false);
   }
 
   if (loading) return <LoadingScreen base="Loading scheduler…" />;
@@ -302,6 +333,34 @@ export default function SchedulerPage() {
         </div>
       </div>
 
+      {/* 1-day-off-in-7 rule */}
+      <div className="mt-6 rounded-panel border border-hairline bg-surface-card p-6 md:max-w-[900px]">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-base font-bold text-ink">Require one day off in seven</div>
+            <div className="max-w-[520px] text-[13px] text-ink-faint">
+              The solver will never schedule a staff member on all 7 days of a rota week. Switching this off
+              may risk a breach of UK Working Time Regulations.
+            </div>
+          </div>
+          <button
+            role="switch"
+            aria-checked={dayOffRequired}
+            onClick={handleToggleDayOff}
+            disabled={savingDayOff}
+            className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-60 ${
+              dayOffRequired ? "bg-accent" : "bg-surface-subtle border border-unset-border"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                dayOffRequired ? "translate-x-[22px]" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+
       {/* Upcoming weeks preview */}
       <div className="mt-6 rounded-panel border border-hairline bg-surface-card p-6 md:max-w-[900px]">
         <div className="mb-4 text-base font-bold text-ink">Upcoming weeks</div>
@@ -354,6 +413,35 @@ export default function SchedulerPage() {
                 className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {savingOverride ? "Saving…" : "Save anyway"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Risk popup: turning off the day-off-in-7 rule */}
+      {dayOffRiskOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
+          <div className="w-full max-w-[440px] rounded-card border border-warn-dot bg-surface-card p-6">
+            <div className="mb-2 text-lg font-bold text-ink">Turning off the day-off rule</div>
+            <div className="mb-4 text-sm text-ink-muted">
+              With this off, the solver may schedule staff on all 7 days of a rota week. This may breach{" "}
+              <span className="font-semibold">UK Working Time Regulations</span>, which generally entitle
+              workers to a rest day each week. Turn off anyway only if you&apos;re sure.
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setDayOffRiskOpen(false)}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => submitDayOff(false, true)}
+                disabled={savingDayOff}
+                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {savingDayOff ? "Saving…" : "Turn off anyway"}
               </button>
             </div>
           </div>

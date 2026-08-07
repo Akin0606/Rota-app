@@ -110,6 +110,7 @@ def upcoming_for_venue(venue_id: str, now: Optional[datetime] = None, count: int
         earliest_label = f"{h:02d}:{m:02d}"
     return {
         "offsets": off,
+        "require_day_off": bool(rules.get("require_day_off", True)),
         "earliest_minutes": earliest,
         "earliest_shift_label": earliest_label,
         "weeks": weeks,

@@ -61,7 +61,7 @@ def generate_rota(
     shifts: [{id, name, start_time, end_time}]
     submissions: [{staff_id, day_index, shift_id, status}] (shift_id may be
         None for day-level notes — those are ignored here)
-    rules: {max_hours_per_week, min_rest_hours}
+    rules: {max_hours_per_week, min_rest_hours, require_day_off}
 
     Returns {
         "assignments": [{"staff_id", "day_index", "shift_id"}],
@@ -71,6 +71,7 @@ def generate_rota(
     """
     max_hours = rules.get("max_hours_per_week", 48)
     min_rest = rules.get("min_rest_hours", 11)
+    require_day_off = rules.get("require_day_off", True)
 
     shifts_by_id = {sh["id"]: sh for sh in shifts}
     duration = {shid: shift_duration_hours(sh) for shid, sh in shifts_by_id.items()}
@@ -105,6 +106,15 @@ def generate_rota(
             vars_today = [x[(sid, d, shid)] for shid in shift_ids if (sid, d, shid) in x]
             if vars_today:
                 model.Add(sum(vars_today) <= 1)
+
+    # Hard: at least one full day off in each 7-day rota week. Since each
+    # staff member works at most one shift per day, the sum of their shifts
+    # across the week is already a 0/6 day-count, so capping it at 6 is enough.
+    if require_day_off:
+        for sid in staff_ids:
+            week_vars = [x[(sid, d, shid)] for d in DAYS for shid in shift_ids if (sid, d, shid) in x]
+            if week_vars:
+                model.Add(sum(week_vars) <= 6)
 
     # Per-(day, shift) staffing: vars for everyone available for that slot.
     slot_vars: dict[tuple, list] = {}

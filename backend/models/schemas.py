@@ -227,12 +227,22 @@ class SchedulerConfigOut(BaseModel):
     earliest_shift_label: Optional[str] = None
     has_shifts: bool
     weeks: list[SchedulerWeekOut] = []
+    # 1-day-off-in-7 solver constraint. Default on; disabling it risks a UK
+    # Working Time Regulations breach, so the frontend gates it on the
+    # "needs_confirm" status below (same risk-popup pattern as the notice
+    # override).
+    require_day_off: bool = True
+    status: Literal["saved", "needs_confirm"] = "saved"
 
 
 class SchedulerConfigUpdateRequest(BaseModel):
     open_offset_hours: Optional[int] = Field(default=None, ge=0)
     reminder_offset_hours: Optional[int] = Field(default=None, ge=0)
     notice_buffer_hours: Optional[int] = Field(default=None, ge=0)
+    require_day_off: Optional[bool] = None
+    # Managers must explicitly confirm when switching require_day_off off;
+    # the first attempt returns needs_confirm instead of saving.
+    confirm: bool = False
 
 
 class SchedulerOverrideRequest(BaseModel):
