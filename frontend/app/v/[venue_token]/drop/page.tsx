@@ -7,7 +7,7 @@ import Link from "next/link";
 import Modal from "@/components/modal";
 import ShiftBadge from "@/components/shift-badge";
 import Toast from "@/components/toast";
-import { ApiError, StaffRota, StaffRotaAssignment, dropShift, getStaffRota } from "@/lib/api";
+import { ApiError, StaffRota, StaffRotaAssignment, claimShift, dropShift, getStaffRota } from "@/lib/api";
 import { DAY_NAMES, addDays, parseISODate, pinStorageKey } from "@/lib/utils";
 
 export default function DropShiftPage({ params }: { params: { venue_token: string } }) {
@@ -23,6 +23,9 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
   const [confirmTarget, setConfirmTarget] = useState<StaffRotaAssignment | null>(null);
   const [dropping, setDropping] = useState(false);
   const [justDroppedId, setJustDroppedId] = useState<string | null>(null);
+
+  const [claimTarget, setClaimTarget] = useState<StaffRotaAssignment | null>(null);
+  const [claiming, setClaiming] = useState(false);
 
   useEffect(() => {
     const storedPin = sessionStorage.getItem(pinStorageKey(venue_token));
@@ -67,6 +70,25 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
     }
   }
 
+  async function confirmClaim() {
+    if (!pin || !claimTarget) return;
+    setClaiming(true);
+    try {
+      const result = await claimShift(venue_token, pin, claimTarget.id);
+      if (result.rota) setData(result.rota);
+      setClaimTarget(null);
+      if (result.status === "approved") {
+        showToast("You're on this shift!");
+      } else {
+        showToast(`Claim sent for manager approval${result.reason ? ` (${result.reason})` : ""}`);
+      }
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not claim this shift");
+    } finally {
+      setClaiming(false);
+    }
+  }
+
   if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
   if (error || !data) return <CenteredMessage>{error || "Something went wrong."}</CenteredMessage>;
 
@@ -104,7 +126,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
     .sort((a, b) => a.day_index - b.day_index);
 
   const openShifts = data.assignments
-    .filter((a) => a.drop_status === "pending_pickup" && a.shift_id)
+    .filter((a) => Boolean(a.drop_status) && a.shift_id)
     .sort((a, b) => a.day_index - b.day_index);
 
   return (
@@ -147,7 +169,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                     </div>
                     {dropped ? (
                       <span className="shrink-0 rounded-full bg-warn-bg px-3 py-1.5 text-[11px] font-semibold text-warn-text">
-                        Drop requested
+                        {a.drop_status === "pending_approval" ? "Claim pending approval" : "Drop requested"}
                       </span>
                     ) : (
                       <button
@@ -175,6 +197,8 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                 const member = teamById.get(a.staff_id);
                 if (!shift || !member) return null;
                 const dayDate = addDays(weekStart, a.day_index);
+                const isMine = a.staff_id === data.staff_id;
+                const isMyClaim = a.claim_staff_id === data.staff_id;
                 return (
                   <div
                     key={a.id}
@@ -183,12 +207,28 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                     <div className="mb-1 text-sm font-bold text-ink">
                       {DAY_NAMES[a.day_index]} {dayDate.getUTCDate()}
                     </div>
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="mb-2 flex items-center justify-between gap-2">
                       <ShiftBadge name={shift.name} time={`${shift.start_time} – ${shift.end_time}`} color={shift.color} />
                       <span className="text-[12px] text-ink-faint">
                         {member.name} · {member.role}
                       </span>
                     </div>
+                    {a.drop_status === "pending_approval" ? (
+                      <span className="inline-flex rounded-full bg-warn-bg px-2.5 py-1 text-[11px] font-semibold text-warn-text">
+                        {isMyClaim ? "Your claim is pending approval" : "Claim pending approval"}
+                      </span>
+                    ) : isMine ? (
+                      <span className="inline-flex rounded-full bg-unset-bg px-2.5 py-1 text-[11px] font-semibold text-ink-muted">
+                        Your dropped shift
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setClaimTarget(a)}
+                        className="w-full rounded-lg bg-accent py-2 text-center text-[12px] font-semibold text-white"
+                      >
+                        Claim this shift
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -217,6 +257,32 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                 className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {dropping ? "Dropping…" : "Drop shift"}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
+
+      <Modal open={claimTarget !== null} onClose={() => setClaimTarget(null)} title="Claim this shift?">
+        {claimTarget && (
+          <>
+            <div className="mb-5 text-sm leading-relaxed text-ink-muted">
+              If it's a straightforward like-for-like swap it's yours right away. If it needs a closer look
+              (different role, or it'd affect your hours/rest), it goes to your manager for approval instead.
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setClaimTarget(null)}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmClaim}
+                disabled={claiming}
+                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {claiming ? "Claiming…" : "Claim shift"}
               </button>
             </div>
           </>

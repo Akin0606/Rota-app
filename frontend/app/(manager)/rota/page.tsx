@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import AvailabilityPanel from "@/components/availability-panel";
+import ClaimsPanel from "@/components/claims-panel";
 import LoadingScreen from "@/components/loading-screen";
 import PublishPanel from "@/components/publish-panel";
 import RotaDayView from "@/components/rota-day-view";
@@ -11,22 +12,26 @@ import StatusBanner from "@/components/status-banner";
 import Toast from "@/components/toast";
 import {
   ApiError,
+  Claim,
   EmailDelivery,
   Period,
   RotaSummary,
   Shift,
   StaffManager,
   SubmissionEntry,
+  approveClaim,
   clearSubmission,
   createPeriod,
   editAssignment,
   generateRota,
+  getClaims,
   getPeriodSubmissions,
   getRota,
   listPeriods,
   listShifts,
   listStaff,
   publishRota,
+  rejectClaim,
 } from "@/lib/api";
 import { DAY_LABELS, formatWeekRange } from "@/lib/utils";
 
@@ -52,6 +57,11 @@ export default function RotaPage() {
   const [submissions, setSubmissions] = useState<SubmissionEntry[]>([]);
   const [clearTarget, setClearTarget] = useState<{ staffId: string; staffName: string } | null>(null);
   const [clearingId, setClearingId] = useState<string | null>(null);
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const [claimBusyId, setClaimBusyId] = useState<string | null>(null);
+  const [pendingApproveId, setPendingApproveId] = useState<string | null>(null);
+  const [claimRiskOpen, setClaimRiskOpen] = useState(false);
+  const [claimRiskReason, setClaimRiskReason] = useState<string | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<string>(WEEK_OPTIONS[0].weekStart);
   const [orientation, setOrientation] = useState<RotaOrientation>("staff-rows");
   const [loading, setLoading] = useState(true);
@@ -120,18 +130,25 @@ export default function RotaPage() {
       if (!period) {
         setSummary(null);
         setSubmissions([]);
+        setClaims([]);
         return;
       }
       setRotaLoading(true);
       try {
-        const [rotaRes, subsRes] = await Promise.all([getRota(period.id), getPeriodSubmissions(period.id)]);
+        const [rotaRes, subsRes, claimsRes] = await Promise.all([
+          getRota(period.id),
+          getPeriodSubmissions(period.id),
+          getClaims(period.id),
+        ]);
         if (cancelled) return;
         setSummary(rotaRes);
         setSubmissions(subsRes.submissions);
+        setClaims(claimsRes.claims);
       } catch {
         if (!cancelled) {
           setSummary(null);
           setSubmissions([]);
+          setClaims([]);
         }
       } finally {
         if (!cancelled) setRotaLoading(false);
@@ -161,6 +178,53 @@ export default function RotaPage() {
       showToast(err instanceof ApiError ? err.message : "Could not clear submission");
     } finally {
       setClearingId(null);
+    }
+  }
+
+  async function submitApproveClaim(assignmentId: string, confirm: boolean) {
+    if (!period) return;
+    setClaimBusyId(assignmentId);
+    try {
+      const result = await approveClaim(period.id, assignmentId, confirm);
+      if (result.status === "needs_confirm") {
+        setPendingApproveId(assignmentId);
+        setClaimRiskReason(result.reason ?? null);
+        setClaimRiskOpen(true);
+        return;
+      }
+      if (result.summary) setSummary(result.summary);
+      setClaims(result.claims);
+      setClaimRiskOpen(false);
+      setPendingApproveId(null);
+      showToast("Claim approved");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not approve claim");
+    } finally {
+      setClaimBusyId(null);
+    }
+  }
+
+  function handleApproveClaim(assignmentId: string) {
+    submitApproveClaim(assignmentId, false);
+  }
+
+  function handleConfirmApproveClaim() {
+    if (!pendingApproveId) return;
+    submitApproveClaim(pendingApproveId, true);
+  }
+
+  async function handleRejectClaim(assignmentId: string) {
+    if (!period) return;
+    setClaimBusyId(assignmentId);
+    try {
+      const result = await rejectClaim(period.id, assignmentId);
+      if (result.summary) setSummary(result.summary);
+      setClaims(result.claims);
+      showToast("Claim rejected — shift stays open in the pool");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not reject claim");
+    } finally {
+      setClaimBusyId(null);
     }
   }
 
@@ -487,6 +551,14 @@ export default function RotaPage() {
         </div>
       )}
 
+      <ClaimsPanel
+        claims={claims}
+        shifts={shifts}
+        busyId={claimBusyId}
+        onApprove={handleApproveClaim}
+        onReject={handleRejectClaim}
+      />
+
       {period && (
         <AvailabilityPanel
           shifts={shifts}
@@ -576,6 +648,37 @@ export default function RotaPage() {
                 className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {addSaving ? "Saving…" : "Assign anyway"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Risk popup: adult rule flagged by approving a shift claim */}
+      {claimRiskOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
+          <div className="w-full max-w-[440px] rounded-card border border-warn-dot bg-surface-card p-6">
+            <div className="mb-2 text-lg font-bold text-ink">This claim breaks a rest rule</div>
+            <div className="mb-4 text-sm text-ink-muted">
+              {claimRiskReason ?? "This reassignment falls short of the venue's rest requirements."} Approve
+              anyway only if you&apos;re sure.
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => {
+                  setClaimRiskOpen(false);
+                  setPendingApproveId(null);
+                }}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmApproveClaim}
+                disabled={claimBusyId !== null}
+                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {claimBusyId ? "Saving…" : "Approve anyway"}
               </button>
             </div>
           </div>

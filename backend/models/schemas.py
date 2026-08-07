@@ -112,6 +112,11 @@ class AvailabilityDropRequest(BaseModel):
     assignment_id: str
 
 
+class AvailabilityClaimRequest(BaseModel):
+    pin: str = Field(pattern=r"^\d{4}$")
+    assignment_id: str
+
+
 class VenueOut(BaseModel):
     id: str
     name: str
@@ -431,6 +436,7 @@ class StaffRotaAssignmentOut(BaseModel):
     day_index: int
     shift_id: Optional[str] = None
     drop_status: Optional[str] = None
+    claim_staff_id: Optional[str] = None
 
 
 class StaffRotaTeamMemberOut(BaseModel):
@@ -446,6 +452,42 @@ class StaffRotaOut(BaseModel):
     shifts: list[ShiftOut] = []
     assignments: list[StaffRotaAssignmentOut] = []
     team: list[StaffRotaTeamMemberOut] = []
+
+
+class ClaimSubmitResponse(BaseModel):
+    status: Literal["approved", "pending"]
+    reason: Optional[str] = None
+    rota: Optional[StaffRotaOut] = None
+
+
+class ClaimOut(BaseModel):
+    assignment_id: str
+    day_index: int
+    shift_id: str
+    original_staff_id: str
+    original_staff_name: str
+    claimant_staff_id: str
+    claimant_staff_name: str
+    reason: Optional[str] = None
+
+
+class PeriodClaimsOut(BaseModel):
+    period_id: str
+    claims: list[ClaimOut] = []
+
+
+class ClaimApproveRequest(BaseModel):
+    # Managers must explicitly confirm approving a claim that trips an adult
+    # rule at approval time (state may have drifted since the claim was
+    # made); the first attempt returns needs_confirm instead of approving.
+    confirm: bool = False
+
+
+class ClaimActionOut(BaseModel):
+    status: Literal["approved", "needs_confirm", "rejected"]
+    reason: Optional[str] = None
+    summary: Optional[RotaSummaryOut] = None
+    claims: list[ClaimOut] = []
 
 
 class AdminStatsOut(BaseModel):

@@ -6,8 +6,10 @@ from config import get_settings
 from database import get_supabase
 from models.schemas import (
     AvailabilityAuthResponse,
+    AvailabilityClaimRequest,
     AvailabilityDropRequest,
     AvailabilitySubmitRequest,
+    ClaimSubmitResponse,
     ForgotPinRequest,
     PinAuthRequest,
     StaffRotaOut,
@@ -17,6 +19,7 @@ from models.schemas import (
 )
 from services import email_service, notice_window, rate_limit
 from services.auth_service import INACTIVE_VENUE_MESSAGE
+from services.solver import UNAVAILABLE, check_manual_assignment
 
 # PIN auth: block a venue_token + IP after this many wrong PINs in the window.
 PIN_MAX_ATTEMPTS = 5
@@ -509,3 +512,172 @@ def drop_shift(venue_token: str, payload: AvailabilityDropRequest):
     ).execute()
 
     return _build_staff_rota(venue, staff["id"])
+
+
+def _get_rules_for_solver(venue_id: str) -> dict:
+    supabase = get_supabase()
+    rules_res = (
+        supabase.table("scheduling_rules")
+        .select("max_hours_per_week, min_rest_hours, require_day_off")
+        .eq("venue_id", venue_id)
+        .limit(1)
+        .execute()
+    )
+    return rules_res.data[0] if rules_res.data else {
+        "max_hours_per_week": 48,
+        "min_rest_hours": 11,
+        "require_day_off": True,
+    }
+
+
+@router.post("/{venue_token}/rota/claim", response_model=ClaimSubmitResponse)
+def claim_shift(venue_token: str, payload: AvailabilityClaimRequest):
+    """Part 2 of drop-a-shift: a staff member claims an open (pending_pickup)
+    shift. Reuses check_manual_assignment — the same rest/hours/under-18
+    checks a manager's manual rota edit already goes through — rather than
+    reimplementing that rule logic here.
+
+    Auto-approves only when the claimant's role matches the original
+    assignee's, they haven't marked themselves unavailable for that slot, and
+    check_manual_assignment says "ok". Anything else that isn't an outright
+    under-18 block goes to pending_approval for a manager to review — never
+    auto-rejected.
+    """
+    venue = _get_venue_or_404(venue_token)
+    staff = _get_staff_by_pin(venue["id"], payload.pin)
+    supabase = get_supabase()
+
+    period = _get_published_period(venue["id"])
+    if not period:
+        raise HTTPException(status_code=404, detail="No published rota found")
+
+    assignment_res = (
+        supabase.table("rota_assignments")
+        .select("*")
+        .eq("id", payload.assignment_id)
+        .eq("period_id", period["id"])
+        .eq("drop_status", "pending_pickup")
+        .limit(1)
+        .execute()
+    )
+    if not assignment_res.data:
+        raise HTTPException(status_code=404, detail="This shift isn't open to claim")
+    assignment = assignment_res.data[0]
+
+    if assignment["staff_id"] == staff["id"]:
+        raise HTTPException(status_code=400, detail="You can't claim your own dropped shift")
+
+    shifts_by_id = {s["id"]: s for s in _get_shifts(venue["id"])}
+    shift = shifts_by_id.get(assignment["shift_id"])
+    if not shift:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    original_res = (
+        supabase.table("staff_members")
+        .select("id, name, role")
+        .eq("id", assignment["staff_id"])
+        .limit(1)
+        .execute()
+    )
+    original_staff = original_res.data[0] if original_res.data else None
+
+    claimant = (
+        supabase.table("staff_members")
+        .select("id, name, role, is_under_18")
+        .eq("id", staff["id"])
+        .limit(1)
+        .execute()
+        .data[0]
+    )
+
+    role_mismatch = bool(original_staff) and claimant["role"] != original_staff["role"]
+
+    sub_res = (
+        supabase.table("availability_submissions")
+        .select("status")
+        .eq("period_id", period["id"])
+        .eq("staff_id", staff["id"])
+        .eq("day_index", assignment["day_index"])
+        .eq("shift_id", assignment["shift_id"])
+        .limit(1)
+        .execute()
+    )
+    marked_unavailable = bool(sub_res.data) and sub_res.data[0]["status"] == UNAVAILABLE
+
+    other_assignments = (
+        supabase.table("rota_assignments")
+        .select("day_index, shift_id")
+        .eq("period_id", period["id"])
+        .eq("staff_id", staff["id"])
+        .neq("day_index", assignment["day_index"])
+        .execute()
+        .data
+    )
+    rules = _get_rules_for_solver(venue["id"])
+    check = check_manual_assignment(claimant, assignment["day_index"], shift, other_assignments, shifts_by_id, rules)
+
+    # Under-18 legal violations are a hard block — can never be claimed at
+    # all, not even into a pending state.
+    if check["severity"] == "block":
+        raise HTTPException(status_code=400, detail=check["reason"])
+
+    reasons = []
+    if role_mismatch:
+        reasons.append(f"different role ({claimant['role']} vs {original_staff['role'] if original_staff else 'unknown'})")
+    if marked_unavailable:
+        reasons.append("marked unavailable for this shift")
+    if check["severity"] == "confirm":
+        reasons.append(check["reason"])
+
+    original_name = original_staff["name"] if original_staff else "a teammate"
+
+    if not reasons:
+        # Enforce one-shift-per-day for the claimant before handing them the
+        # claimed shift.
+        supabase.table("rota_assignments").delete().eq("period_id", period["id"]).eq(
+            "staff_id", staff["id"]
+        ).eq("day_index", assignment["day_index"]).execute()
+
+        supabase.table("rota_assignments").update(
+            {
+                "staff_id": staff["id"],
+                "drop_status": None,
+                "dropped_at": None,
+                "claim_staff_id": None,
+                "claim_reason": None,
+                "manually_assigned": True,
+            }
+        ).eq("id", assignment["id"]).execute()
+
+        supabase.table("activity_log").insert(
+            {
+                "venue_id": venue["id"],
+                "staff_id": staff["id"],
+                "action": "shift_claimed_auto",
+                "detail": (
+                    f"{staff['name']} picked up {original_name}'s {DAY_NAMES[assignment['day_index']]} "
+                    f"shift — auto-approved (like-for-like)."
+                ),
+            }
+        ).execute()
+
+        return ClaimSubmitResponse(status="approved", rota=_build_staff_rota(venue, staff["id"]))
+
+    reason_text = "; ".join(reasons)
+    supabase.table("rota_assignments").update(
+        {"drop_status": "pending_approval", "claim_staff_id": staff["id"], "claim_reason": reason_text}
+    ).eq("id", assignment["id"]).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": staff["id"],
+            "action": "shift_claim_pending",
+            "detail": (
+                f"{staff['name']} requested {original_name}'s {DAY_NAMES[assignment['day_index']]} shift — "
+                f"needs manager approval ({reason_text})."
+            ),
+        }
+    ).execute()
+
+    return ClaimSubmitResponse(status="pending", reason=reason_text, rota=_build_staff_rota(venue, staff["id"]))

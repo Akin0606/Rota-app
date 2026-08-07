@@ -149,6 +149,7 @@ export type StaffRotaAssignment = {
   day_index: number;
   shift_id: string | null;
   drop_status: "pending_pickup" | "pending_approval" | null;
+  claim_staff_id: string | null;
 };
 
 export type StaffRotaTeamMember = {
@@ -172,6 +173,23 @@ export function getStaffRota(venueToken: string, pin: string): Promise<StaffRota
 
 export function dropShift(venueToken: string, pin: string, assignmentId: string): Promise<StaffRota> {
   return request(`/api/availability/${venueToken}/rota/drop`, {
+    method: "POST",
+    body: JSON.stringify({ pin, assignment_id: assignmentId }),
+  });
+}
+
+export type ClaimSubmitResult = {
+  status: "approved" | "pending";
+  reason?: string | null;
+  rota?: StaffRota | null;
+};
+
+export function claimShift(
+  venueToken: string,
+  pin: string,
+  assignmentId: string,
+): Promise<ClaimSubmitResult> {
+  return request(`/api/availability/${venueToken}/rota/claim`, {
     method: "POST",
     body: JSON.stringify({ pin, assignment_id: assignmentId }),
   });
@@ -563,6 +581,48 @@ export function getPeriodSubmissions(periodId: string): Promise<PeriodSubmission
 
 export function clearSubmission(periodId: string, staffId: string): Promise<RotaSummary> {
   return authedRequest(`/api/rota/${periodId}/submissions/${staffId}`, { method: "DELETE" });
+}
+
+export type Claim = {
+  assignment_id: string;
+  day_index: number;
+  shift_id: string;
+  original_staff_id: string;
+  original_staff_name: string;
+  claimant_staff_id: string;
+  claimant_staff_name: string;
+  reason: string | null;
+};
+
+export type PeriodClaims = {
+  period_id: string;
+  claims: Claim[];
+};
+
+export type ClaimActionResult = {
+  status: "approved" | "needs_confirm" | "rejected";
+  reason?: string | null;
+  summary?: RotaSummary | null;
+  claims: Claim[];
+};
+
+export function getClaims(periodId: string): Promise<PeriodClaims> {
+  return authedRequest(`/api/rota/${periodId}/claims`);
+}
+
+export function approveClaim(
+  periodId: string,
+  assignmentId: string,
+  confirm = false,
+): Promise<ClaimActionResult> {
+  return authedRequest(`/api/rota/${periodId}/claims/${assignmentId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ confirm }),
+  });
+}
+
+export function rejectClaim(periodId: string, assignmentId: string): Promise<ClaimActionResult> {
+  return authedRequest(`/api/rota/${periodId}/claims/${assignmentId}/reject`, { method: "POST" });
 }
 
 // Fetches a rota export (PDF/Excel) with auth and hands back the blob plus the

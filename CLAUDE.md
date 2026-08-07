@@ -31,10 +31,15 @@ B2b: 1-day-off-in-7 rule (with manager override + risk popup) and
 under-18 staff handling with differentiated rest rules.
 
 ## Roadmap after B2b
-Staff hub restructure (tiles: availability/holiday/swap/drop) →
-shift swap + drop (auto-approve like-for-like, else manager approval) →
-holiday requests → admin console controls (venue toggle, delete, rota view)
-→ full aesthetic pass last.
+Staff hub restructure (done) → shift drop + claim (done: auto-approve
+like-for-like, else manager approval queue) → holiday requests → admin
+console controls (venue toggle, delete, rota view) → full aesthetic pass
+last.
+
+Future (not scheduled): a real notification system (email/push) for shift
+claims and approvals — right now managers only see these via activity_log
+("Recent Activity" on the dashboard), and claimers/droppers only find out
+by reopening the app.
 
 ## Known bugs
 - "Send code" button fails silently for unregistered emails (no error shown)

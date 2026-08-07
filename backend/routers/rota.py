@@ -7,7 +7,11 @@ from database import get_supabase
 from models.schemas import (
     AssignmentEditRequest,
     AssignmentEditResponse,
+    ClaimActionOut,
+    ClaimApproveRequest,
+    ClaimOut,
     EmailDeliveryOut,
+    PeriodClaimsOut,
     PeriodSubmissionsOut,
     RotaEmailRequest,
     RotaSummaryOut,
@@ -17,6 +21,7 @@ from services import email_service, rota_export
 from services.auth_service import get_current_manager, get_manager_venue
 from services.solver import (
     AVAILABLE,
+    DAY_NAMES,
     PREFERRED,
     check_manual_assignment,
     generate_rota,
@@ -235,6 +240,212 @@ def clear_submission(
     ).execute()
 
     return _build_summary(venue["id"], period)
+
+
+def _get_claims(venue_id: str, period_id: str) -> list[dict]:
+    supabase = get_supabase()
+    rows = (
+        supabase.table("rota_assignments")
+        .select("id, day_index, shift_id, staff_id, claim_staff_id, claim_reason")
+        .eq("period_id", period_id)
+        .eq("drop_status", "pending_approval")
+        .execute()
+        .data
+    )
+    if not rows:
+        return []
+
+    staff_ids = {r["staff_id"] for r in rows} | {r["claim_staff_id"] for r in rows}
+    names = {
+        s["id"]: s["name"]
+        for s in supabase.table("staff_members")
+        .select("id, name")
+        .eq("venue_id", venue_id)
+        .in_("id", list(staff_ids))
+        .execute()
+        .data
+    }
+
+    return [
+        {
+            "assignment_id": r["id"],
+            "day_index": r["day_index"],
+            "shift_id": r["shift_id"],
+            "original_staff_id": r["staff_id"],
+            "original_staff_name": names.get(r["staff_id"], "Unknown"),
+            "claimant_staff_id": r["claim_staff_id"],
+            "claimant_staff_name": names.get(r["claim_staff_id"], "Unknown"),
+            "reason": r["claim_reason"],
+        }
+        for r in rows
+    ]
+
+
+@router.get("/{period_id}/claims", response_model=PeriodClaimsOut)
+def get_claims(period_id: str, manager: dict = Depends(get_current_manager)):
+    venue = get_manager_venue(manager["id"])
+    _get_period_or_404(venue["id"], period_id)
+    return PeriodClaimsOut(period_id=period_id, claims=_get_claims(venue["id"], period_id))
+
+
+@router.post("/{period_id}/claims/{assignment_id}/approve", response_model=ClaimActionOut)
+def approve_claim(
+    period_id: str,
+    assignment_id: str,
+    payload: ClaimApproveRequest,
+    manager: dict = Depends(get_current_manager),
+):
+    """Re-runs check_manual_assignment against the claimant before committing
+    — state may have drifted since the claim was submitted (e.g. the
+    claimant picked up other shifts in the meantime) — and reuses the same
+    needs_confirm/risk-popup gate as a manual manager edit for adult-rule
+    breaches. Under-18 violations are always rejected outright."""
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+    supabase = get_supabase()
+
+    assignment_res = (
+        supabase.table("rota_assignments")
+        .select("*")
+        .eq("id", assignment_id)
+        .eq("period_id", period_id)
+        .eq("drop_status", "pending_approval")
+        .limit(1)
+        .execute()
+    )
+    if not assignment_res.data:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    assignment = assignment_res.data[0]
+    claimant_id = assignment["claim_staff_id"]
+
+    claimant_res = (
+        supabase.table("staff_members")
+        .select("id, name, is_under_18")
+        .eq("id", claimant_id)
+        .eq("venue_id", venue["id"])
+        .limit(1)
+        .execute()
+    )
+    if not claimant_res.data:
+        raise HTTPException(status_code=404, detail="Claimant not found")
+    claimant = claimant_res.data[0]
+
+    shifts_by_id = {
+        s["id"]: s for s in supabase.table("shifts").select("*").eq("venue_id", venue["id"]).execute().data
+    }
+    shift = shifts_by_id.get(assignment["shift_id"])
+    if not shift:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    other_assignments = (
+        supabase.table("rota_assignments")
+        .select("day_index, shift_id")
+        .eq("period_id", period_id)
+        .eq("staff_id", claimant_id)
+        .neq("day_index", assignment["day_index"])
+        .execute()
+        .data
+    )
+
+    rules_res = (
+        supabase.table("scheduling_rules")
+        .select("max_hours_per_week, min_rest_hours, require_day_off")
+        .eq("venue_id", venue["id"])
+        .limit(1)
+        .execute()
+    )
+    rules = rules_res.data[0] if rules_res.data else {
+        "max_hours_per_week": 48,
+        "min_rest_hours": 11,
+        "require_day_off": True,
+    }
+
+    check = check_manual_assignment(claimant, assignment["day_index"], shift, other_assignments, shifts_by_id, rules)
+
+    if check["severity"] == "block":
+        raise HTTPException(status_code=400, detail=check["reason"])
+
+    if check["severity"] == "confirm" and not payload.confirm:
+        return ClaimActionOut(
+            status="needs_confirm", reason=check["reason"], claims=_get_claims(venue["id"], period_id)
+        )
+
+    # Enforce one-shift-per-day for the claimant before handing them the
+    # claimed shift.
+    supabase.table("rota_assignments").delete().eq("period_id", period_id).eq(
+        "staff_id", claimant_id
+    ).eq("day_index", assignment["day_index"]).neq("id", assignment["id"]).execute()
+
+    supabase.table("rota_assignments").update(
+        {
+            "staff_id": claimant_id,
+            "drop_status": None,
+            "dropped_at": None,
+            "claim_staff_id": None,
+            "claim_reason": None,
+            "manually_assigned": True,
+        }
+    ).eq("id", assignment["id"]).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": claimant_id,
+            "action": "shift_claim_approved",
+            "detail": (
+                f"Approved {claimant['name']}'s claim on the {DAY_NAMES[assignment['day_index']]} shift "
+                f"for week of {period['week_start']}."
+            ),
+        }
+    ).execute()
+
+    return ClaimActionOut(
+        status="approved",
+        summary=_build_summary(venue["id"], period),
+        claims=_get_claims(venue["id"], period_id),
+    )
+
+
+@router.post("/{period_id}/claims/{assignment_id}/reject", response_model=ClaimActionOut)
+def reject_claim(period_id: str, assignment_id: str, manager: dict = Depends(get_current_manager)):
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+    supabase = get_supabase()
+
+    assignment_res = (
+        supabase.table("rota_assignments")
+        .select("*")
+        .eq("id", assignment_id)
+        .eq("period_id", period_id)
+        .eq("drop_status", "pending_approval")
+        .limit(1)
+        .execute()
+    )
+    if not assignment_res.data:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    assignment = assignment_res.data[0]
+
+    # Reverts to pending_pickup (still open in the pool) rather than clearing
+    # the drop entirely — the original person doesn't have to re-drop it for
+    # someone else to try.
+    supabase.table("rota_assignments").update(
+        {"drop_status": "pending_pickup", "claim_staff_id": None, "claim_reason": None}
+    ).eq("id", assignment["id"]).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": assignment["claim_staff_id"],
+            "action": "shift_claim_rejected",
+            "detail": "Manager rejected a shift claim — shift returned to the open pool.",
+        }
+    ).execute()
+
+    return ClaimActionOut(
+        status="rejected",
+        summary=_build_summary(venue["id"], period),
+        claims=_get_claims(venue["id"], period_id),
+    )
 
 
 def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
