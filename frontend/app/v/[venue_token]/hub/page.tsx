@@ -18,7 +18,7 @@ const TILES: Tile[] = [
   { icon: "📅", label: "View My Rota", description: "See your upcoming shifts", href: "rota" },
   { icon: "🔄", label: "Swap a Shift", description: "Trade a shift with a teammate", comingSoon: true },
   { icon: "🌴", label: "Request Time Off", description: "Ask for a day or week off", comingSoon: true },
-  { icon: "❌", label: "Drop a Shift", description: "Give up a shift you can't work", comingSoon: true },
+  { icon: "❌", label: "Drop a Shift", description: "Give up a shift you can't work", href: "drop" },
 ];
 
 export default function StaffHubPage({ params }: { params: { venue_token: string } }) {

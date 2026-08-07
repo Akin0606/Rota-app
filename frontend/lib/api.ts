@@ -148,6 +148,7 @@ export type StaffRotaAssignment = {
   staff_id: string;
   day_index: number;
   shift_id: string | null;
+  drop_status: "pending_pickup" | "pending_approval" | null;
 };
 
 export type StaffRotaTeamMember = {
@@ -167,6 +168,13 @@ export type StaffRota = {
 
 export function getStaffRota(venueToken: string, pin: string): Promise<StaffRota> {
   return request(`/api/availability/${venueToken}/rota?pin=${pin}`);
+}
+
+export function dropShift(venueToken: string, pin: string, assignmentId: string): Promise<StaffRota> {
+  return request(`/api/availability/${venueToken}/rota/drop`, {
+    method: "POST",
+    body: JSON.stringify({ pin, assignment_id: assignmentId }),
+  });
 }
 
 export async function requestLoginCode(email: string): Promise<{ status: string }> {

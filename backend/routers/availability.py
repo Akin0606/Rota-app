@@ -6,6 +6,7 @@ from config import get_settings
 from database import get_supabase
 from models.schemas import (
     AvailabilityAuthResponse,
+    AvailabilityDropRequest,
     AvailabilitySubmitRequest,
     ForgotPinRequest,
     PinAuthRequest,
@@ -404,28 +405,29 @@ def forgot_pin(venue_token: str, payload: ForgotPinRequest):
     return {"status": "ok"}
 
 
-@router.get("/{venue_token}/rota", response_model=StaffRotaOut)
-def get_staff_rota(venue_token: str, pin: str = Query(pattern=r"^\d{4}$")):
-    venue = _get_venue_or_404(venue_token)
-    staff = _get_staff_by_pin(venue["id"], pin)
+def _get_published_period(venue_id: str) -> Optional[dict]:
     supabase = get_supabase()
-
-    period_res = (
+    res = (
         supabase.table("availability_periods")
         .select("*")
-        .eq("venue_id", venue["id"])
+        .eq("venue_id", venue_id)
         .eq("status", "published")
         .order("week_start", desc=True)
         .limit(1)
         .execute()
     )
-    if not period_res.data:
-        return {"venue_name": venue["name"], "staff_id": staff["id"], "period": None}
-    period = period_res.data[0]
+    return res.data[0] if res.data else None
 
+
+def _build_staff_rota(venue: dict, staff_id: str) -> dict:
+    period = _get_published_period(venue["id"])
+    if not period:
+        return {"venue_name": venue["name"], "staff_id": staff_id, "period": None}
+
+    supabase = get_supabase()
     assignments = (
         supabase.table("rota_assignments")
-        .select("id, staff_id, day_index, shift_id")
+        .select("id, staff_id, day_index, shift_id, drop_status")
         .eq("period_id", period["id"])
         .execute()
         .data
@@ -440,9 +442,70 @@ def get_staff_rota(venue_token: str, pin: str = Query(pattern=r"^\d{4}$")):
 
     return {
         "venue_name": venue["name"],
-        "staff_id": staff["id"],
+        "staff_id": staff_id,
         "period": {"id": period["id"], "week_start": str(period["week_start"]), "status": period["status"]},
         "shifts": _get_shifts(venue["id"]),
         "assignments": assignments,
         "team": team,
     }
+
+
+@router.get("/{venue_token}/rota", response_model=StaffRotaOut)
+def get_staff_rota(venue_token: str, pin: str = Query(pattern=r"^\d{4}$")):
+    venue = _get_venue_or_404(venue_token)
+    staff = _get_staff_by_pin(venue["id"], pin)
+    return _build_staff_rota(venue, staff["id"])
+
+
+@router.post("/{venue_token}/rota/drop", response_model=StaffRotaOut)
+def drop_shift(venue_token: str, payload: AvailabilityDropRequest):
+    """Part 1 of drop-a-shift: marks the caller's own assignment as open for
+    pickup. Does NOT reassign or remove it — the original person stays on the
+    shift until a valid claim exists (part 2), so this never creates a gap
+    the system itself is responsible for."""
+    from datetime import date, datetime, timedelta
+
+    venue = _get_venue_or_404(venue_token)
+    staff = _get_staff_by_pin(venue["id"], payload.pin)
+    supabase = get_supabase()
+
+    period = _get_published_period(venue["id"])
+    if not period:
+        raise HTTPException(status_code=404, detail="No published rota found")
+
+    # Venue + ownership scoped in the same query: a cross-tenant or someone
+    # else's assignment_id simply matches zero rows.
+    assignment_res = (
+        supabase.table("rota_assignments")
+        .select("*")
+        .eq("id", payload.assignment_id)
+        .eq("period_id", period["id"])
+        .eq("staff_id", staff["id"])
+        .limit(1)
+        .execute()
+    )
+    if not assignment_res.data:
+        raise HTTPException(status_code=404, detail="Shift not found")
+    assignment = assignment_res.data[0]
+
+    if assignment.get("drop_status"):
+        raise HTTPException(status_code=400, detail="This shift has already been dropped")
+
+    shift_date = date.fromisoformat(str(period["week_start"])) + timedelta(days=assignment["day_index"])
+    if shift_date < date.today():
+        raise HTTPException(status_code=400, detail="Can't drop a shift that's already passed")
+
+    supabase.table("rota_assignments").update(
+        {"drop_status": "pending_pickup", "dropped_at": datetime.utcnow().isoformat()}
+    ).eq("id", assignment["id"]).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": staff["id"],
+            "action": "shift_dropped",
+            "detail": f"{staff['name']} dropped their {DAY_NAMES[assignment['day_index']]} shift for week of {period['week_start']}",
+        }
+    ).execute()
+
+    return _build_staff_rota(venue, staff["id"])

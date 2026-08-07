@@ -107,6 +107,11 @@ class ForgotPinRequest(BaseModel):
     email: str
 
 
+class AvailabilityDropRequest(BaseModel):
+    pin: str = Field(pattern=r"^\d{4}$")
+    assignment_id: str
+
+
 class VenueOut(BaseModel):
     id: str
     name: str
@@ -425,6 +430,7 @@ class StaffRotaAssignmentOut(BaseModel):
     staff_id: str
     day_index: int
     shift_id: Optional[str] = None
+    drop_status: Optional[str] = None
 
 
 class StaffRotaTeamMemberOut(BaseModel):
