@@ -41,6 +41,8 @@ holiday requests → admin console controls (venue toggle, delete, rota view)
 - No way to create managers from admin console without editing Supabase manually
 
 ## Learnings (append after each session — most recent first)
+- Migrations now auto-apply on deploy via backend/scripts/migrate.py over DATABASE_URL — never paste SQL into Supabase again. Just add a numbered file to supabase/migrations/ and push.
+- Render build context must be repo root (Root Directory blank, Dockerfile Path backend/Dockerfile, Build Context ".") so the Dockerfile can COPY both backend/ and supabase/. Changing Render settings and Dockerfile paths must happen in the same commit or the build breaks.
 - Magic-link auth breaks in Gmail/Mail in-app browsers (PKCE failure) → OTP only
 - Per-staff tokenized URLs add too much complexity → single shared venue link + PIN
 - Controlled pilot onboarding (waitlist + admin invite) beats public self-serve signup
