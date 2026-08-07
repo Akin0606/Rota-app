@@ -509,10 +509,22 @@ export function generateRota(periodId: string): Promise<RotaSummary> {
   return authedRequest(`/api/rota/${periodId}/generate`, { method: "POST" });
 }
 
+export type AssignmentEditResult = {
+  status: "saved" | "needs_confirm";
+  reason?: string | null;
+  summary?: RotaSummary | null;
+};
+
 export function editAssignment(
   periodId: string,
-  edit: { staff_id: string; day_index: number; shift_id: string; action: "add" | "remove" },
-): Promise<RotaSummary> {
+  edit: {
+    staff_id: string;
+    day_index: number;
+    shift_id: string;
+    action: "add" | "remove";
+    confirm?: boolean;
+  },
+): Promise<AssignmentEditResult> {
   return authedRequest(`/api/rota/${periodId}/assignments`, {
     method: "PUT",
     body: JSON.stringify(edit),

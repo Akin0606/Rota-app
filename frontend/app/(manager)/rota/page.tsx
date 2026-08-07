@@ -56,6 +56,14 @@ export default function RotaPage() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [pendingAdd, setPendingAdd] = useState<{
+    dayIndex: number;
+    shiftId: string;
+    staffId: string;
+  } | null>(null);
+  const [addRiskOpen, setAddRiskOpen] = useState(false);
+  const [addRiskReason, setAddRiskReason] = useState<string | null>(null);
+  const [addSaving, setAddSaving] = useState(false);
 
   const period = periods.find((p) => p.week_start === selectedWeek) ?? null;
 
@@ -150,20 +158,41 @@ export default function RotaPage() {
     }
   }
 
-  async function handleAdd(dayIndex: number, shiftId: string, staffId: string) {
+  async function submitAdd(dayIndex: number, shiftId: string, staffId: string, confirm: boolean) {
     const p = await ensurePeriod();
     if (!p) return;
+    setAddSaving(true);
     try {
       const result = await editAssignment(p.id, {
         staff_id: staffId,
         day_index: dayIndex,
         shift_id: shiftId,
         action: "add",
+        confirm,
       });
-      setSummary(result);
+      if (result.status === "needs_confirm") {
+        setPendingAdd({ dayIndex, shiftId, staffId });
+        setAddRiskReason(result.reason ?? null);
+        setAddRiskOpen(true);
+        return;
+      }
+      if (result.summary) setSummary(result.summary);
+      setAddRiskOpen(false);
+      setPendingAdd(null);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not update rota");
+    } finally {
+      setAddSaving(false);
     }
+  }
+
+  async function handleAdd(dayIndex: number, shiftId: string, staffId: string) {
+    submitAdd(dayIndex, shiftId, staffId, false);
+  }
+
+  function handleConfirmAdd() {
+    if (!pendingAdd) return;
+    submitAdd(pendingAdd.dayIndex, pendingAdd.shiftId, pendingAdd.staffId, true);
   }
 
   async function handleRemove(dayIndex: number, shiftId: string, staffId: string) {
@@ -175,7 +204,7 @@ export default function RotaPage() {
         shift_id: shiftId,
         action: "remove",
       });
-      setSummary(result);
+      if (result.summary) setSummary(result.summary);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not update rota");
     }
@@ -478,6 +507,37 @@ export default function RotaPage() {
         weekLabel={formatWeekRange(selectedWeek)}
         publishResult={publishResult}
       />
+
+      {/* Risk popup: adult rule flagged by a manual add (rest gap / day-off-in-7) */}
+      {addRiskOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
+          <div className="w-full max-w-[440px] rounded-card border border-warn-dot bg-surface-card p-6">
+            <div className="mb-2 text-lg font-bold text-ink">This assignment breaks a rest rule</div>
+            <div className="mb-4 text-sm text-ink-muted">
+              {addRiskReason ?? "This assignment falls short of the venue's rest requirements."} Assign
+              anyway only if you&apos;re sure.
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => {
+                  setAddRiskOpen(false);
+                  setPendingAdd(null);
+                }}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmAdd}
+                disabled={addSaving}
+                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {addSaving ? "Saving…" : "Assign anyway"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Toast message={toast} />
     </div>

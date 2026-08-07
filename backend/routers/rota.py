@@ -6,13 +6,20 @@ from config import get_settings
 from database import get_supabase
 from models.schemas import (
     AssignmentEditRequest,
+    AssignmentEditResponse,
     EmailDeliveryOut,
     RotaEmailRequest,
     RotaSummaryOut,
 )
 from services import email_service, rota_export
 from services.auth_service import get_current_manager, get_manager_venue
-from services.solver import AVAILABLE, PREFERRED, generate_rota, shift_duration_hours
+from services.solver import (
+    AVAILABLE,
+    PREFERRED,
+    check_manual_assignment,
+    generate_rota,
+    shift_duration_hours,
+)
 
 router = APIRouter(prefix="/api/rota", tags=["rota"])
 
@@ -248,7 +255,7 @@ def generate(period_id: str, manager: dict = Depends(get_current_manager)):
     return run_solver_for_period(venue, period)
 
 
-@router.put("/{period_id}/assignments", response_model=RotaSummaryOut)
+@router.put("/{period_id}/assignments", response_model=AssignmentEditResponse)
 def edit_assignment(
     period_id: str,
     payload: AssignmentEditRequest,
@@ -259,27 +266,99 @@ def edit_assignment(
     supabase = get_supabase()
 
     if payload.action == "remove":
+        # Removing can only improve compliance, so no rule-checking. No extra
+        # ownership check needed either: period_id is already venue-scoped, so
+        # a foreign staff_id/shift_id simply matches zero rows.
         supabase.table("rota_assignments").delete().eq("period_id", period_id).eq(
             "staff_id", payload.staff_id
         ).eq("day_index", payload.day_index).eq("shift_id", payload.shift_id).execute()
-    else:
-        # Enforce one shift per staff per day: clear any existing assignment
-        # for this staff on this day before adding the new one.
-        supabase.table("rota_assignments").delete().eq("period_id", period_id).eq(
-            "staff_id", payload.staff_id
-        ).eq("day_index", payload.day_index).execute()
+        return AssignmentEditResponse(status="saved", summary=_build_summary(venue["id"], period))
 
-        supabase.table("rota_assignments").insert(
+    # Venue-scoped lookups first — a cross-tenant staff_id or shift_id must
+    # never be assignable, and must never even reveal whether it exists.
+    staff_res = (
+        supabase.table("staff_members")
+        .select("id, name, is_under_18")
+        .eq("id", payload.staff_id)
+        .eq("venue_id", venue["id"])
+        .limit(1)
+        .execute()
+    )
+    if not staff_res.data:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    staff = staff_res.data[0]
+
+    shifts_by_id = {
+        s["id"]: s for s in supabase.table("shifts").select("*").eq("venue_id", venue["id"]).execute().data
+    }
+    shift = shifts_by_id.get(payload.shift_id)
+    if not shift:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    # This staff's other assignments in the period — excluding day_index,
+    # since an add always clears that day first — so the check judges the
+    # POST-add state of their week, not a stale pre-add snapshot.
+    other_assignments = (
+        supabase.table("rota_assignments")
+        .select("day_index, shift_id")
+        .eq("period_id", period_id)
+        .eq("staff_id", payload.staff_id)
+        .neq("day_index", payload.day_index)
+        .execute()
+        .data
+    )
+
+    rules_res = (
+        supabase.table("scheduling_rules")
+        .select("max_hours_per_week, min_rest_hours, require_day_off")
+        .eq("venue_id", venue["id"])
+        .limit(1)
+        .execute()
+    )
+    rules = rules_res.data[0] if rules_res.data else {
+        "max_hours_per_week": 48,
+        "min_rest_hours": 11,
+        "require_day_off": True,
+    }
+
+    check = check_manual_assignment(staff, payload.day_index, shift, other_assignments, shifts_by_id, rules)
+
+    # Under-18 violations are a hard block — no override, regardless of confirm.
+    if check["severity"] == "block":
+        raise HTTPException(status_code=400, detail=check["reason"])
+
+    # Adult violations go through the same needs_confirm/confirm gate as the
+    # scheduler's other risk popups — managers keep discretion here.
+    if check["severity"] == "confirm" and not payload.confirm:
+        return AssignmentEditResponse(status="needs_confirm", reason=check["reason"])
+
+    # Enforce one shift per staff per day: clear any existing assignment for
+    # this staff on this day before adding the new one.
+    supabase.table("rota_assignments").delete().eq("period_id", period_id).eq(
+        "staff_id", payload.staff_id
+    ).eq("day_index", payload.day_index).execute()
+
+    supabase.table("rota_assignments").insert(
+        {
+            "period_id": period_id,
+            "staff_id": payload.staff_id,
+            "day_index": payload.day_index,
+            "shift_id": payload.shift_id,
+            "manually_assigned": True,
+        }
+    ).execute()
+
+    if check["severity"] == "confirm":
+        supabase.table("activity_log").insert(
             {
-                "period_id": period_id,
+                "venue_id": venue["id"],
                 "staff_id": payload.staff_id,
-                "day_index": payload.day_index,
-                "shift_id": payload.shift_id,
-                "manually_assigned": True,
+                "action": "manual_assignment_override",
+                "detail": check["reason"],
             }
         ).execute()
 
-    return _build_summary(venue["id"], period)
+    return AssignmentEditResponse(status="saved", summary=_build_summary(venue["id"], period))
 
 
 def _send_published_rota_emails(
@@ -306,6 +385,7 @@ def _send_published_rota_emails(
     staff = (
         supabase.table("staff_members")
         .select("id, name, email")
+        .eq("venue_id", venue["id"])
         .in_("id", staff_ids)
         .execute()
         .data

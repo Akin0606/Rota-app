@@ -66,10 +66,140 @@ def _shift_touches_night_hours(shift: dict) -> bool:
 
 
 def _rest_gap_hours(shift_a: dict, shift_b: dict) -> float:
-    """Rest hours between the end of shift_a (day d) and start of shift_b (day d+1)."""
-    end_a = _parse_hour(shift_a["end_time"])
+    """Rest hours between the end of shift_a (day d) and start of shift_b (day d+1).
+    Uses shift_a's unrolled end (via _shift_bounds) so a shift_a that itself
+    crosses midnight (e.g. 18:00-02:00, unrolled end 26.0) is measured from its
+    true end rather than the raw clock time it wraps back to."""
+    _, end_a = _shift_bounds(shift_a)
     start_b = _parse_hour(shift_b["start_time"])
-    return (24 - end_a) + start_b
+    return (24 + start_b) - end_a
+
+
+def check_manual_assignment(
+    staff: dict,
+    day_index: int,
+    shift: dict,
+    other_assignments: list[dict],
+    shifts_by_id: dict,
+    rules: dict,
+) -> dict:
+    """Validates a single proposed manual "add" against the same rules
+    generate_rota enforces, so the one-off manual-edit path can't bypass them.
+
+    staff: {id, name, is_under_18}
+    day_index: the day the shift is being added on
+    shift: the shift being added
+    other_assignments: this staff's OTHER assignments in the period — i.e.
+        excluding whatever's on day_index, since an "add" always clears that
+        day first. [{day_index, shift_id}]
+    shifts_by_id: all of the venue's shifts, keyed by id
+    rules: {max_hours_per_week, min_rest_hours, require_day_off}
+
+    Judges the proposed add against the POST-add state of the staff member's
+    week (their other assignments plus this one) so an adjacent-day rest gap
+    or a now-fully-booked week is caught, not just the shift in isolation.
+
+    Returns {"severity": "block" | "confirm" | "ok", "reason": str | None}.
+    Under-18 violations are always "block" — no confirm path exists for them,
+    matching the solver's non-toggleable hard constraints. Adult violations
+    are "confirm", mirroring the existing risk-popup pattern elsewhere in the
+    app (managers keep discretion where the law allows it).
+    """
+    name = staff.get("name") or "Staff member"
+    under18 = bool(staff.get("is_under_18"))
+
+    days_worked: dict[int, str] = {
+        a["day_index"]: a["shift_id"] for a in other_assignments if a.get("shift_id")
+    }
+    days_worked[day_index] = shift["id"]
+
+    def _neighbor_gap(neighbor_day: int):
+        if neighbor_day < 0 or neighbor_day > 6 or neighbor_day not in days_worked:
+            return None
+        neighbor_shift = shifts_by_id.get(days_worked[neighbor_day])
+        if not neighbor_shift:
+            return None
+        if neighbor_day < day_index:
+            return _rest_gap_hours(neighbor_shift, shift)
+        return _rest_gap_hours(shift, neighbor_shift)
+
+    if under18:
+        duration = shift_duration_hours(shift)
+        if duration > UNDER18_MAX_HOURS_PER_DAY:
+            return {
+                "severity": "block",
+                "reason": (
+                    f"{name} is under 18: '{shift['name']}' is {duration:.1f}h, over the "
+                    f"{UNDER18_MAX_HOURS_PER_DAY:.0f}h daily limit for under-18s."
+                ),
+            }
+        if _shift_touches_night_hours(shift):
+            return {
+                "severity": "block",
+                "reason": (
+                    f"{name} is under 18: '{shift['name']}' falls between 10pm and 6am — "
+                    f"under-18s can't work night hours."
+                ),
+            }
+
+        weekly_cap = min(rules.get("max_hours_per_week", 48), UNDER18_MAX_HOURS_PER_WEEK)
+        total_hours = sum(
+            shift_duration_hours(shifts_by_id[shid])
+            for shid in days_worked.values()
+            if shid in shifts_by_id
+        )
+        if total_hours > weekly_cap + 1e-6:
+            return {
+                "severity": "block",
+                "reason": (
+                    f"{name} is under 18: this would bring their week to {total_hours:.1f}h, "
+                    f"over the {weekly_cap:.0f}h weekly limit for under-18s."
+                ),
+            }
+
+        for neighbor_day in (day_index - 1, day_index + 1):
+            gap = _neighbor_gap(neighbor_day)
+            if gap is not None and gap < UNDER18_MIN_REST_HOURS:
+                return {
+                    "severity": "block",
+                    "reason": (
+                        f"{name} is under 18: only {gap:.1f}h rest around this shift, short of the "
+                        f"{UNDER18_MIN_REST_HOURS:.0f}h minimum for under-18s."
+                    ),
+                }
+
+        worked_days = set(days_worked.keys())
+        has_gap = any(d not in worked_days and (d + 1) not in worked_days for d in range(6))
+        if not has_gap:
+            return {
+                "severity": "block",
+                "reason": (
+                    f"{name} is under 18: this would leave no 2 consecutive days off in the "
+                    f"week, which under-18s are legally entitled to."
+                ),
+            }
+
+        return {"severity": "ok", "reason": None}
+
+    min_rest = rules.get("min_rest_hours", 11)
+    for neighbor_day in (day_index - 1, day_index + 1):
+        gap = _neighbor_gap(neighbor_day)
+        if gap is not None and gap < min_rest:
+            return {
+                "severity": "confirm",
+                "reason": (
+                    f"{name}: only {gap:.1f}h rest around this shift, short of the venue's "
+                    f"{min_rest:.0f}h minimum rest."
+                ),
+            }
+
+    if rules.get("require_day_off", True) and len(days_worked) >= 7:
+        return {
+            "severity": "confirm",
+            "reason": f"{name}: this would leave them working all 7 days this week, with no day off.",
+        }
+
+    return {"severity": "ok", "reason": None}
 
 
 def generate_rota(

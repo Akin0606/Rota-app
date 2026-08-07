@@ -325,6 +325,17 @@ class AssignmentEditRequest(BaseModel):
     day_index: int = Field(ge=0, le=6)
     shift_id: str
     action: Literal["add", "remove"]
+    # Managers must explicitly confirm an "add" that trips an adult rule
+    # (rest gap, day-off-in-7); the first attempt returns needs_confirm
+    # instead of saving. Under-18 violations have no confirm path — they're
+    # always rejected outright, regardless of this flag.
+    confirm: bool = False
+
+
+class AssignmentEditResponse(BaseModel):
+    status: Literal["saved", "needs_confirm"]
+    reason: Optional[str] = None
+    summary: Optional[RotaSummaryOut] = None
 
 
 class RotaEmailRequest(BaseModel):
