@@ -7,7 +7,15 @@ import Link from "next/link";
 import Modal from "@/components/modal";
 import ShiftBadge from "@/components/shift-badge";
 import Toast from "@/components/toast";
-import { ApiError, StaffRota, StaffRotaAssignment, claimShift, dropShift, getStaffRota } from "@/lib/api";
+import {
+  ApiError,
+  StaffRota,
+  StaffRotaAssignment,
+  claimShift,
+  dropShift,
+  getStaffRota,
+  giveShift,
+} from "@/lib/api";
 import { DAY_NAMES, addDays, parseISODate, pinStorageKey } from "@/lib/utils";
 
 export default function DropShiftPage({ params }: { params: { venue_token: string } }) {
@@ -26,6 +34,10 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
 
   const [claimTarget, setClaimTarget] = useState<StaffRotaAssignment | null>(null);
   const [claiming, setClaiming] = useState(false);
+
+  const [giveTarget, setGiveTarget] = useState<StaffRotaAssignment | null>(null);
+  const [giveeId, setGiveeId] = useState<string | null>(null);
+  const [giving, setGiving] = useState(false);
 
   useEffect(() => {
     const storedPin = sessionStorage.getItem(pinStorageKey(venue_token));
@@ -67,6 +79,28 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
       showToast(err instanceof ApiError ? err.message : "Could not drop this shift");
     } finally {
       setDropping(false);
+    }
+  }
+
+  function openGive(a: StaffRotaAssignment) {
+    setGiveTarget(a);
+    setGiveeId(null);
+  }
+
+  async function confirmGive() {
+    if (!pin || !giveTarget || !giveeId) return;
+    setGiving(true);
+    try {
+      const result = await giveShift(venue_token, pin, giveTarget.id, giveeId);
+      setData(result);
+      const giveeName = data?.venue_staff.find((s) => s.id === giveeId)?.name ?? "them";
+      setGiveTarget(null);
+      setGiveeId(null);
+      showToast(`Offered to ${giveeName} — you're still on this shift until they respond`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not give away this shift");
+    } finally {
+      setGiving(false);
     }
   }
 
@@ -125,8 +159,10 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
     .filter((a) => addDays(weekStart, a.day_index).getTime() >= todayUTC)
     .sort((a, b) => a.day_index - b.day_index);
 
+  // Targeted gives are private between giver and recipient — they never show
+  // in the open pool, regardless of who's viewing.
   const openShifts = data.assignments
-    .filter((a) => Boolean(a.drop_status) && a.shift_id)
+    .filter((a) => Boolean(a.drop_status) && a.shift_id && !a.target_staff_id)
     .sort((a, b) => a.day_index - b.day_index);
 
   return (
@@ -155,6 +191,12 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                 if (!shift) return null;
                 const dayDate = addDays(weekStart, a.day_index);
                 const dropped = Boolean(a.drop_status) || a.id === justDroppedId;
+                const targetName = a.target_staff_id
+                  ? data.venue_staff.find((s) => s.id === a.target_staff_id)?.name
+                  : null;
+                let badge = "Drop requested";
+                if (a.drop_status === "pending_approval") badge = "Claim pending approval";
+                else if (targetName) badge = `Offered to ${targetName}`;
                 return (
                   <div
                     key={a.id}
@@ -169,15 +211,23 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                     </div>
                     {dropped ? (
                       <span className="shrink-0 rounded-full bg-warn-bg px-3 py-1.5 text-[11px] font-semibold text-warn-text">
-                        {a.drop_status === "pending_approval" ? "Claim pending approval" : "Drop requested"}
+                        {badge}
                       </span>
                     ) : (
-                      <button
-                        onClick={() => setConfirmTarget(a)}
-                        className="shrink-0 rounded-lg border border-unavail-border bg-surface-card px-3 py-1.5 text-[12px] font-semibold text-unavail-text"
-                      >
-                        Drop shift
-                      </button>
+                      <div className="flex shrink-0 flex-col gap-1.5">
+                        <button
+                          onClick={() => setConfirmTarget(a)}
+                          className="rounded-lg border border-unavail-border bg-surface-card px-3 py-1.5 text-[12px] font-semibold text-unavail-text"
+                        >
+                          Drop shift
+                        </button>
+                        <button
+                          onClick={() => openGive(a)}
+                          className="rounded-lg border border-accent-border bg-surface-card px-3 py-1.5 text-[12px] font-semibold text-accent"
+                        >
+                          Give to someone
+                        </button>
+                      </div>
                     )}
                   </div>
                 );
@@ -257,6 +307,52 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                 className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {dropping ? "Dropping…" : "Drop shift"}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
+
+      <Modal open={giveTarget !== null} onClose={() => setGiveTarget(null)} title="Give this shift to someone">
+        {giveTarget && (
+          <>
+            <div className="mb-4 text-sm leading-relaxed text-ink-muted">
+              Pick a colleague to offer it to. You&apos;re still on this shift until they accept — nothing
+              changes until then.
+            </div>
+            {data.venue_staff.length === 0 ? (
+              <div className="mb-4 text-sm text-ink-muted">No other active staff to give this to.</div>
+            ) : (
+              <div className="mb-5 flex max-h-[280px] flex-col gap-1.5 overflow-y-auto">
+                {data.venue_staff.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setGiveeId(s.id)}
+                    className={`flex items-center justify-between rounded-lg border px-3.5 py-2.5 text-left text-sm font-semibold transition ${
+                      giveeId === s.id
+                        ? "border-accent bg-accent-light text-accent"
+                        : "border-hairline bg-surface-card text-ink-label"
+                    }`}
+                  >
+                    {s.name}
+                    <span className="text-[11px] font-normal text-ink-faint">{s.role}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setGiveTarget(null)}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmGive}
+                disabled={giving || !giveeId}
+                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {giving ? "Sending…" : "Give shift"}
               </button>
             </div>
           </>

@@ -4,8 +4,18 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-import { ApiError, authenticatePin } from "@/lib/api";
-import { pinStorageKey } from "@/lib/utils";
+import Modal from "@/components/modal";
+import Toast from "@/components/toast";
+import {
+  ApiError,
+  StaffRota,
+  StaffRotaAssignment,
+  acceptGive,
+  authenticatePin,
+  declineGive,
+  getStaffRota,
+} from "@/lib/api";
+import { DAY_NAMES, pinStorageKey } from "@/lib/utils";
 
 type Tile = {
   icon: string;
@@ -25,18 +35,26 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
   const { venue_token } = params;
   const router = useRouter();
 
+  const [pin, setPin] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
   const [venueName, setVenueName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const [rota, setRota] = useState<StaffRota | null>(null);
+  const [acceptTarget, setAcceptTarget] = useState<StaffRotaAssignment | null>(null);
+  const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
-    const pin = sessionStorage.getItem(pinStorageKey(venue_token));
-    if (!pin) {
+    const storedPin = sessionStorage.getItem(pinStorageKey(venue_token));
+    if (!storedPin) {
       router.replace(`/v/${venue_token}`);
       return;
     }
-    authenticatePin(venue_token, pin)
+    setPin(storedPin);
+
+    authenticatePin(venue_token, storedPin)
       .then((res) => {
         setName(res.staff.name.split(" ")[0]);
         setVenueName(res.venue_name);
@@ -50,11 +68,61 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
         setError(err instanceof ApiError ? err.message : "Something went wrong");
       })
       .finally(() => setLoading(false));
+
+    // Best-effort: a pending give banner is a nice-to-have, not core to the
+    // hub loading — no published rota yet just means no banner.
+    getStaffRota(venue_token, storedPin)
+      .then(setRota)
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [venue_token]);
 
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  async function confirmAccept() {
+    if (!pin || !acceptTarget) return;
+    setResolving(true);
+    try {
+      const result = await acceptGive(venue_token, pin, acceptTarget.id);
+      if (result.rota) setRota(result.rota);
+      setAcceptTarget(null);
+      if (result.status === "approved") {
+        showToast("You're on this shift!");
+      } else {
+        showToast(`Sent for manager approval${result.reason ? ` (${result.reason})` : ""}`);
+      }
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not accept this shift");
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  async function handleDecline(a: StaffRotaAssignment) {
+    if (!pin) return;
+    setResolving(true);
+    try {
+      const result = await declineGive(venue_token, pin, a.id);
+      setRota(result);
+      showToast("Declined — the shift stays with them");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not decline this shift");
+    } finally {
+      setResolving(false);
+    }
+  }
+
   if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
   if (error) return <CenteredMessage>{error}</CenteredMessage>;
+
+  const pendingGive = rota?.assignments.find(
+    (a) => a.target_staff_id === rota.staff_id && a.drop_status === "pending_pickup",
+  );
+  const giveShift = pendingGive ? rota?.shifts.find((s) => s.id === pendingGive.shift_id) : null;
+  const giverName = pendingGive ? rota?.team.find((t) => t.id === pendingGive.staff_id)?.name : null;
 
   return (
     <div className="mx-auto max-w-[420px] py-4">
@@ -65,6 +133,33 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
               Hi {name} — {venueName}
             </div>
           </div>
+
+          {pendingGive && giveShift && giverName && (
+            <div className="mb-5 rounded-panel border border-accent-border bg-accent-light p-4">
+              <div className="mb-1 text-sm font-bold text-ink">
+                {giverName} wants to give you their {DAY_NAMES[pendingGive.day_index]} {giveShift.name} shift
+              </div>
+              <div className="mb-3 text-xs text-ink-muted">
+                {giveShift.start_time} – {giveShift.end_time}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAcceptTarget(pendingGive)}
+                  disabled={resolving}
+                  className="flex-1 rounded-lg bg-accent py-2 text-center text-[13px] font-semibold text-white disabled:opacity-50"
+                >
+                  Accept
+                </button>
+                <button
+                  onClick={() => handleDecline(pendingGive)}
+                  disabled={resolving}
+                  className="flex-1 rounded-lg border border-hairline bg-surface-card py-2 text-center text-[13px] font-semibold text-ink-muted disabled:opacity-50"
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2.5">
             {TILES.map((tile) =>
@@ -104,6 +199,34 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
           </div>
         </div>
       </div>
+
+      <Modal open={acceptTarget !== null} onClose={() => setAcceptTarget(null)} title="Accept this shift?">
+        {acceptTarget && (
+          <>
+            <div className="mb-5 text-sm leading-relaxed text-ink-muted">
+              If it's compliant with your hours and rest, you're on this shift right away. If it would breach
+              a rule, it goes to your manager for approval instead.
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setAcceptTarget(null)}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmAccept}
+                disabled={resolving}
+                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {resolving ? "Accepting…" : "Accept shift"}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
+
+      <Toast message={toast} />
     </div>
   );
 }

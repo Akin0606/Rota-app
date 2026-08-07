@@ -117,6 +117,17 @@ class AvailabilityClaimRequest(BaseModel):
     assignment_id: str
 
 
+class AvailabilityGiveRequest(BaseModel):
+    pin: str = Field(pattern=r"^\d{4}$")
+    assignment_id: str
+    target_staff_id: str
+
+
+class AvailabilityGiveActionRequest(BaseModel):
+    pin: str = Field(pattern=r"^\d{4}$")
+    assignment_id: str
+
+
 class VenueOut(BaseModel):
     id: str
     name: str
@@ -437,6 +448,7 @@ class StaffRotaAssignmentOut(BaseModel):
     shift_id: Optional[str] = None
     drop_status: Optional[str] = None
     claim_staff_id: Optional[str] = None
+    target_staff_id: Optional[str] = None
 
 
 class StaffRotaTeamMemberOut(BaseModel):
@@ -452,6 +464,9 @@ class StaffRotaOut(BaseModel):
     shifts: list[ShiftOut] = []
     assignments: list[StaffRotaAssignmentOut] = []
     team: list[StaffRotaTeamMemberOut] = []
+    # Full active roster (excluding the caller), for the "give to" picker —
+    # distinct from `team`, which is only staff with an assignment this period.
+    venue_staff: list[StaffRotaTeamMemberOut] = []
 
 
 class ClaimSubmitResponse(BaseModel):

@@ -150,6 +150,7 @@ export type StaffRotaAssignment = {
   shift_id: string | null;
   drop_status: "pending_pickup" | "pending_approval" | null;
   claim_staff_id: string | null;
+  target_staff_id: string | null;
 };
 
 export type StaffRotaTeamMember = {
@@ -165,6 +166,7 @@ export type StaffRota = {
   shifts: Shift[];
   assignments: StaffRotaAssignment[];
   team: StaffRotaTeamMember[];
+  venue_staff: StaffRotaTeamMember[];
 };
 
 export function getStaffRota(venueToken: string, pin: string): Promise<StaffRota> {
@@ -190,6 +192,36 @@ export function claimShift(
   assignmentId: string,
 ): Promise<ClaimSubmitResult> {
   return request(`/api/availability/${venueToken}/rota/claim`, {
+    method: "POST",
+    body: JSON.stringify({ pin, assignment_id: assignmentId }),
+  });
+}
+
+export function giveShift(
+  venueToken: string,
+  pin: string,
+  assignmentId: string,
+  targetStaffId: string,
+): Promise<StaffRota> {
+  return request(`/api/availability/${venueToken}/rota/give`, {
+    method: "POST",
+    body: JSON.stringify({ pin, assignment_id: assignmentId, target_staff_id: targetStaffId }),
+  });
+}
+
+export function acceptGive(
+  venueToken: string,
+  pin: string,
+  assignmentId: string,
+): Promise<ClaimSubmitResult> {
+  return request(`/api/availability/${venueToken}/rota/give/accept`, {
+    method: "POST",
+    body: JSON.stringify({ pin, assignment_id: assignmentId }),
+  });
+}
+
+export function declineGive(venueToken: string, pin: string, assignmentId: string): Promise<StaffRota> {
+  return request(`/api/availability/${venueToken}/rota/give/decline`, {
     method: "POST",
     body: JSON.stringify({ pin, assignment_id: assignmentId }),
   });

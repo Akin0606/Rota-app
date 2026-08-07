@@ -8,6 +8,8 @@ from models.schemas import (
     AvailabilityAuthResponse,
     AvailabilityClaimRequest,
     AvailabilityDropRequest,
+    AvailabilityGiveActionRequest,
+    AvailabilityGiveRequest,
     AvailabilitySubmitRequest,
     ClaimSubmitResponse,
     ForgotPinRequest,
@@ -430,7 +432,7 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
     supabase = get_supabase()
     assignments = (
         supabase.table("rota_assignments")
-        .select("id, staff_id, day_index, shift_id, drop_status, claim_staff_id")
+        .select("id, staff_id, day_index, shift_id, drop_status, claim_staff_id, target_staff_id")
         .eq("period_id", period["id"])
         .execute()
         .data
@@ -443,6 +445,17 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
         else []
     )
 
+    venue_staff = [
+        s
+        for s in supabase.table("staff_members")
+        .select("id, name, role")
+        .eq("venue_id", venue["id"])
+        .eq("is_active", True)
+        .execute()
+        .data
+        if s["id"] != staff_id
+    ]
+
     return {
         "venue_name": venue["name"],
         "staff_id": staff_id,
@@ -450,6 +463,7 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
         "shifts": _get_shifts(venue["id"]),
         "assignments": assignments,
         "team": team,
+        "venue_staff": venue_staff,
     }
 
 
@@ -681,3 +695,257 @@ def claim_shift(venue_token: str, payload: AvailabilityClaimRequest):
     ).execute()
 
     return ClaimSubmitResponse(status="pending", reason=reason_text, rota=_build_staff_rota(venue, staff["id"]))
+
+
+@router.post("/{venue_token}/rota/give", response_model=StaffRotaOut)
+def give_shift(venue_token: str, payload: AvailabilityGiveRequest):
+    """Offers the caller's own assignment directly to a named colleague,
+    rather than opening it to the whole pool. Same pending_pickup state and
+    no-gap guarantee as a drop — target_staff_id is what makes it visible +
+    actionable only by that one person."""
+    from datetime import date, datetime, timedelta
+
+    venue = _get_venue_or_404(venue_token)
+    staff = _get_staff_by_pin(venue["id"], payload.pin)
+    supabase = get_supabase()
+
+    period = _get_published_period(venue["id"])
+    if not period:
+        raise HTTPException(status_code=404, detail="No published rota found")
+
+    assignment_res = (
+        supabase.table("rota_assignments")
+        .select("*")
+        .eq("id", payload.assignment_id)
+        .eq("period_id", period["id"])
+        .eq("staff_id", staff["id"])
+        .limit(1)
+        .execute()
+    )
+    if not assignment_res.data:
+        raise HTTPException(status_code=404, detail="Shift not found")
+    assignment = assignment_res.data[0]
+
+    if assignment.get("drop_status"):
+        raise HTTPException(status_code=400, detail="This shift has already been dropped")
+
+    shift_date = date.fromisoformat(str(period["week_start"])) + timedelta(days=assignment["day_index"])
+    if shift_date < date.today():
+        raise HTTPException(status_code=400, detail="Can't give away a shift that's already passed")
+
+    if payload.target_staff_id == staff["id"]:
+        raise HTTPException(status_code=400, detail="You can't give a shift to yourself")
+
+    target_res = (
+        supabase.table("staff_members")
+        .select("id, name, email")
+        .eq("id", payload.target_staff_id)
+        .eq("venue_id", venue["id"])
+        .eq("is_active", True)
+        .limit(1)
+        .execute()
+    )
+    if not target_res.data:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    target = target_res.data[0]
+
+    shifts_by_id = {s["id"]: s for s in _get_shifts(venue["id"])}
+    shift = shifts_by_id.get(assignment["shift_id"])
+    if not shift:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    supabase.table("rota_assignments").update(
+        {
+            "drop_status": "pending_pickup",
+            "dropped_at": datetime.utcnow().isoformat(),
+            "target_staff_id": target["id"],
+        }
+    ).eq("id", assignment["id"]).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": staff["id"],
+            "action": "shift_given",
+            "detail": (
+                f"{staff['name']} offered their {DAY_NAMES[assignment['day_index']]} shift to {target['name']}"
+            ),
+        }
+    ).execute()
+
+    email_service.send_shift_give_email(
+        to_email=target.get("email"),
+        name=target["name"],
+        giver_name=staff["name"],
+        venue_name=venue["name"],
+        shift_label=f"{DAY_NAMES[assignment['day_index']]} {shift['name']}",
+        venue_link_url=f"{get_settings().frontend_url}/v/{venue['link_token']}",
+    )
+
+    return _build_staff_rota(venue, staff["id"])
+
+
+@router.post("/{venue_token}/rota/give/accept", response_model=ClaimSubmitResponse)
+def accept_give(venue_token: str, payload: AvailabilityGiveActionRequest):
+    """Recipient accepts a shift given to them. Unlike claim_shift, this only
+    runs check_manual_assignment — no role-match or availability check —
+    since the giver already vouched for this specific person by naming them."""
+    venue = _get_venue_or_404(venue_token)
+    staff = _get_staff_by_pin(venue["id"], payload.pin)
+    supabase = get_supabase()
+
+    period = _get_published_period(venue["id"])
+    if not period:
+        raise HTTPException(status_code=404, detail="No published rota found")
+
+    assignment_res = (
+        supabase.table("rota_assignments")
+        .select("*")
+        .eq("id", payload.assignment_id)
+        .eq("period_id", period["id"])
+        .eq("target_staff_id", staff["id"])
+        .eq("drop_status", "pending_pickup")
+        .limit(1)
+        .execute()
+    )
+    if not assignment_res.data:
+        raise HTTPException(status_code=404, detail="This isn't available to accept")
+    assignment = assignment_res.data[0]
+
+    shifts_by_id = {s["id"]: s for s in _get_shifts(venue["id"])}
+    shift = shifts_by_id.get(assignment["shift_id"])
+    if not shift:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    original_res = (
+        supabase.table("staff_members").select("id, name").eq("id", assignment["staff_id"]).limit(1).execute()
+    )
+    original_name = original_res.data[0]["name"] if original_res.data else "a teammate"
+
+    recipient = (
+        supabase.table("staff_members")
+        .select("id, name, role, is_under_18")
+        .eq("id", staff["id"])
+        .limit(1)
+        .execute()
+        .data[0]
+    )
+
+    other_assignments = (
+        supabase.table("rota_assignments")
+        .select("day_index, shift_id")
+        .eq("period_id", period["id"])
+        .eq("staff_id", staff["id"])
+        .neq("day_index", assignment["day_index"])
+        .execute()
+        .data
+    )
+    rules = _get_rules_for_solver(venue["id"])
+    check = check_manual_assignment(recipient, assignment["day_index"], shift, other_assignments, shifts_by_id, rules)
+
+    if check["severity"] == "block":
+        raise HTTPException(status_code=400, detail=check["reason"])
+
+    if check["severity"] == "ok":
+        supabase.table("rota_assignments").delete().eq("period_id", period["id"]).eq(
+            "staff_id", staff["id"]
+        ).eq("day_index", assignment["day_index"]).execute()
+
+        supabase.table("rota_assignments").update(
+            {
+                "staff_id": staff["id"],
+                "drop_status": None,
+                "dropped_at": None,
+                "target_staff_id": None,
+                "claim_staff_id": None,
+                "claim_reason": None,
+                "manually_assigned": True,
+            }
+        ).eq("id", assignment["id"]).execute()
+
+        supabase.table("activity_log").insert(
+            {
+                "venue_id": venue["id"],
+                "staff_id": staff["id"],
+                "action": "shift_given_accepted",
+                "detail": (
+                    f"{staff['name']} accepted {original_name}'s {DAY_NAMES[assignment['day_index']]} shift — "
+                    f"auto-approved."
+                ),
+            }
+        ).execute()
+
+        return ClaimSubmitResponse(status="approved", rota=_build_staff_rota(venue, staff["id"]))
+
+    reason_text = check["reason"]
+    supabase.table("rota_assignments").update(
+        {
+            "drop_status": "pending_approval",
+            "target_staff_id": None,
+            "claim_staff_id": staff["id"],
+            "claim_reason": reason_text,
+        }
+    ).eq("id", assignment["id"]).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": staff["id"],
+            "action": "shift_given_accept_pending",
+            "detail": (
+                f"{staff['name']} accepted {original_name}'s {DAY_NAMES[assignment['day_index']]} shift — "
+                f"needs manager approval ({reason_text})."
+            ),
+        }
+    ).execute()
+
+    return ClaimSubmitResponse(status="pending", reason=reason_text, rota=_build_staff_rota(venue, staff["id"]))
+
+
+@router.post("/{venue_token}/rota/give/decline", response_model=StaffRotaOut)
+def decline_give(venue_token: str, payload: AvailabilityGiveActionRequest):
+    """Recipient declines. Reverts cleanly to the giver — does NOT enter the
+    open pool, unlike a manager's claim-reject."""
+    venue = _get_venue_or_404(venue_token)
+    staff = _get_staff_by_pin(venue["id"], payload.pin)
+    supabase = get_supabase()
+
+    period = _get_published_period(venue["id"])
+    if not period:
+        raise HTTPException(status_code=404, detail="No published rota found")
+
+    assignment_res = (
+        supabase.table("rota_assignments")
+        .select("*")
+        .eq("id", payload.assignment_id)
+        .eq("period_id", period["id"])
+        .eq("target_staff_id", staff["id"])
+        .eq("drop_status", "pending_pickup")
+        .limit(1)
+        .execute()
+    )
+    if not assignment_res.data:
+        raise HTTPException(status_code=404, detail="This isn't available to decline")
+    assignment = assignment_res.data[0]
+
+    original_res = (
+        supabase.table("staff_members").select("id, name").eq("id", assignment["staff_id"]).limit(1).execute()
+    )
+    original_name = original_res.data[0]["name"] if original_res.data else "a teammate"
+
+    supabase.table("rota_assignments").update(
+        {"drop_status": None, "dropped_at": None, "target_staff_id": None}
+    ).eq("id", assignment["id"]).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": staff["id"],
+            "action": "shift_given_declined",
+            "detail": (
+                f"{staff['name']} declined {original_name}'s {DAY_NAMES[assignment['day_index']]} shift offer"
+            ),
+        }
+    ).execute()
+
+    return _build_staff_rota(venue, staff["id"])

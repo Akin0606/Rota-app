@@ -298,6 +298,26 @@ def send_manager_rota_email(
     return _send(to_email, subject, html, attachments=attachments)
 
 
+# 6b. Shift given (to the recipient) ------------------------------------------
+
+def send_shift_give_email(
+    to_email: str,
+    name: str,
+    giver_name: str,
+    venue_name: str,
+    shift_label: str,
+    venue_link_url: str,
+) -> dict:
+    subject = f"{giver_name} wants to give you a shift"
+    body = f"""
+<p style="margin:0 0 8px;">Hi {name},</p>
+<p style="margin:0 0 16px;"><strong>{giver_name}</strong> has offered you their <strong>{shift_label}</strong> shift at {venue_name}. Open your hub to accept or decline.</p>
+{_button("Open your hub", venue_link_url)}
+"""
+    html = _shell(f"{giver_name} wants to give you a shift", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
+    return _send(to_email, subject, html)
+
+
 # 7. Bulk reminder (to manager) ----------------------------------------------
 
 def send_bulk_reminder_email(
