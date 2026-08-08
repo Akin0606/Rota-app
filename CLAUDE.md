@@ -47,6 +47,8 @@ by reopening the app.
 - No way to create managers from admin console without editing Supabase manually
 
 ## Learnings (append after each session — most recent first)
+- Notification bell live and verified: activity_log reused directly, no new tables/RLS. Staff feed via allowlisted GET, localStorage-based last-seen badge.
+- Known cosmetic bug (pre-existing, unrelated to this batch): manager dashboard's describeAction default branch double-prints the actor name for drop/give/swap rows (e.g. "Paulina B Paulina B dropped..."). Staff feed does NOT have this bug — confirmed live. Fix in the aesthetic pass (batch E).
 - Swap Shift live and verified: propose/auto-accept/confirm-path/under-18 block/decline/same-day-swap/manager approve+reject/cross-guard all confirmed on the deployed app.
 - Foreign keys referencing rota_assignments need explicit ON DELETE CASCADE, or a resolved swap permanently blocks deleting that assignment — surfaces as an opaque "Failed to fetch" with no real error. Check for this pattern on any future table linking back to rota_assignments.
 - The three staff shift-actions (Give, Swap, Drop) are all complete and live as of this session.
