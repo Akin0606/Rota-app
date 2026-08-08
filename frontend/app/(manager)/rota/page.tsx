@@ -9,6 +9,7 @@ import PublishPanel from "@/components/publish-panel";
 import RotaDayView from "@/components/rota-day-view";
 import RotaGrid, { RotaOrientation } from "@/components/rota-grid";
 import StatusBanner from "@/components/status-banner";
+import SwapsPanel from "@/components/swaps-panel";
 import Toast from "@/components/toast";
 import {
   ApiError,
@@ -19,7 +20,9 @@ import {
   Shift,
   StaffManager,
   SubmissionEntry,
+  Swap,
   approveClaim,
+  approveSwap,
   clearSubmission,
   createPeriod,
   editAssignment,
@@ -27,11 +30,13 @@ import {
   getClaims,
   getPeriodSubmissions,
   getRota,
+  getSwaps,
   listPeriods,
   listShifts,
   listStaff,
   publishRota,
   rejectClaim,
+  rejectSwap,
 } from "@/lib/api";
 import { DAY_LABELS, formatWeekRange } from "@/lib/utils";
 
@@ -62,6 +67,11 @@ export default function RotaPage() {
   const [pendingApproveId, setPendingApproveId] = useState<string | null>(null);
   const [claimRiskOpen, setClaimRiskOpen] = useState(false);
   const [claimRiskReason, setClaimRiskReason] = useState<string | null>(null);
+  const [swaps, setSwaps] = useState<Swap[]>([]);
+  const [swapBusyId, setSwapBusyId] = useState<string | null>(null);
+  const [pendingApproveSwapId, setPendingApproveSwapId] = useState<string | null>(null);
+  const [swapRiskOpen, setSwapRiskOpen] = useState(false);
+  const [swapRiskReason, setSwapRiskReason] = useState<string | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<string>(WEEK_OPTIONS[0].weekStart);
   const [orientation, setOrientation] = useState<RotaOrientation>("staff-rows");
   const [loading, setLoading] = useState(true);
@@ -131,24 +141,28 @@ export default function RotaPage() {
         setSummary(null);
         setSubmissions([]);
         setClaims([]);
+        setSwaps([]);
         return;
       }
       setRotaLoading(true);
       try {
-        const [rotaRes, subsRes, claimsRes] = await Promise.all([
+        const [rotaRes, subsRes, claimsRes, swapsRes] = await Promise.all([
           getRota(period.id),
           getPeriodSubmissions(period.id),
           getClaims(period.id),
+          getSwaps(period.id),
         ]);
         if (cancelled) return;
         setSummary(rotaRes);
         setSubmissions(subsRes.submissions);
         setClaims(claimsRes.claims);
+        setSwaps(swapsRes.swaps);
       } catch {
         if (!cancelled) {
           setSummary(null);
           setSubmissions([]);
           setClaims([]);
+          setSwaps([]);
         }
       } finally {
         if (!cancelled) setRotaLoading(false);
@@ -226,6 +240,53 @@ export default function RotaPage() {
       showToast(err instanceof ApiError ? err.message : "Could not reject claim");
     } finally {
       setClaimBusyId(null);
+    }
+  }
+
+  async function submitApproveSwap(swapId: string, confirm: boolean) {
+    if (!period) return;
+    setSwapBusyId(swapId);
+    try {
+      const result = await approveSwap(period.id, swapId, confirm);
+      if (result.status === "needs_confirm") {
+        setPendingApproveSwapId(swapId);
+        setSwapRiskReason(result.reason ?? null);
+        setSwapRiskOpen(true);
+        return;
+      }
+      if (result.summary) setSummary(result.summary);
+      setSwaps(result.swaps);
+      setSwapRiskOpen(false);
+      setPendingApproveSwapId(null);
+      showToast("Swap approved");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not approve swap");
+    } finally {
+      setSwapBusyId(null);
+    }
+  }
+
+  function handleApproveSwap(swapId: string) {
+    submitApproveSwap(swapId, false);
+  }
+
+  function handleConfirmApproveSwap() {
+    if (!pendingApproveSwapId) return;
+    submitApproveSwap(pendingApproveSwapId, true);
+  }
+
+  async function handleRejectSwap(swapId: string) {
+    if (!period) return;
+    setSwapBusyId(swapId);
+    try {
+      const result = await rejectSwap(period.id, swapId);
+      if (result.summary) setSummary(result.summary);
+      setSwaps(result.swaps);
+      showToast("Swap rejected — both shifts stay with their original owners");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not reject swap");
+    } finally {
+      setSwapBusyId(null);
     }
   }
 
@@ -560,6 +621,14 @@ export default function RotaPage() {
         onReject={handleRejectClaim}
       />
 
+      <SwapsPanel
+        swaps={swaps}
+        shifts={shifts}
+        busyId={swapBusyId}
+        onApprove={handleApproveSwap}
+        onReject={handleRejectSwap}
+      />
+
       {period && (
         <AvailabilityPanel
           shifts={shifts}
@@ -680,6 +749,37 @@ export default function RotaPage() {
                 className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {claimBusyId ? "Saving…" : "Approve anyway"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Risk popup: adult rule flagged by approving a shift swap */}
+      {swapRiskOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
+          <div className="w-full max-w-[440px] rounded-card border border-warn-dot bg-surface-card p-6">
+            <div className="mb-2 text-lg font-bold text-ink">This swap breaks a rest rule</div>
+            <div className="mb-4 text-sm text-ink-muted">
+              {swapRiskReason ?? "One side of this swap falls short of the venue's rules."} Approve anyway only
+              if you&apos;re sure.
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => {
+                  setSwapRiskOpen(false);
+                  setPendingApproveSwapId(null);
+                }}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmApproveSwap}
+                disabled={swapBusyId !== null}
+                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {swapBusyId ? "Saving…" : "Approve anyway"}
               </button>
             </div>
           </div>

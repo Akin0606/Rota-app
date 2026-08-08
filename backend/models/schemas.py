@@ -128,6 +128,18 @@ class AvailabilityGiveActionRequest(BaseModel):
     assignment_id: str
 
 
+class AvailabilitySwapProposeRequest(BaseModel):
+    pin: str = Field(pattern=r"^\d{4}$")
+    assignment_id: str
+    target_staff_id: str
+    target_assignment_id: str
+
+
+class AvailabilitySwapActionRequest(BaseModel):
+    pin: str = Field(pattern=r"^\d{4}$")
+    swap_id: str
+
+
 class VenueOut(BaseModel):
     id: str
     name: str
@@ -457,6 +469,27 @@ class StaffRotaTeamMemberOut(BaseModel):
     role: str
 
 
+class SwapSideOut(BaseModel):
+    assignment_id: str
+    day_index: int
+    shift_id: str
+
+
+class SwapForStaffOut(BaseModel):
+    """A swap proposal from the caller's point of view — either side of it,
+    while it's still non-terminal (pending_response/pending_approval).
+    Resolved swaps (approved/declined/rejected) don't appear here; their
+    effect is already reflected in `assignments`, or simply gone."""
+
+    id: str
+    role: Literal["initiator", "recipient"]
+    status: Literal["pending_response", "pending_approval"]
+    counterpart_id: str
+    counterpart_name: str
+    my_shift: SwapSideOut
+    their_shift: SwapSideOut
+
+
 class StaffRotaOut(BaseModel):
     venue_name: str
     staff_id: str
@@ -467,6 +500,8 @@ class StaffRotaOut(BaseModel):
     # Full active roster (excluding the caller), for the "give to" picker —
     # distinct from `team`, which is only staff with an assignment this period.
     venue_staff: list[StaffRotaTeamMemberOut] = []
+    # Swap proposals the caller is party to (either side), still unresolved.
+    pending_swaps: list[SwapForStaffOut] = []
 
 
 class ClaimSubmitResponse(BaseModel):
@@ -503,6 +538,39 @@ class ClaimActionOut(BaseModel):
     reason: Optional[str] = None
     summary: Optional[RotaSummaryOut] = None
     claims: list[ClaimOut] = []
+
+
+class SwapOut(BaseModel):
+    id: str
+    initiator_staff_id: str
+    initiator_staff_name: str
+    initiator_day_index: int
+    initiator_shift_id: str
+    recipient_staff_id: str
+    recipient_staff_name: str
+    recipient_day_index: int
+    recipient_shift_id: str
+    reason: Optional[str] = None
+
+
+class PeriodSwapsOut(BaseModel):
+    period_id: str
+    swaps: list[SwapOut] = []
+
+
+class SwapApproveRequest(BaseModel):
+    # Managers must explicitly confirm approving a swap that trips an adult
+    # rule on either side at approval time (state may have drifted since the
+    # swap was proposed); the first attempt returns needs_confirm instead of
+    # approving. Under-18 violations on either side have no confirm path.
+    confirm: bool = False
+
+
+class SwapActionOut(BaseModel):
+    status: Literal["approved", "needs_confirm", "rejected"]
+    reason: Optional[str] = None
+    summary: Optional[RotaSummaryOut] = None
+    swaps: list[SwapOut] = []
 
 
 class AdminStatsOut(BaseModel):

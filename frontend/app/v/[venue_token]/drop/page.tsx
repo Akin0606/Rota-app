@@ -15,6 +15,7 @@ import {
   dropShift,
   getStaffRota,
   giveShift,
+  proposeSwap,
 } from "@/lib/api";
 import { DAY_NAMES, addDays, parseISODate, pinStorageKey } from "@/lib/utils";
 
@@ -38,6 +39,11 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
   const [giveTarget, setGiveTarget] = useState<StaffRotaAssignment | null>(null);
   const [giveeId, setGiveeId] = useState<string | null>(null);
   const [giving, setGiving] = useState(false);
+
+  const [swapTarget, setSwapTarget] = useState<StaffRotaAssignment | null>(null);
+  const [swapColleagueId, setSwapColleagueId] = useState<string | null>(null);
+  const [swapTheirAssignmentId, setSwapTheirAssignmentId] = useState<string | null>(null);
+  const [swapping, setSwapping] = useState(false);
 
   useEffect(() => {
     const storedPin = sessionStorage.getItem(pinStorageKey(venue_token));
@@ -101,6 +107,34 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
       showToast(err instanceof ApiError ? err.message : "Could not give away this shift");
     } finally {
       setGiving(false);
+    }
+  }
+
+  function openSwap(a: StaffRotaAssignment) {
+    setSwapTarget(a);
+    setSwapColleagueId(null);
+    setSwapTheirAssignmentId(null);
+  }
+
+  function closeSwap() {
+    setSwapTarget(null);
+    setSwapColleagueId(null);
+    setSwapTheirAssignmentId(null);
+  }
+
+  async function confirmSwap() {
+    if (!pin || !swapTarget || !swapColleagueId || !swapTheirAssignmentId) return;
+    setSwapping(true);
+    try {
+      const result = await proposeSwap(venue_token, pin, swapTarget.id, swapColleagueId, swapTheirAssignmentId);
+      setData(result);
+      const colleagueName = data?.venue_staff.find((s) => s.id === swapColleagueId)?.name ?? "them";
+      closeSwap();
+      showToast(`Swap offered to ${colleagueName} — nothing changes until they respond`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not propose this swap");
+    } finally {
+      setSwapping(false);
     }
   }
 
@@ -190,13 +224,18 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                 const shift = shiftsById.get(a.shift_id!);
                 if (!shift) return null;
                 const dayDate = addDays(weekStart, a.day_index);
-                const dropped = Boolean(a.drop_status) || a.id === justDroppedId;
+                const mySwap = data.pending_swaps.find(
+                  (s) => s.role === "initiator" && s.my_shift.assignment_id === a.id,
+                );
+                const dropped = Boolean(a.drop_status) || a.id === justDroppedId || Boolean(mySwap);
                 const targetName = a.target_staff_id
                   ? data.venue_staff.find((s) => s.id === a.target_staff_id)?.name
                   : null;
                 let badge = "Drop requested";
                 if (a.drop_status === "pending_approval") badge = "Claim pending approval";
                 else if (targetName) badge = `Offered to ${targetName}`;
+                else if (mySwap?.status === "pending_approval") badge = "Swap pending approval";
+                else if (mySwap) badge = `Swap offered to ${mySwap.counterpart_name}`;
                 return (
                   <div
                     key={a.id}
@@ -226,6 +265,12 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                           className="rounded-lg border border-accent-border bg-surface-card px-3 py-1.5 text-[12px] font-semibold text-accent"
                         >
                           Give to someone
+                        </button>
+                        <button
+                          onClick={() => openSwap(a)}
+                          className="rounded-lg border border-accent-border bg-surface-card px-3 py-1.5 text-[12px] font-semibold text-accent"
+                        >
+                          Swap for one of theirs
                         </button>
                       </div>
                     )}
@@ -357,6 +402,110 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
             </div>
           </>
         )}
+      </Modal>
+
+      <Modal
+        open={swapTarget !== null}
+        onClose={closeSwap}
+        title={swapColleagueId ? "Pick which of their shifts" : "Swap with someone"}
+      >
+        {swapTarget && !swapColleagueId && (
+          <>
+            <div className="mb-4 text-sm leading-relaxed text-ink-muted">
+              Pick a colleague, then pick one of their upcoming shifts to trade for. You&apos;re still on your
+              shift until they accept — nothing changes until then.
+            </div>
+            {data.venue_staff.length === 0 ? (
+              <div className="mb-4 text-sm text-ink-muted">No other active staff to swap with.</div>
+            ) : (
+              <div className="mb-5 flex max-h-[280px] flex-col gap-1.5 overflow-y-auto">
+                {data.venue_staff.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setSwapColleagueId(s.id)}
+                    className="flex items-center justify-between rounded-lg border border-hairline bg-surface-card px-3.5 py-2.5 text-left text-sm font-semibold text-ink-label transition"
+                  >
+                    {s.name}
+                    <span className="text-[11px] font-normal text-ink-faint">{s.role}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center justify-end gap-3">
+              <button onClick={closeSwap} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted">
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+        {swapTarget &&
+          swapColleagueId &&
+          (() => {
+            const colleagueName = data.venue_staff.find((s) => s.id === swapColleagueId)?.name ?? "them";
+            const theirShifts = data.assignments
+              .filter((a) => a.staff_id === swapColleagueId && a.shift_id && !a.drop_status)
+              .filter((a) => addDays(weekStart, a.day_index).getTime() >= todayUTC)
+              .sort((a, b) => a.day_index - b.day_index);
+            return (
+              <>
+                <div className="mb-4 text-sm leading-relaxed text-ink-muted">
+                  Offering your <span className="font-semibold text-ink-label">{DAY_NAMES[swapTarget.day_index]}</span>{" "}
+                  shift. Pick one of <span className="font-semibold text-ink-label">{colleagueName}</span>
+                  &apos;s upcoming shifts to ask for in return.
+                </div>
+                {theirShifts.length === 0 ? (
+                  <div className="mb-4 text-sm text-ink-muted">{colleagueName} has no upcoming shifts to swap for.</div>
+                ) : (
+                  <div className="mb-5 flex max-h-[280px] flex-col gap-1.5 overflow-y-auto">
+                    {theirShifts.map((a) => {
+                      const shift = shiftsById.get(a.shift_id!);
+                      if (!shift) return null;
+                      const dayDate = addDays(weekStart, a.day_index);
+                      return (
+                        <button
+                          key={a.id}
+                          onClick={() => setSwapTheirAssignmentId(a.id)}
+                          className={`flex items-center justify-between rounded-lg border px-3.5 py-2.5 text-left text-sm font-semibold transition ${
+                            swapTheirAssignmentId === a.id
+                              ? "border-accent bg-accent-light text-accent"
+                              : "border-hairline bg-surface-card text-ink-label"
+                          }`}
+                        >
+                          {DAY_NAMES[a.day_index]} {dayDate.getUTCDate()} · {shift.name}
+                          <span className="text-[11px] font-normal text-ink-faint">
+                            {shift.start_time}–{shift.end_time}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    onClick={() => {
+                      setSwapColleagueId(null);
+                      setSwapTheirAssignmentId(null);
+                    }}
+                    className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+                  >
+                    ← Back
+                  </button>
+                  <div className="flex items-center gap-3">
+                    <button onClick={closeSwap} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted">
+                      Cancel
+                    </button>
+                    <button
+                      onClick={confirmSwap}
+                      disabled={swapping || !swapTheirAssignmentId}
+                      className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {swapping ? "Sending…" : "Propose swap"}
+                    </button>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
       </Modal>
 
       <Modal open={claimTarget !== null} onClose={() => setClaimTarget(null)} title="Claim this shift?">

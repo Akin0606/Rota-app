@@ -13,11 +13,15 @@ from models.schemas import (
     EmailDeliveryOut,
     PeriodClaimsOut,
     PeriodSubmissionsOut,
+    PeriodSwapsOut,
     RotaEmailRequest,
     RotaSummaryOut,
     SubmissionEntryOut,
+    SwapActionOut,
+    SwapApproveRequest,
+    SwapOut,
 )
-from services import email_service, rota_export
+from services import email_service, rota_export, swap_guard
 from services.auth_service import get_current_manager, get_manager_venue
 from services.solver import (
     AVAILABLE,
@@ -448,6 +452,247 @@ def reject_claim(period_id: str, assignment_id: str, manager: dict = Depends(get
     )
 
 
+def _get_swaps(venue_id: str, period_id: str) -> list[dict]:
+    supabase = get_supabase()
+    rows = (
+        supabase.table("shift_swaps")
+        .select("*")
+        .eq("venue_id", venue_id)
+        .eq("period_id", period_id)
+        .eq("status", "pending_approval")
+        .execute()
+        .data
+    )
+    if not rows:
+        return []
+
+    assignment_ids = {r["initiator_assignment_id"] for r in rows} | {r["recipient_assignment_id"] for r in rows}
+    assignments = {
+        a["id"]: a
+        for a in supabase.table("rota_assignments").select("id, day_index, shift_id").in_("id", list(assignment_ids)).execute().data
+    }
+
+    staff_ids = {r["initiator_staff_id"] for r in rows} | {r["recipient_staff_id"] for r in rows}
+    names = {
+        s["id"]: s["name"]
+        for s in supabase.table("staff_members").select("id, name").eq("venue_id", venue_id).in_("id", list(staff_ids)).execute().data
+    }
+
+    out = []
+    for r in rows:
+        initiator_a = assignments.get(r["initiator_assignment_id"])
+        recipient_a = assignments.get(r["recipient_assignment_id"])
+        if not initiator_a or not recipient_a:
+            continue
+        out.append(
+            {
+                "id": r["id"],
+                "initiator_staff_id": r["initiator_staff_id"],
+                "initiator_staff_name": names.get(r["initiator_staff_id"], "Unknown"),
+                "initiator_day_index": initiator_a["day_index"],
+                "initiator_shift_id": initiator_a["shift_id"],
+                "recipient_staff_id": r["recipient_staff_id"],
+                "recipient_staff_name": names.get(r["recipient_staff_id"], "Unknown"),
+                "recipient_day_index": recipient_a["day_index"],
+                "recipient_shift_id": recipient_a["shift_id"],
+                "reason": r["reason"],
+            }
+        )
+    return out
+
+
+@router.get("/{period_id}/swaps", response_model=PeriodSwapsOut)
+def get_swaps(period_id: str, manager: dict = Depends(get_current_manager)):
+    venue = get_manager_venue(manager["id"])
+    _get_period_or_404(venue["id"], period_id)
+    return PeriodSwapsOut(period_id=period_id, swaps=_get_swaps(venue["id"], period_id))
+
+
+@router.post("/{period_id}/swaps/{swap_id}/approve", response_model=SwapActionOut)
+def approve_swap(
+    period_id: str,
+    swap_id: str,
+    payload: SwapApproveRequest,
+    manager: dict = Depends(get_current_manager),
+):
+    """Re-runs both check_manual_assignment calls against current state before
+    committing — state may have drifted since the swap was accepted (e.g.
+    either party picked up other shifts in the meantime) — same
+    needs_confirm/risk-popup gate and re-check-at-approval-time pattern as
+    approve_claim. The worse of the two sides still governs."""
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+    supabase = get_supabase()
+
+    swap_res = (
+        supabase.table("shift_swaps")
+        .select("*")
+        .eq("id", swap_id)
+        .eq("period_id", period_id)
+        .eq("status", "pending_approval")
+        .limit(1)
+        .execute()
+    )
+    if not swap_res.data:
+        raise HTTPException(status_code=404, detail="Swap not found")
+    swap = swap_res.data[0]
+
+    initiator_res = (
+        supabase.table("staff_members")
+        .select("id, name, is_under_18")
+        .eq("id", swap["initiator_staff_id"])
+        .eq("venue_id", venue["id"])
+        .limit(1)
+        .execute()
+    )
+    recipient_res = (
+        supabase.table("staff_members")
+        .select("id, name, is_under_18")
+        .eq("id", swap["recipient_staff_id"])
+        .eq("venue_id", venue["id"])
+        .limit(1)
+        .execute()
+    )
+    if not initiator_res.data or not recipient_res.data:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    initiator = initiator_res.data[0]
+    recipient = recipient_res.data[0]
+
+    initiator_assignment_res = (
+        supabase.table("rota_assignments").select("*").eq("id", swap["initiator_assignment_id"]).limit(1).execute()
+    )
+    recipient_assignment_res = (
+        supabase.table("rota_assignments").select("*").eq("id", swap["recipient_assignment_id"]).limit(1).execute()
+    )
+    if not initiator_assignment_res.data or not recipient_assignment_res.data:
+        raise HTTPException(status_code=404, detail="One of the shifts in this swap no longer exists")
+    initiator_assignment = initiator_assignment_res.data[0]
+    recipient_assignment = recipient_assignment_res.data[0]
+
+    shifts_by_id = {
+        s["id"]: s for s in supabase.table("shifts").select("*").eq("venue_id", venue["id"]).execute().data
+    }
+    initiator_shift = shifts_by_id.get(initiator_assignment["shift_id"])
+    recipient_shift = shifts_by_id.get(recipient_assignment["shift_id"])
+    if not initiator_shift or not recipient_shift:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    initiator_other = (
+        supabase.table("rota_assignments")
+        .select("day_index, shift_id")
+        .eq("period_id", period_id)
+        .eq("staff_id", initiator["id"])
+        .neq("day_index", initiator_assignment["day_index"])
+        .execute()
+        .data
+    )
+    recipient_other = (
+        supabase.table("rota_assignments")
+        .select("day_index, shift_id")
+        .eq("period_id", period_id)
+        .eq("staff_id", recipient["id"])
+        .neq("day_index", recipient_assignment["day_index"])
+        .execute()
+        .data
+    )
+
+    rules_res = (
+        supabase.table("scheduling_rules")
+        .select("max_hours_per_week, min_rest_hours, require_day_off")
+        .eq("venue_id", venue["id"])
+        .limit(1)
+        .execute()
+    )
+    rules = rules_res.data[0] if rules_res.data else {
+        "max_hours_per_week": 48,
+        "min_rest_hours": 11,
+        "require_day_off": True,
+    }
+
+    check_a = check_manual_assignment(
+        initiator, recipient_assignment["day_index"], recipient_shift, initiator_other, shifts_by_id, rules
+    )
+    check_b = check_manual_assignment(
+        recipient, initiator_assignment["day_index"], initiator_shift, recipient_other, shifts_by_id, rules
+    )
+
+    block_reasons = [c["reason"] for c in (check_a, check_b) if c["severity"] == "block"]
+    if block_reasons:
+        raise HTTPException(status_code=400, detail="; ".join(block_reasons))
+
+    confirm_reasons = [c["reason"] for c in (check_a, check_b) if c["severity"] == "confirm"]
+    if confirm_reasons and not payload.confirm:
+        return SwapActionOut(
+            status="needs_confirm",
+            reason="; ".join(confirm_reasons),
+            swaps=_get_swaps(venue["id"], period_id),
+        )
+
+    from datetime import datetime
+
+    swap_guard.execute_swap(period_id, initiator_assignment, recipient_assignment)
+    supabase.table("shift_swaps").update(
+        {"status": "approved", "resolved_at": datetime.utcnow().isoformat()}
+    ).eq("id", swap["id"]).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "action": "shift_swap_approved",
+            "detail": f"Manager approved {initiator['name']} and {recipient['name']}'s shift swap.",
+        }
+    ).execute()
+
+    return SwapActionOut(
+        status="approved",
+        summary=_build_summary(venue["id"], period),
+        swaps=_get_swaps(venue["id"], period_id),
+    )
+
+
+@router.post("/{period_id}/swaps/{swap_id}/reject", response_model=SwapActionOut)
+def reject_swap(period_id: str, swap_id: str, manager: dict = Depends(get_current_manager)):
+    """Rejects a pending swap. Neither rota_assignments row was ever touched,
+    so unlike a claim-reject there's nothing to revert there — just marks the
+    swap itself as rejected."""
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+    supabase = get_supabase()
+
+    swap_res = (
+        supabase.table("shift_swaps")
+        .select("*")
+        .eq("id", swap_id)
+        .eq("period_id", period_id)
+        .eq("status", "pending_approval")
+        .limit(1)
+        .execute()
+    )
+    if not swap_res.data:
+        raise HTTPException(status_code=404, detail="Swap not found")
+    swap = swap_res.data[0]
+
+    from datetime import datetime
+
+    supabase.table("shift_swaps").update(
+        {"status": "rejected", "resolved_at": datetime.utcnow().isoformat()}
+    ).eq("id", swap["id"]).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "action": "shift_swap_rejected",
+            "detail": "Manager rejected a shift swap.",
+        }
+    ).execute()
+
+    return SwapActionOut(
+        status="rejected",
+        summary=_build_summary(venue["id"], period),
+        swaps=_get_swaps(venue["id"], period_id),
+    )
+
+
 def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
     """Runs the CP-SAT solver for a venue's period and persists the result.
     Shared by the manager-facing generate endpoint and the admin console's
@@ -566,7 +811,23 @@ def edit_assignment(
     if payload.action == "remove":
         # Removing can only improve compliance, so no rule-checking. No extra
         # ownership check needed either: period_id is already venue-scoped, so
-        # a foreign staff_id/shift_id simply matches zero rows.
+        # a foreign staff_id/shift_id simply matches zero rows. Still must not
+        # silently delete a row that's the subject of a pending swap — the
+        # swap would be left pointing at a row that no longer exists.
+        target_rows = (
+            supabase.table("rota_assignments")
+            .select("id")
+            .eq("period_id", period_id)
+            .eq("staff_id", payload.staff_id)
+            .eq("day_index", payload.day_index)
+            .eq("shift_id", payload.shift_id)
+            .execute()
+            .data
+        )
+        if swap_guard.active_swaps_for_assignments([r["id"] for r in target_rows]):
+            raise HTTPException(
+                status_code=400, detail="This shift has a swap pending — resolve it before removing"
+            )
         supabase.table("rota_assignments").delete().eq("period_id", period_id).eq(
             "staff_id", payload.staff_id
         ).eq("day_index", payload.day_index).eq("shift_id", payload.shift_id).execute()
@@ -631,7 +892,23 @@ def edit_assignment(
         return AssignmentEditResponse(status="needs_confirm", reason=check["reason"])
 
     # Enforce one shift per staff per day: clear any existing assignment for
-    # this staff on this day before adding the new one.
+    # this staff on this day before adding the new one — but never a row
+    # that's the subject of a pending swap for this staff member.
+    same_day_rows = (
+        supabase.table("rota_assignments")
+        .select("id")
+        .eq("period_id", period_id)
+        .eq("staff_id", payload.staff_id)
+        .eq("day_index", payload.day_index)
+        .execute()
+        .data
+    )
+    if swap_guard.active_swaps_for_assignments([r["id"] for r in same_day_rows]):
+        raise HTTPException(
+            status_code=400,
+            detail="This staff member has a swap pending on that day — resolve it before reassigning",
+        )
+
     supabase.table("rota_assignments").delete().eq("period_id", period_id).eq(
         "staff_id", payload.staff_id
     ).eq("day_index", payload.day_index).execute()

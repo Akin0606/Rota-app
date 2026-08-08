@@ -11,6 +11,8 @@ from models.schemas import (
     AvailabilityGiveActionRequest,
     AvailabilityGiveRequest,
     AvailabilitySubmitRequest,
+    AvailabilitySwapActionRequest,
+    AvailabilitySwapProposeRequest,
     ClaimSubmitResponse,
     ForgotPinRequest,
     PinAuthRequest,
@@ -19,7 +21,7 @@ from models.schemas import (
     WeekAvailabilityOut,
     WeekAvailabilityRequest,
 )
-from services import email_service, notice_window, rate_limit
+from services import email_service, notice_window, rate_limit, swap_guard
 from services.auth_service import INACTIVE_VENUE_MESSAGE
 from services.solver import UNAVAILABLE, check_manual_assignment
 
@@ -424,6 +426,58 @@ def _get_published_period(venue_id: str) -> Optional[dict]:
     return res.data[0] if res.data else None
 
 
+def _pending_swaps_for_staff(period_id: str, staff_id: str) -> list[dict]:
+    """Swap proposals the caller is party to (either side), still unresolved.
+    Resolved swaps (approved/declined/rejected) are omitted — their effect is
+    already reflected in `assignments`, or simply gone, matching how a
+    resolved drop/give also stops appearing once it's settled."""
+    supabase = get_supabase()
+    rows = (
+        supabase.table("shift_swaps")
+        .select("*")
+        .eq("period_id", period_id)
+        .in_("status", ["pending_response", "pending_approval"])
+        .or_(f"initiator_staff_id.eq.{staff_id},recipient_staff_id.eq.{staff_id}")
+        .execute()
+        .data
+    )
+    if not rows:
+        return []
+
+    counterpart_ids = {
+        (r["recipient_staff_id"] if r["initiator_staff_id"] == staff_id else r["initiator_staff_id"])
+        for r in rows
+    }
+    names = {
+        s["id"]: s["name"]
+        for s in supabase.table("staff_members").select("id, name").in_("id", list(counterpart_ids)).execute().data
+    }
+
+    out = []
+    for r in rows:
+        is_initiator = r["initiator_staff_id"] == staff_id
+        counterpart_id = r["recipient_staff_id"] if is_initiator else r["initiator_staff_id"]
+        my_side = "initiator" if is_initiator else "recipient"
+        my_assignment_id = r["initiator_assignment_id"] if is_initiator else r["recipient_assignment_id"]
+        their_assignment_id = r["recipient_assignment_id"] if is_initiator else r["initiator_assignment_id"]
+        out.append(
+            {
+                "id": r["id"],
+                "role": my_side,
+                "status": r["status"],
+                "counterpart_id": counterpart_id,
+                "counterpart_name": names.get(counterpart_id, "a teammate"),
+                "my_assignment_id": my_assignment_id,
+                "their_assignment_id": their_assignment_id,
+            }
+        )
+    return out
+
+
+def _swap_side_from_assignment(assignment: dict) -> dict:
+    return {"assignment_id": assignment["id"], "day_index": assignment["day_index"], "shift_id": assignment["shift_id"]}
+
+
 def _build_staff_rota(venue: dict, staff_id: str) -> dict:
     period = _get_published_period(venue["id"])
     if not period:
@@ -437,6 +491,7 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
         .execute()
         .data
     )
+    assignments_by_id = {a["id"]: a for a in assignments}
 
     staff_ids = list({a["staff_id"] for a in assignments})
     team = (
@@ -456,6 +511,24 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
         if s["id"] != staff_id
     ]
 
+    pending_swaps = []
+    for sw in _pending_swaps_for_staff(period["id"], staff_id):
+        my_a = assignments_by_id.get(sw["my_assignment_id"])
+        their_a = assignments_by_id.get(sw["their_assignment_id"])
+        if not my_a or not their_a:
+            continue
+        pending_swaps.append(
+            {
+                "id": sw["id"],
+                "role": sw["role"],
+                "status": sw["status"],
+                "counterpart_id": sw["counterpart_id"],
+                "counterpart_name": sw["counterpart_name"],
+                "my_shift": _swap_side_from_assignment(my_a),
+                "their_shift": _swap_side_from_assignment(their_a),
+            }
+        )
+
     return {
         "venue_name": venue["name"],
         "staff_id": staff_id,
@@ -464,6 +537,7 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
         "assignments": assignments,
         "team": team,
         "venue_staff": venue_staff,
+        "pending_swaps": pending_swaps,
     }
 
 
@@ -507,6 +581,9 @@ def drop_shift(venue_token: str, payload: AvailabilityDropRequest):
 
     if assignment.get("drop_status"):
         raise HTTPException(status_code=400, detail="This shift has already been dropped")
+
+    if swap_guard.active_swaps_for_assignments([assignment["id"]]):
+        raise HTTPException(status_code=400, detail="This shift has a swap offer pending — resolve that first")
 
     shift_date = date.fromisoformat(str(period["week_start"])) + timedelta(days=assignment["day_index"])
     if shift_date < date.today():
@@ -647,7 +724,23 @@ def claim_shift(venue_token: str, payload: AvailabilityClaimRequest):
 
     if not reasons:
         # Enforce one-shift-per-day for the claimant before handing them the
-        # claimed shift.
+        # claimed shift — but never silently blow away a row that's the
+        # subject of one of the claimant's own pending swaps.
+        same_day = (
+            supabase.table("rota_assignments")
+            .select("id")
+            .eq("period_id", period["id"])
+            .eq("staff_id", staff["id"])
+            .eq("day_index", assignment["day_index"])
+            .execute()
+            .data
+        )
+        if swap_guard.active_swaps_for_assignments([r["id"] for r in same_day]):
+            raise HTTPException(
+                status_code=400,
+                detail="You have a swap pending on that day — resolve it before claiming this shift",
+            )
+
         supabase.table("rota_assignments").delete().eq("period_id", period["id"]).eq(
             "staff_id", staff["id"]
         ).eq("day_index", assignment["day_index"]).execute()
@@ -728,6 +821,9 @@ def give_shift(venue_token: str, payload: AvailabilityGiveRequest):
 
     if assignment.get("drop_status"):
         raise HTTPException(status_code=400, detail="This shift has already been dropped")
+
+    if swap_guard.active_swaps_for_assignments([assignment["id"]]):
+        raise HTTPException(status_code=400, detail="This shift has a swap offer pending — resolve that first")
 
     shift_date = date.fromisoformat(str(period["week_start"])) + timedelta(days=assignment["day_index"])
     if shift_date < date.today():
@@ -847,6 +943,21 @@ def accept_give(venue_token: str, payload: AvailabilityGiveActionRequest):
         raise HTTPException(status_code=400, detail=check["reason"])
 
     if check["severity"] == "ok":
+        same_day = (
+            supabase.table("rota_assignments")
+            .select("id")
+            .eq("period_id", period["id"])
+            .eq("staff_id", staff["id"])
+            .eq("day_index", assignment["day_index"])
+            .execute()
+            .data
+        )
+        if swap_guard.active_swaps_for_assignments([r["id"] for r in same_day]):
+            raise HTTPException(
+                status_code=400,
+                detail="You have a swap pending on that day — resolve it before accepting this shift",
+            )
+
         supabase.table("rota_assignments").delete().eq("period_id", period["id"]).eq(
             "staff_id", staff["id"]
         ).eq("day_index", assignment["day_index"]).execute()
@@ -945,6 +1056,305 @@ def decline_give(venue_token: str, payload: AvailabilityGiveActionRequest):
             "detail": (
                 f"{staff['name']} declined {original_name}'s {DAY_NAMES[assignment['day_index']]} shift offer"
             ),
+        }
+    ).execute()
+
+    return _build_staff_rota(venue, staff["id"])
+
+
+def _own_open_assignment(period_id: str, staff_id: str, assignment_id: str) -> dict:
+    """Fetches an assignment the caller owns outright — not already dropped,
+    given, or tied up in another swap. Shared validation for both sides of a
+    swap proposal. period_id is already venue-scoped (via _get_published_period)
+    and staff_id is validated venue-scoped by the caller, so no separate
+    venue check is needed here."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("rota_assignments")
+        .select("*")
+        .eq("id", assignment_id)
+        .eq("period_id", period_id)
+        .eq("staff_id", staff_id)
+        .limit(1)
+        .execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Shift not found")
+    assignment = res.data[0]
+    if not assignment.get("shift_id"):
+        raise HTTPException(status_code=404, detail="Shift not found")
+    if assignment.get("drop_status"):
+        raise HTTPException(status_code=400, detail="That shift is already mid-drop/give — resolve it first")
+    if swap_guard.active_swaps_for_assignments([assignment["id"]]):
+        raise HTTPException(status_code=400, detail="That shift already has a swap pending")
+    return assignment
+
+
+@router.post("/{venue_token}/rota/swap/propose", response_model=StaffRotaOut)
+def propose_swap(venue_token: str, payload: AvailabilitySwapProposeRequest):
+    """Initiator offers one of their own shifts in exchange for one of a named
+    colleague's shifts. Neither rota_assignments row is touched here — both
+    stay with their current owners until the swap is fully accepted (or
+    approved, if it needs a manager) — same no-gap guarantee as give/drop,
+    just symmetric across two rows instead of one."""
+    from datetime import date, timedelta
+
+    venue = _get_venue_or_404(venue_token)
+    staff = _get_staff_by_pin(venue["id"], payload.pin)
+    supabase = get_supabase()
+
+    period = _get_published_period(venue["id"])
+    if not period:
+        raise HTTPException(status_code=404, detail="No published rota found")
+
+    if payload.target_staff_id == staff["id"]:
+        raise HTTPException(status_code=400, detail="You can't swap a shift with yourself")
+
+    target_res = (
+        supabase.table("staff_members")
+        .select("id, name, email")
+        .eq("id", payload.target_staff_id)
+        .eq("venue_id", venue["id"])
+        .eq("is_active", True)
+        .limit(1)
+        .execute()
+    )
+    if not target_res.data:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    target = target_res.data[0]
+
+    my_assignment = _own_open_assignment(period["id"], staff["id"], payload.assignment_id)
+    their_assignment = _own_open_assignment(period["id"], target["id"], payload.target_assignment_id)
+
+    week_start = date.fromisoformat(str(period["week_start"]))
+    if week_start + timedelta(days=my_assignment["day_index"]) < date.today():
+        raise HTTPException(status_code=400, detail="Can't swap a shift that's already passed")
+    if week_start + timedelta(days=their_assignment["day_index"]) < date.today():
+        raise HTTPException(status_code=400, detail="Can't request a shift that's already passed")
+
+    shifts_by_id = {s["id"]: s for s in _get_shifts(venue["id"])}
+    my_shift = shifts_by_id.get(my_assignment["shift_id"])
+    their_shift = shifts_by_id.get(their_assignment["shift_id"])
+    if not my_shift or not their_shift:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    supabase.table("shift_swaps").insert(
+        {
+            "venue_id": venue["id"],
+            "period_id": period["id"],
+            "initiator_staff_id": staff["id"],
+            "initiator_assignment_id": my_assignment["id"],
+            "recipient_staff_id": target["id"],
+            "recipient_assignment_id": their_assignment["id"],
+        }
+    ).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": staff["id"],
+            "action": "shift_swap_proposed",
+            "detail": (
+                f"{staff['name']} offered their {DAY_NAMES[my_assignment['day_index']]} {my_shift['name']} shift "
+                f"to {target['name']} in exchange for their {DAY_NAMES[their_assignment['day_index']]} "
+                f"{their_shift['name']} shift"
+            ),
+        }
+    ).execute()
+
+    email_service.send_shift_swap_email(
+        to_email=target.get("email"),
+        name=target["name"],
+        initiator_name=staff["name"],
+        venue_name=venue["name"],
+        their_shift_label=f"{DAY_NAMES[my_assignment['day_index']]} {my_shift['name']}",
+        my_shift_label=f"{DAY_NAMES[their_assignment['day_index']]} {their_shift['name']}",
+        venue_link_url=f"{get_settings().frontend_url}/v/{venue['link_token']}",
+    )
+
+    return _build_staff_rota(venue, staff["id"])
+
+
+def _get_active_swap_or_404(period_id: str, swap_id: str, *, statuses: tuple[str, ...]) -> dict:
+    supabase = get_supabase()
+    res = (
+        supabase.table("shift_swaps")
+        .select("*")
+        .eq("id", swap_id)
+        .eq("period_id", period_id)
+        .in_("status", list(statuses))
+        .limit(1)
+        .execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Swap not found")
+    return res.data[0]
+
+
+@router.post("/{venue_token}/rota/swap/accept", response_model=ClaimSubmitResponse)
+def accept_swap(venue_token: str, payload: AvailabilitySwapActionRequest):
+    """Recipient accepts a proposed swap. Validates BOTH resulting positions —
+    initiator into the recipient's old shift, recipient into the initiator's
+    old shift — via check_manual_assignment. The worse of the two outcomes
+    governs the whole swap: any block hard-rejects it (never reaches
+    pending), any confirm sends the whole thing to manager approval, and only
+    if both sides are "ok" does it auto-approve and actually move anyone."""
+    venue = _get_venue_or_404(venue_token)
+    staff = _get_staff_by_pin(venue["id"], payload.pin)
+    supabase = get_supabase()
+
+    period = _get_published_period(venue["id"])
+    if not period:
+        raise HTTPException(status_code=404, detail="No published rota found")
+
+    swap = _get_active_swap_or_404(period["id"], payload.swap_id, statuses=("pending_response",))
+    if swap["recipient_staff_id"] != staff["id"]:
+        raise HTTPException(status_code=404, detail="Swap not found")
+
+    initiator_res = (
+        supabase.table("staff_members")
+        .select("id, name, is_under_18")
+        .eq("id", swap["initiator_staff_id"])
+        .limit(1)
+        .execute()
+    )
+    if not initiator_res.data:
+        raise HTTPException(status_code=404, detail="Initiator not found")
+    initiator = initiator_res.data[0]
+
+    recipient = (
+        supabase.table("staff_members")
+        .select("id, name, is_under_18")
+        .eq("id", staff["id"])
+        .limit(1)
+        .execute()
+        .data[0]
+    )
+
+    initiator_assignment_res = (
+        supabase.table("rota_assignments").select("*").eq("id", swap["initiator_assignment_id"]).limit(1).execute()
+    )
+    recipient_assignment_res = (
+        supabase.table("rota_assignments").select("*").eq("id", swap["recipient_assignment_id"]).limit(1).execute()
+    )
+    if not initiator_assignment_res.data or not recipient_assignment_res.data:
+        raise HTTPException(status_code=404, detail="One of the shifts in this swap no longer exists")
+    initiator_assignment = initiator_assignment_res.data[0]
+    recipient_assignment = recipient_assignment_res.data[0]
+
+    shifts_by_id = {s["id"]: s for s in _get_shifts(venue["id"])}
+    initiator_shift = shifts_by_id.get(initiator_assignment["shift_id"])
+    recipient_shift = shifts_by_id.get(recipient_assignment["shift_id"])
+    if not initiator_shift or not recipient_shift:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    initiator_other = (
+        supabase.table("rota_assignments")
+        .select("day_index, shift_id")
+        .eq("period_id", period["id"])
+        .eq("staff_id", initiator["id"])
+        .neq("day_index", initiator_assignment["day_index"])
+        .execute()
+        .data
+    )
+    recipient_other = (
+        supabase.table("rota_assignments")
+        .select("day_index, shift_id")
+        .eq("period_id", period["id"])
+        .eq("staff_id", recipient["id"])
+        .neq("day_index", recipient_assignment["day_index"])
+        .execute()
+        .data
+    )
+
+    rules = _get_rules_for_solver(venue["id"])
+    # Initiator moving into the recipient's old slot; recipient moving into
+    # the initiator's old slot.
+    check_a = check_manual_assignment(
+        initiator, recipient_assignment["day_index"], recipient_shift, initiator_other, shifts_by_id, rules
+    )
+    check_b = check_manual_assignment(
+        recipient, initiator_assignment["day_index"], initiator_shift, recipient_other, shifts_by_id, rules
+    )
+
+    block_reasons = [c["reason"] for c in (check_a, check_b) if c["severity"] == "block"]
+    if block_reasons:
+        raise HTTPException(status_code=400, detail="; ".join(block_reasons))
+
+    confirm_reasons = [c["reason"] for c in (check_a, check_b) if c["severity"] == "confirm"]
+    if confirm_reasons:
+        reason_text = "; ".join(confirm_reasons)
+        supabase.table("shift_swaps").update({"status": "pending_approval", "reason": reason_text}).eq(
+            "id", swap["id"]
+        ).execute()
+
+        supabase.table("activity_log").insert(
+            {
+                "venue_id": venue["id"],
+                "staff_id": staff["id"],
+                "action": "shift_swap_accept_pending",
+                "detail": (
+                    f"{recipient['name']} accepted {initiator['name']}'s swap offer — needs manager approval "
+                    f"({reason_text})."
+                ),
+            }
+        ).execute()
+
+        return ClaimSubmitResponse(status="pending", reason=reason_text, rota=_build_staff_rota(venue, staff["id"]))
+
+    from datetime import datetime
+
+    swap_guard.execute_swap(period["id"], initiator_assignment, recipient_assignment)
+    supabase.table("shift_swaps").update(
+        {"status": "approved", "resolved_at": datetime.utcnow().isoformat()}
+    ).eq("id", swap["id"]).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": staff["id"],
+            "action": "shift_swap_accepted",
+            "detail": f"{recipient['name']} and {initiator['name']} swapped shifts — auto-approved.",
+        }
+    ).execute()
+
+    return ClaimSubmitResponse(status="approved", rota=_build_staff_rota(venue, staff["id"]))
+
+
+@router.post("/{venue_token}/rota/swap/decline", response_model=StaffRotaOut)
+def decline_swap(venue_token: str, payload: AvailabilitySwapActionRequest):
+    """Recipient declines. Reverts cleanly — neither rota_assignments row was
+    ever touched, so there's nothing to revert there; just marks the swap
+    proposal itself as declined."""
+    venue = _get_venue_or_404(venue_token)
+    staff = _get_staff_by_pin(venue["id"], payload.pin)
+    supabase = get_supabase()
+
+    period = _get_published_period(venue["id"])
+    if not period:
+        raise HTTPException(status_code=404, detail="No published rota found")
+
+    swap = _get_active_swap_or_404(period["id"], payload.swap_id, statuses=("pending_response",))
+    if swap["recipient_staff_id"] != staff["id"]:
+        raise HTTPException(status_code=404, detail="Swap not found")
+
+    initiator_res = (
+        supabase.table("staff_members").select("id, name").eq("id", swap["initiator_staff_id"]).limit(1).execute()
+    )
+    initiator_name = initiator_res.data[0]["name"] if initiator_res.data else "a teammate"
+
+    from datetime import datetime
+
+    supabase.table("shift_swaps").update(
+        {"status": "declined", "resolved_at": datetime.utcnow().isoformat()}
+    ).eq("id", swap["id"]).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": staff["id"],
+            "action": "shift_swap_declined",
+            "detail": f"{staff['name']} declined {initiator_name}'s swap offer",
         }
     ).execute()
 

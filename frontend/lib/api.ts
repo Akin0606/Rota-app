@@ -159,6 +159,22 @@ export type StaffRotaTeamMember = {
   role: string;
 };
 
+export type SwapSide = {
+  assignment_id: string;
+  day_index: number;
+  shift_id: string;
+};
+
+export type SwapForStaff = {
+  id: string;
+  role: "initiator" | "recipient";
+  status: "pending_response" | "pending_approval";
+  counterpart_id: string;
+  counterpart_name: string;
+  my_shift: SwapSide;
+  their_shift: SwapSide;
+};
+
 export type StaffRota = {
   venue_name: string;
   staff_id: string;
@@ -167,6 +183,7 @@ export type StaffRota = {
   assignments: StaffRotaAssignment[];
   team: StaffRotaTeamMember[];
   venue_staff: StaffRotaTeamMember[];
+  pending_swaps: SwapForStaff[];
 };
 
 export function getStaffRota(venueToken: string, pin: string): Promise<StaffRota> {
@@ -224,6 +241,38 @@ export function declineGive(venueToken: string, pin: string, assignmentId: strin
   return request(`/api/availability/${venueToken}/rota/give/decline`, {
     method: "POST",
     body: JSON.stringify({ pin, assignment_id: assignmentId }),
+  });
+}
+
+export function proposeSwap(
+  venueToken: string,
+  pin: string,
+  assignmentId: string,
+  targetStaffId: string,
+  targetAssignmentId: string,
+): Promise<StaffRota> {
+  return request(`/api/availability/${venueToken}/rota/swap/propose`, {
+    method: "POST",
+    body: JSON.stringify({
+      pin,
+      assignment_id: assignmentId,
+      target_staff_id: targetStaffId,
+      target_assignment_id: targetAssignmentId,
+    }),
+  });
+}
+
+export function acceptSwap(venueToken: string, pin: string, swapId: string): Promise<ClaimSubmitResult> {
+  return request(`/api/availability/${venueToken}/rota/swap/accept`, {
+    method: "POST",
+    body: JSON.stringify({ pin, swap_id: swapId }),
+  });
+}
+
+export function declineSwap(venueToken: string, pin: string, swapId: string): Promise<StaffRota> {
+  return request(`/api/availability/${venueToken}/rota/swap/decline`, {
+    method: "POST",
+    body: JSON.stringify({ pin, swap_id: swapId }),
   });
 }
 
@@ -655,6 +704,46 @@ export function approveClaim(
 
 export function rejectClaim(periodId: string, assignmentId: string): Promise<ClaimActionResult> {
   return authedRequest(`/api/rota/${periodId}/claims/${assignmentId}/reject`, { method: "POST" });
+}
+
+export type Swap = {
+  id: string;
+  initiator_staff_id: string;
+  initiator_staff_name: string;
+  initiator_day_index: number;
+  initiator_shift_id: string;
+  recipient_staff_id: string;
+  recipient_staff_name: string;
+  recipient_day_index: number;
+  recipient_shift_id: string;
+  reason: string | null;
+};
+
+export type PeriodSwaps = {
+  period_id: string;
+  swaps: Swap[];
+};
+
+export type SwapActionResult = {
+  status: "approved" | "needs_confirm" | "rejected";
+  reason?: string | null;
+  summary?: RotaSummary | null;
+  swaps: Swap[];
+};
+
+export function getSwaps(periodId: string): Promise<PeriodSwaps> {
+  return authedRequest(`/api/rota/${periodId}/swaps`);
+}
+
+export function approveSwap(periodId: string, swapId: string, confirm = false): Promise<SwapActionResult> {
+  return authedRequest(`/api/rota/${periodId}/swaps/${swapId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ confirm }),
+  });
+}
+
+export function rejectSwap(periodId: string, swapId: string): Promise<SwapActionResult> {
+  return authedRequest(`/api/rota/${periodId}/swaps/${swapId}/reject`, { method: "POST" });
 }
 
 // Fetches a rota export (PDF/Excel) with auth and hands back the blob plus the

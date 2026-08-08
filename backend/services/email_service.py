@@ -318,6 +318,27 @@ def send_shift_give_email(
     return _send(to_email, subject, html)
 
 
+# 6c. Shift swap proposed (to the recipient) ----------------------------------
+
+def send_shift_swap_email(
+    to_email: str,
+    name: str,
+    initiator_name: str,
+    venue_name: str,
+    their_shift_label: str,
+    my_shift_label: str,
+    venue_link_url: str,
+) -> dict:
+    subject = f"{initiator_name} wants to swap shifts with you"
+    body = f"""
+<p style="margin:0 0 8px;">Hi {name},</p>
+<p style="margin:0 0 16px;"><strong>{initiator_name}</strong> wants to swap their <strong>{their_shift_label}</strong> shift for your <strong>{my_shift_label}</strong> shift at {venue_name}. Open your hub to accept or decline.</p>
+{_button("Open your hub", venue_link_url)}
+"""
+    html = _shell(f"{initiator_name} wants to swap shifts with you", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
+    return _send(to_email, subject, html)
+
+
 # 7. Bulk reminder (to manager) ----------------------------------------------
 
 def send_bulk_reminder_email(
