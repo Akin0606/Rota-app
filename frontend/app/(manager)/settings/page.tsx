@@ -69,23 +69,12 @@ export default function SettingsPage() {
   }
 
   async function handleShiftDone(shift: Shift) {
-    // Clamp to valid bounds only on save, so the fields can be cleared while
-    // typing without snapping to a value.
-    const minStaff = Math.max(0, shift.min_staff || 0);
-    const maxStaff = Math.max(1, shift.max_staff || 0);
-    if (maxStaff < minStaff) {
-      showToast("Max staff can't be below min staff");
-      return;
-    }
     try {
       await updateShift(shift.id, {
         name: shift.name,
         start_time: shift.start_time,
         end_time: shift.end_time,
-        min_staff: minStaff,
-        max_staff: maxStaff,
       });
-      patchShiftLocal(shift.id, { min_staff: minStaff, max_staff: maxStaff });
       setEditingShiftId(null);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not save shift");
@@ -131,13 +120,10 @@ export default function SettingsPage() {
     try {
       await Promise.all([
         venue && venueName.trim() && venueName !== venue.name ? updateVenue(venueName.trim()) : null,
-        // The availability-window datetimes are owned by Scheduler now; Settings
-        // only saves these venue-level rules.
-        updateRules({
-          max_hours_per_week: rules.max_hours_per_week,
-          min_rest_hours: rules.min_rest_hours,
-          review_email_day: rules.review_email_day,
-        }),
+        // The availability-window datetimes and scheduling rules (max hours,
+        // min rest, shift staffing) are owned by Scheduler now; Settings only
+        // saves this remaining venue-level field.
+        updateRules({ review_email_day: rules.review_email_day }),
       ]);
       showToast("Settings saved!");
     } catch (err) {
@@ -202,32 +188,16 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Rules */}
-        <div className="rounded-panel border border-hairline bg-surface-card p-6">
-          <div className="mb-4 text-base font-bold text-ink">Scheduling Rules</div>
-          <div className="flex flex-col gap-3.5">
-            <RuleRow label="Max hours / week">
-              <input
-                type="number"
-                value={rules.max_hours_per_week}
-                onChange={(e) => setRules((r) => (r ? { ...r, max_hours_per_week: Number(e.target.value) } : r))}
-                className="w-[70px] rounded-lg border-[1.5px] border-unset-border px-3 py-2 text-center text-sm font-semibold text-ink outline-none"
-              />
-            </RuleRow>
-            <RuleRow label="Min rest between shifts (hrs)">
-              <input
-                type="number"
-                value={rules.min_rest_hours}
-                onChange={(e) => setRules((r) => (r ? { ...r, min_rest_hours: Number(e.target.value) } : r))}
-                className="w-[70px] rounded-lg border-[1.5px] border-unset-border px-3 py-2 text-center text-sm font-semibold text-ink outline-none"
-              />
-            </RuleRow>
-          </div>
-        </div>
-
         {/* Shifts */}
         <div className="rounded-panel border border-hairline bg-surface-card p-6">
-          <div className="mb-4 text-base font-bold text-ink">Shift Types</div>
+          <div className="mb-1 text-base font-bold text-ink">Shift Types</div>
+          <div className="mb-4 text-[13px] text-ink-faint">
+            Name and timing live here. Adjust min/max staff per shift, max hours/week and min rest in{" "}
+            <a href="/scheduler" className="font-semibold text-accent">
+              Scheduler
+            </a>
+            .
+          </div>
           <div className="flex flex-col gap-2">
             {shifts.map((sh) =>
               editingShiftId === sh.id ? (
@@ -259,45 +229,6 @@ export default function SettingsPage() {
                           <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
-                    </div>
-                    <div className="mt-1 border-t border-accent-border pt-2.5">
-                      <div className="mb-1.5 text-[12px] font-semibold text-ink-label">
-                        Staff per shift
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-2 text-[13px] text-ink-muted">
-                          Min
-                          <input
-                            type="number"
-                            min={0}
-                            value={sh.min_staff}
-                            onChange={(e) =>
-                              patchShiftLocal(sh.id, {
-                                min_staff: e.target.value === "" ? 0 : Number(e.target.value),
-                              })
-                            }
-                            className="w-[60px] rounded-lg border-[1.5px] border-accent-border bg-surface px-2 py-2 text-center text-sm font-semibold text-ink outline-none"
-                          />
-                        </label>
-                        <label className="flex items-center gap-2 text-[13px] text-ink-muted">
-                          Max
-                          <input
-                            type="number"
-                            min={1}
-                            value={sh.max_staff}
-                            onChange={(e) =>
-                              patchShiftLocal(sh.id, {
-                                max_staff: e.target.value === "" ? 0 : Number(e.target.value),
-                              })
-                            }
-                            className="w-[60px] rounded-lg border-[1.5px] border-accent-border bg-surface px-2 py-2 text-center text-sm font-semibold text-ink outline-none"
-                          />
-                        </label>
-                      </div>
-                      <div className="mt-1.5 text-[11px] text-ink-faint">
-                        The rota never puts more than <span className="font-semibold">Max</span> people on
-                        this shift, and aims for at least <span className="font-semibold">Min</span>.
-                      </div>
                     </div>
                   </div>
                   <button

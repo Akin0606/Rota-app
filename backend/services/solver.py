@@ -181,6 +181,21 @@ def check_manual_assignment(
 
         return {"severity": "ok", "reason": None}
 
+    max_hours = rules.get("max_hours_per_week", 48)
+    total_hours = sum(
+        shift_duration_hours(shifts_by_id[shid])
+        for shid in days_worked.values()
+        if shid in shifts_by_id
+    )
+    if total_hours > max_hours + 1e-6:
+        return {
+            "severity": "confirm",
+            "reason": (
+                f"{name}: this would bring their week to {total_hours:.1f}h, over the venue's "
+                f"{max_hours:.0f}h weekly limit."
+            ),
+        }
+
     min_rest = rules.get("min_rest_hours", 11)
     for neighbor_day in (day_index - 1, day_index + 1):
         gap = _neighbor_gap(neighbor_day)

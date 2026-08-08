@@ -8,10 +8,16 @@ import {
   ApiError,
   SchedulerConfig,
   SchedulerWeek,
+  SchedulingRules,
+  Shift,
   clearScheduleOverride,
+  getRules,
   getScheduler,
+  listShifts,
   setScheduleOverride,
+  updateRules,
   updateScheduler,
+  updateShift,
 } from "@/lib/api";
 
 // The API returns naive wall-clock strings ("YYYY-MM-DDTHH:MM:SS"). Format for
@@ -62,15 +68,27 @@ export default function SchedulerPage() {
   const [savingDayOff, setSavingDayOff] = useState(false);
   const [dayOffRiskOpen, setDayOffRiskOpen] = useState(false);
 
+  // Scheduling rules (venue preferences) form state.
+  const [maxHoursPerWeek, setMaxHoursPerWeek] = useState(48);
+  const [minRestHours, setMinRestHours] = useState(11);
+  const [savingRules, setSavingRules] = useState(false);
+
+  // Shift staffing form state, keyed by shift id.
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [staffingForm, setStaffingForm] = useState<Record<string, { min_staff: number; max_staff: number }>>({});
+  const [savingStaffing, setSavingStaffing] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);
       setError(false);
       try {
-        const res = await getScheduler();
+        const [schedulerRes, rulesRes, shiftsRes] = await Promise.all([getScheduler(), getRules(), listShifts()]);
         if (cancelled) return;
-        applyConfig(res);
+        applyConfig(schedulerRes);
+        applyRules(rulesRes);
+        applyShifts(shiftsRes);
       } catch {
         if (!cancelled) setError(true);
       } finally {
@@ -95,6 +113,16 @@ export default function SchedulerPage() {
       setOverrideWeek(res.weeks[0].week_start);
       setOverrideClose(dtLocal(res.weeks[0].closes_at));
     }
+  }
+
+  function applyRules(res: SchedulingRules) {
+    setMaxHoursPerWeek(res.max_hours_per_week);
+    setMinRestHours(res.min_rest_hours);
+  }
+
+  function applyShifts(res: Shift[]) {
+    setShifts(res);
+    setStaffingForm(Object.fromEntries(res.map((sh) => [sh.id, { min_staff: sh.min_staff, max_staff: sh.max_staff }])));
   }
 
   function showToast(msg: string) {
@@ -136,6 +164,56 @@ export default function SchedulerPage() {
       showToast(err instanceof ApiError ? err.message : "Could not save timing");
     } finally {
       setSavingOffsets(false);
+    }
+  }
+
+  async function handleSaveRules() {
+    setSavingRules(true);
+    try {
+      const res = await updateRules({
+        max_hours_per_week: Math.max(1, Math.round(maxHoursPerWeek)),
+        min_rest_hours: Math.max(0, Math.round(minRestHours)),
+      });
+      applyRules(res);
+      showToast("Scheduling rules saved");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not save rules");
+    } finally {
+      setSavingRules(false);
+    }
+  }
+
+  function patchStaffingLocal(shiftId: string, patch: Partial<{ min_staff: number; max_staff: number }>) {
+    setStaffingForm((prev) => ({ ...prev, [shiftId]: { ...prev[shiftId], ...patch } }));
+  }
+
+  async function handleSaveStaffing() {
+    const changed = shifts.filter((sh) => {
+      const f = staffingForm[sh.id];
+      return f && (f.min_staff !== sh.min_staff || f.max_staff !== sh.max_staff);
+    });
+    if (!changed.length) {
+      showToast("No staffing changes to save");
+      return;
+    }
+    for (const sh of changed) {
+      const f = staffingForm[sh.id];
+      if (f.max_staff < f.min_staff) {
+        showToast(`${sh.name}: max staff can't be below min staff`);
+        return;
+      }
+    }
+    setSavingStaffing(true);
+    try {
+      const updated = await Promise.all(
+        changed.map((sh) => updateShift(sh.id, staffingForm[sh.id])),
+      );
+      setShifts((prev) => prev.map((sh) => updated.find((u) => u.id === sh.id) ?? sh));
+      showToast("Staffing saved");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not save staffing");
+    } finally {
+      setSavingStaffing(false);
     }
   }
 
@@ -331,6 +409,83 @@ export default function SchedulerPage() {
               </button>
             )}
           </div>
+        </div>
+
+        {/* Scheduling rules */}
+        <div className="rounded-panel border border-hairline bg-surface-card p-6">
+          <div className="mb-1 text-base font-bold text-ink">Scheduling Rules</div>
+          <div className="mb-4 text-[13px] text-ink-faint">
+            Venue preferences the solver enforces when building the rota.
+          </div>
+          <div className="flex flex-col gap-3.5">
+            <OffsetRow label="Max hours / week" suffix="hrs" value={maxHoursPerWeek} min={1} onChange={setMaxHoursPerWeek} />
+            <OffsetRow
+              label="Min rest between shifts"
+              suffix="hrs"
+              value={minRestHours}
+              min={0}
+              onChange={setMinRestHours}
+            />
+          </div>
+          <button
+            onClick={handleSaveRules}
+            disabled={savingRules}
+            className="mt-5 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {savingRules ? "Saving…" : "Save rules"}
+          </button>
+        </div>
+
+        {/* Shift staffing */}
+        <div className="rounded-panel border border-hairline bg-surface-card p-6">
+          <div className="mb-1 text-base font-bold text-ink">Shift Staffing</div>
+          <div className="mb-4 text-[13px] text-ink-faint">
+            How many people the solver aims for (min) and never exceeds (max) on each shift. Add or rename
+            shifts in <span className="font-semibold">Settings</span>.
+          </div>
+          <div className="flex flex-col gap-2">
+            {shifts.map((sh) => {
+              const f = staffingForm[sh.id] ?? { min_staff: sh.min_staff, max_staff: sh.max_staff };
+              return (
+                <div key={sh.id} className="flex items-center gap-2.5 rounded-[10px] bg-surface-subtle px-3.5 py-2.5">
+                  <div className="h-6 w-1 shrink-0 rounded-sm" style={{ background: sh.color }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-semibold text-ink">{sh.name}</div>
+                    <div className="truncate text-[11px] text-ink-faint">
+                      {sh.start_time} – {sh.end_time}
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-[12px] text-ink-muted">
+                    Min
+                    <input
+                      type="number"
+                      min={0}
+                      value={f.min_staff}
+                      onChange={(e) => patchStaffingLocal(sh.id, { min_staff: e.target.value === "" ? 0 : Number(e.target.value) })}
+                      className="w-[50px] rounded-lg border-[1.5px] border-unset-border bg-surface px-2 py-1.5 text-center text-sm font-semibold text-ink outline-none"
+                    />
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[12px] text-ink-muted">
+                    Max
+                    <input
+                      type="number"
+                      min={1}
+                      value={f.max_staff}
+                      onChange={(e) => patchStaffingLocal(sh.id, { max_staff: e.target.value === "" ? 0 : Number(e.target.value) })}
+                      className="w-[50px] rounded-lg border-[1.5px] border-unset-border bg-surface px-2 py-1.5 text-center text-sm font-semibold text-ink outline-none"
+                    />
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+          <button
+            onClick={handleSaveStaffing}
+            disabled={savingStaffing || !shifts.length}
+            className="mt-5 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {savingStaffing ? "Saving…" : "Save staffing"}
+          </button>
         </div>
       </div>
 
