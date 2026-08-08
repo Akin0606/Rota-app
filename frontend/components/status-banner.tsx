@@ -3,7 +3,9 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; d
   closed: { label: "Availability Closed", bg: "bg-unset-bg", text: "text-ink-muted", dot: "bg-ink-faint" },
   generated: { label: "Rota Generated", bg: "bg-accent-light", text: "text-accent", dot: "bg-accent" },
   confirmed: { label: "Confirmed", bg: "bg-avail-bg", text: "text-avail-text", dot: "bg-avail-border" },
-  published: { label: "Published", bg: "bg-avail-bg", text: "text-avail-text", dot: "bg-avail-border" },
+  // "published" means the availability window is still open on this rota — it
+  // may still change, so it reads as "Provisional" everywhere, not "Published".
+  published: { label: "Provisional", bg: "bg-warn-bg", text: "text-warn-text", dot: "bg-warn-dot" },
 };
 
 export default function StatusBanner({ status }: { status: string }) {

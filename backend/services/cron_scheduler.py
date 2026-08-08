@@ -64,6 +64,7 @@ def refresh_jobs() -> None:
         send_reminders_for_venue,
         send_review_email_for_venue,
     )
+    from routers.rota import confirm_published_periods_for_venue
 
     for job in _scheduler.get_jobs():
         job.remove()
@@ -88,6 +89,12 @@ def refresh_jobs() -> None:
     scheduled = 0
 
     for venue in venues:
+        # Opportunistic sweep: promote any provisional (published) period whose
+        # window has closed since we last checked. Runs here rather than as its
+        # own precise timer so it self-heals on every startup/settings change,
+        # not just at the one active window's close moment.
+        _run_safely(confirm_published_periods_for_venue, venue)
+
         rules = rules_by_venue.get(venue["id"], {})
         shifts = shifts_by_venue.get(venue["id"], [])
         overrides = notice_window.overrides_map(overrides_by_venue.get(venue["id"], []))

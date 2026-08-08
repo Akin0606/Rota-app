@@ -439,7 +439,7 @@ export default function RotaPage() {
           >
             {generating ? "Generating…" : "Auto-fill"}
           </button>
-          {period?.status === "published" ? (
+          {period?.status === "published" || period?.status === "confirmed" ? (
             <button
               onClick={() => setPanelOpen(true)}
               className="rounded-[10px] bg-accent px-4 py-2.5 text-[13px] font-semibold text-white"

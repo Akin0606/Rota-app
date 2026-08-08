@@ -144,7 +144,7 @@ def get_stats():
 
     periods = supabase.table("availability_periods").select("venue_id, status").execute().data
     open_periods = sum(1 for p in periods if p["status"] == "collecting")
-    published = sum(1 for p in periods if p["status"] == "published")
+    published = sum(1 for p in periods if p["status"] in ("published", "confirmed"))
 
     # Stale: an active venue whose most recent activity is older than STALE_DAYS.
     activity = (

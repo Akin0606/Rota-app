@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import ShiftBadge from "@/components/shift-badge";
+import StatusBanner from "@/components/status-banner";
 import { ApiError, StaffRota, StaffRotaAssignment, getStaffRota } from "@/lib/api";
 import { DAY_NAMES, addDays, buildShiftsIcs, formatWeekRange, parseISODate, pinStorageKey } from "@/lib/utils";
 
@@ -123,6 +124,9 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
             <div className="mt-1 text-[22px] font-bold text-ink">Your Rota</div>
             <div className="mt-1 text-[13px] font-semibold text-ink-muted">
               Week of {formatWeekRange(period.week_start)}
+            </div>
+            <div className="mt-2.5 flex justify-center">
+              <StatusBanner status={period.status} />
             </div>
           </div>
 

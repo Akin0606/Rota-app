@@ -56,6 +56,7 @@ STAFF_ACTIVITY_ACTIONS = [
     "shift_swap_approved",
     "shift_swap_rejected",
     "rota_published",
+    "rota_confirmed",
     "staff_added",
 ]
 
@@ -438,12 +439,16 @@ def forgot_pin(venue_token: str, payload: ForgotPinRequest):
 
 
 def _get_published_period(venue_id: str) -> Optional[dict]:
+    """The active rota staff should see — provisional (status "published") or
+    confirmed, whichever is the most recent week. Both are equally "live" from
+    a staff member's point of view; confirmed just means the window has
+    closed on it, not that it's any more or less visible."""
     supabase = get_supabase()
     res = (
         supabase.table("availability_periods")
         .select("*")
         .eq("venue_id", venue_id)
-        .eq("status", "published")
+        .in_("status", ["published", "confirmed"])
         .order("week_start", desc=True)
         .limit(1)
         .execute()

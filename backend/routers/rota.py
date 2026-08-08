@@ -21,7 +21,7 @@ from models.schemas import (
     SwapApproveRequest,
     SwapOut,
 )
-from services import email_service, rota_export, swap_guard
+from services import email_service, notice_window, rota_export, schedule_windows, swap_guard
 from services.auth_service import get_current_manager, get_manager_venue
 from services.solver import (
     AVAILABLE,
@@ -1022,26 +1022,81 @@ def _send_published_rota_emails(
 
 @router.post("/{period_id}/publish", response_model=RotaSummaryOut)
 def publish(period_id: str, manager: dict = Depends(get_current_manager)):
+    """Publishing before the availability window has closed produces a
+    provisional rota (status stays "published", staff can see it but it may
+    still change); publishing after the window has closed goes straight to
+    "confirmed". A provisional rota is promoted to confirmed automatically
+    once its window closes — see confirm_published_periods_for_venue, swept
+    from cron_scheduler.refresh_jobs()."""
     venue = get_manager_venue(manager["id"])
     period = _get_period_or_404(venue["id"], period_id)
     supabase = get_supabase()
 
-    supabase.table("availability_periods").update({"status": "published"}).eq("id", period_id).execute()
+    week_monday = date.fromisoformat(str(period["week_start"]))
+    close_at = notice_window.close_for_week(venue["id"], week_monday)
+    now = schedule_windows.now_london()
+    window_closed = close_at is not None and close_at <= now
+    new_status = "confirmed" if window_closed else "published"
+
+    supabase.table("availability_periods").update({"status": new_status}).eq("id", period_id).execute()
 
     supabase.table("activity_log").insert(
         {
             "venue_id": venue["id"],
             "action": "rota_published",
-            "detail": f"Rota published for week of {period['week_start']}",
+            "detail": (
+                f"Rota published for week of {period['week_start']}"
+                + (" (confirmed — availability window already closed)" if window_closed else " (provisional — availability window still open)")
+            ),
         }
     ).execute()
 
-    updated_period = {**period, "status": "published"}
+    updated_period = {**period, "status": new_status}
     summary = _build_summary(venue["id"], updated_period)
 
     summary["email"] = _send_published_rota_emails(venue, updated_period, summary["assignments"])
 
     return summary
+
+
+def confirm_published_periods_for_venue(venue: dict) -> list[dict]:
+    """Promotes any provisional (status "published") period whose availability
+    window has now closed to "confirmed". Swept from cron_scheduler.refresh_jobs()
+    rather than scheduled as a precise one-shot job, since that already runs on
+    every server startup (so a missed transition self-heals after a redeploy)
+    and after every settings/weekly-close change — good enough cadence for what
+    is purely a status label, without needing new scheduler plumbing."""
+    supabase = get_supabase()
+    published = (
+        supabase.table("availability_periods")
+        .select("*")
+        .eq("venue_id", venue["id"])
+        .eq("status", "published")
+        .execute()
+        .data
+    )
+    if not published:
+        return []
+
+    now = schedule_windows.now_london()
+    confirmed = []
+    for period in published:
+        week_monday = date.fromisoformat(str(period["week_start"]))
+        close_at = notice_window.close_for_week(venue["id"], week_monday)
+        if close_at is None or close_at > now:
+            continue
+
+        supabase.table("availability_periods").update({"status": "confirmed"}).eq("id", period["id"]).execute()
+        supabase.table("activity_log").insert(
+            {
+                "venue_id": venue["id"],
+                "action": "rota_confirmed",
+                "detail": f"Rota for week of {period['week_start']} is now confirmed — availability window closed",
+            }
+        ).execute()
+        confirmed.append(period)
+
+    return confirmed
 
 
 def _normalise_orientation(orientation: str) -> str:
