@@ -8,6 +8,7 @@ import LoadingScreen from "@/components/loading-screen";
 import PublishPanel from "@/components/publish-panel";
 import RotaDayView from "@/components/rota-day-view";
 import RotaGrid, { RotaOrientation } from "@/components/rota-grid";
+import RotaImageView from "@/components/rota-image-view";
 import StatusBanner from "@/components/status-banner";
 import SwapsPanel from "@/components/swaps-panel";
 import Toast from "@/components/toast";
@@ -31,6 +32,7 @@ import {
   getPeriodSubmissions,
   getRota,
   getSwaps,
+  getVenue,
   listPeriods,
   listShifts,
   listStaff,
@@ -81,6 +83,8 @@ export default function RotaPage() {
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<EmailDelivery | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [imageViewOpen, setImageViewOpen] = useState(false);
+  const [venueName, setVenueName] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [pendingAdd, setPendingAdd] = useState<{
@@ -107,15 +111,17 @@ export default function RotaPage() {
       setLoading(true);
       setError(false);
       try {
-        const [periodsRes, shiftsRes, staffRes] = await Promise.all([
+        const [periodsRes, shiftsRes, staffRes, venueRes] = await Promise.all([
           listPeriods(),
           listShifts(),
           listStaff(),
+          getVenue(),
         ]);
         if (cancelled) return;
         setPeriods(periodsRes);
         setShifts(shiftsRes);
         setStaff(staffRes);
+        setVenueName(venueRes.name);
 
         const newest = periodsRes[0];
         if (newest && WEEK_OPTIONS.some((w) => w.weekStart === newest.week_start)) {
@@ -691,6 +697,19 @@ export default function RotaPage() {
         orientation={orientation}
         weekLabel={formatWeekRange(selectedWeek)}
         publishResult={publishResult}
+        onViewImage={() => setImageViewOpen(true)}
+      />
+
+      <RotaImageView
+        open={imageViewOpen}
+        onClose={() => setImageViewOpen(false)}
+        venueName={venueName}
+        weekStart={selectedWeek}
+        status={period?.status ?? "collecting"}
+        orientation={orientation}
+        shifts={shifts}
+        staff={staff}
+        assignments={summary?.assignments ?? []}
       />
 
       {/* Risk popup: adult rule flagged by a manual add (rest gap / day-off-in-7) */}

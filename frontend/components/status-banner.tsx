@@ -1,4 +1,4 @@
-const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+export const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
   collecting: { label: "Awaiting Availability", bg: "bg-warn-bg", text: "text-warn-text", dot: "bg-warn-dot" },
   closed: { label: "Availability Closed", bg: "bg-unset-bg", text: "text-ink-muted", dot: "bg-ink-faint" },
   generated: { label: "Rota Generated", bg: "bg-accent-light", text: "text-accent", dot: "bg-accent" },

@@ -13,6 +13,7 @@ type PublishPanelProps = {
   weekLabel: string;
   // Delivery result from the publish itself (staff emails sent on publish).
   publishResult: EmailDelivery | null;
+  onViewImage: () => void;
 };
 
 type ActionState = { status: "idle" | "loading" | "done" | "error"; message?: string };
@@ -35,6 +36,7 @@ export default function PublishPanel({
   orientation,
   weekLabel,
   publishResult,
+  onViewImage,
 }: PublishPanelProps) {
   const [pdf, setPdf] = useState<ActionState>({ status: "idle" });
   const [xlsx, setXlsx] = useState<ActionState>({ status: "idle" });
@@ -158,6 +160,23 @@ export default function PublishPanel({
         </div>
 
         <div className="flex flex-col gap-3 overflow-y-auto p-5">
+          <div className="rounded-panel border border-hairline bg-surface-card p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold text-ink">View as Image</div>
+                <div className="truncate text-[12px] text-ink-muted">Clean layout — screenshot to share</div>
+              </div>
+              <button
+                onClick={() => {
+                  onViewImage();
+                  onClose();
+                }}
+                className="shrink-0 rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-semibold text-white"
+              >
+                View
+              </button>
+            </div>
+          </div>
           {actions.map((a) => (
             <div key={a.key} className="rounded-panel border border-hairline bg-surface-card p-4">
               <div className="flex items-center justify-between gap-3">
