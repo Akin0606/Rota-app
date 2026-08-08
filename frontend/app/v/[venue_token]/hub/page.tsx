@@ -29,9 +29,10 @@ type Tile = {
 const TILES: Tile[] = [
   { icon: "📋", label: "Log Availability", description: "Tell us when you can work", href: "availability" },
   { icon: "📅", label: "View My Rota", description: "See your upcoming shifts", href: "rota" },
-  { icon: "🔄", label: "Swap a Shift", description: "Trade a shift with a teammate", comingSoon: true },
   { icon: "🌴", label: "Request Time Off", description: "Ask for a day or week off", comingSoon: true },
-  { icon: "❌", label: "Drop a Shift", description: "Give up a shift you can't work", href: "drop" },
+  // Drop, Give, and Swap all live on the Drop page — one entry tile covers
+  // all three, same as Give never got its own tile.
+  { icon: "❌", label: "Drop or Swap a Shift", description: "Give up, give away, or trade a shift", href: "drop" },
 ];
 
 export default function StaffHubPage({ params }: { params: { venue_token: string } }) {
