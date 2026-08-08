@@ -17,6 +17,11 @@ type RotaImageViewProps = {
   assignments: AssignmentOut[];
 };
 
+// Matches the PDF export: a fixed narrow label column, everything else split
+// evenly across the remaining columns — never a per-column minimum, so the
+// grid always fits its container width with no horizontal scroll.
+const LABEL_COL = "52px";
+
 function dateForDay(weekStart: string, dayIndex: number): number {
   const [y, m, d] = weekStart.split("-").map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
@@ -48,11 +53,12 @@ export default function RotaImageView({
   function CellContent({ staffId, dayIndex }: { staffId: string; dayIndex: number }) {
     const a = assignmentFor(staffId, dayIndex);
     const shift = a?.shift_id ? shiftsById.get(a.shift_id) : undefined;
-    if (!shift) return <div className="min-h-[40px]" />;
+    if (!shift) return <div className="min-h-[32px]" />;
     return (
       <div
-        className="rounded-md px-2 py-1.5 text-[11px] font-semibold leading-tight"
+        className="truncate rounded-md px-1 py-1 text-center text-[10px] font-semibold leading-tight"
         style={{ background: `${shift.color}22`, color: shift.color }}
+        title={`${shift.name} ${compactTimeRange(shift.start_time, shift.end_time)}`}
       >
         {shift.name} {compactTimeRange(shift.start_time, shift.end_time)}
       </div>
@@ -86,68 +92,71 @@ export default function RotaImageView({
           </div>
 
           {orientation === "staff-rows" ? (
-            <div className="overflow-x-auto">
-              <div className="min-w-[700px]">
-                <div className="grid grid-cols-[100px_repeat(7,minmax(90px,1fr))] border-b border-surface-page">
-                  <div />
-                  {DAY_LABELS.map((d, i) => (
-                    <div key={d} className="border-l border-surface-page px-1.5 py-2 text-center">
-                      <div className="text-[10px] font-semibold uppercase text-ink-faint">{d}</div>
-                      <div className="text-sm font-bold text-ink">{dateForDay(weekStart, i)}</div>
-                    </div>
-                  ))}
-                </div>
-                {activeStaff.map((member, ri) => (
-                  <div
-                    key={member.id}
-                    className={`grid grid-cols-[100px_repeat(7,minmax(90px,1fr))] ${ri < activeStaff.length - 1 ? "border-b border-surface-page" : ""}`}
-                  >
-                    <div className="flex flex-col justify-center p-2">
-                      <div className="truncate text-xs font-semibold text-ink-label">{member.name}</div>
-                      <div className="truncate text-[10px] text-ink-faint">{member.role}</div>
-                    </div>
-                    {DAY_LABELS.map((_, di) => (
-                      <div key={di} className="flex min-h-[44px] flex-col justify-center border-l border-surface-page p-1">
-                        <CellContent staffId={member.id} dayIndex={di} />
-                      </div>
-                    ))}
+            <div>
+              <div
+                className="grid border-b border-surface-page"
+                style={{ gridTemplateColumns: `${LABEL_COL} repeat(7, 1fr)` }}
+              >
+                <div />
+                {DAY_LABELS.map((d, i) => (
+                  <div key={d} className="min-w-0 border-l border-surface-page px-0.5 py-2 text-center">
+                    <div className="truncate text-[9px] font-semibold uppercase text-ink-faint">{d}</div>
+                    <div className="text-xs font-bold text-ink">{dateForDay(weekStart, i)}</div>
                   </div>
                 ))}
               </div>
+              {activeStaff.map((member, ri) => (
+                <div
+                  key={member.id}
+                  className="grid"
+                  style={{ gridTemplateColumns: `${LABEL_COL} repeat(7, 1fr)` }}
+                >
+                  <div className={`min-w-0 flex items-center p-1 ${ri < activeStaff.length - 1 ? "border-b border-surface-page" : ""}`}>
+                    <div className="truncate text-[10px] font-semibold text-ink-label">{member.name}</div>
+                  </div>
+                  {DAY_LABELS.map((_, di) => (
+                    <div
+                      key={di}
+                      className={`min-w-0 flex min-h-[34px] flex-col justify-center border-l border-surface-page p-0.5 ${ri < activeStaff.length - 1 ? "border-b border-surface-page" : ""}`}
+                    >
+                      <CellContent staffId={member.id} dayIndex={di} />
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <div style={{ minWidth: `${120 + activeStaff.length * 110}px` }}>
-                <div
-                  className="grid border-b border-surface-page"
-                  style={{ gridTemplateColumns: `100px repeat(${activeStaff.length}, minmax(90px, 1fr))` }}
-                >
-                  <div />
-                  {activeStaff.map((member) => (
-                    <div key={member.id} className="border-l border-surface-page px-1.5 py-2 text-center">
-                      <div className="truncate text-xs font-semibold text-ink-label">{member.name}</div>
-                      <div className="truncate text-[10px] text-ink-faint">{member.role}</div>
-                    </div>
-                  ))}
-                </div>
-                {DAY_LABELS.map((d, di) => (
-                  <div
-                    key={d}
-                    className={`grid ${di < DAY_LABELS.length - 1 ? "border-b border-surface-page" : ""}`}
-                    style={{ gridTemplateColumns: `100px repeat(${activeStaff.length}, minmax(90px, 1fr))` }}
-                  >
-                    <div className="flex items-center gap-1.5 p-2">
-                      <div className="text-[10px] font-semibold uppercase text-ink-faint">{d}</div>
-                      <div className="text-sm font-bold text-ink">{dateForDay(weekStart, di)}</div>
-                    </div>
-                    {activeStaff.map((member) => (
-                      <div key={member.id} className="flex min-h-[44px] flex-col justify-center border-l border-surface-page p-1">
-                        <CellContent staffId={member.id} dayIndex={di} />
-                      </div>
-                    ))}
+            <div>
+              <div
+                className="grid border-b border-surface-page"
+                style={{ gridTemplateColumns: `${LABEL_COL} repeat(${activeStaff.length}, 1fr)` }}
+              >
+                <div />
+                {activeStaff.map((member) => (
+                  <div key={member.id} className="min-w-0 border-l border-surface-page px-0.5 py-2 text-center">
+                    <div className="truncate text-[10px] font-semibold text-ink-label">{member.name}</div>
                   </div>
                 ))}
               </div>
+              {DAY_LABELS.map((d, di) => (
+                <div
+                  key={d}
+                  className="grid"
+                  style={{ gridTemplateColumns: `${LABEL_COL} repeat(${activeStaff.length}, 1fr)` }}
+                >
+                  <div className={`min-w-0 flex items-center gap-1 p-1 ${di < DAY_LABELS.length - 1 ? "border-b border-surface-page" : ""}`}>
+                    <div className="truncate text-[9px] font-semibold uppercase text-ink-faint">{d}</div>
+                  </div>
+                  {activeStaff.map((member) => (
+                    <div
+                      key={member.id}
+                      className={`min-w-0 flex min-h-[34px] flex-col justify-center border-l border-surface-page p-0.5 ${di < DAY_LABELS.length - 1 ? "border-b border-surface-page" : ""}`}
+                    >
+                      <CellContent staffId={member.id} dayIndex={di} />
+                    </div>
+                  ))}
+                </div>
+              ))}
             </div>
           )}
         </div>
