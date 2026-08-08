@@ -30,6 +30,7 @@ import {
 import {
   DAY_NAMES,
   daysUntilDeadline,
+  describeAction,
   formatRelativeTime,
   formatWeekRange,
   shiftDurationHours,
@@ -437,21 +438,6 @@ function StaffModal({
       </div>
     </Modal>
   );
-}
-
-function describeAction(action: string, detail: string | null, staffName: string | null): string {
-  switch (action) {
-    case "submitted_availability":
-      return "submitted availability";
-    case "staff_added":
-      return "joined the team";
-    case "venue_created":
-      return "Venue was set up";
-    case "reminder_sent":
-      return staffName ? "was reminded to submit availability" : (detail ?? action);
-    default:
-      return detail ?? action;
-  }
 }
 
 function StatCard({

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import Modal from "@/components/modal";
+import NotificationBell from "@/components/notification-bell";
 import Toast from "@/components/toast";
 import {
   ApiError,
@@ -171,7 +172,12 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
   return (
     <div className="mx-auto max-w-[420px] py-4">
       <div className="mx-4 animate-fadeIn overflow-hidden rounded-card bg-surface shadow-card">
-        <div className="px-6 pb-7 pt-5">
+        <div className="relative px-6 pb-7 pt-5">
+          {pin && (
+            <div className="absolute right-4 top-3">
+              <NotificationBell venueToken={venue_token} pin={pin} />
+            </div>
+          )}
           <div className="py-2 pb-6 text-center">
             <div className="text-[22px] font-bold text-ink">
               Hi {name} — {venueName}

@@ -276,6 +276,10 @@ export function declineSwap(venueToken: string, pin: string, swapId: string): Pr
   });
 }
 
+export function getStaffActivity(venueToken: string, pin: string, limit = 20): Promise<Activity[]> {
+  return request(`/api/availability/${venueToken}/activity?pin=${pin}&limit=${limit}`);
+}
+
 export async function requestLoginCode(email: string): Promise<{ status: string }> {
   // Sends a 6-digit OTP code rather than a clickable magic link. We
   // deliberately omit emailRedirectTo: with no redirect URL, Supabase's email

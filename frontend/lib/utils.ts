@@ -87,6 +87,21 @@ export function formatRelativeTime(iso: string): string {
   return `${d} days ago`;
 }
 
+export function describeAction(action: string, detail: string | null, staffName: string | null): string {
+  switch (action) {
+    case "submitted_availability":
+      return "submitted availability";
+    case "staff_added":
+      return "joined the team";
+    case "venue_created":
+      return "Venue was set up";
+    case "reminder_sent":
+      return staffName ? "was reminded to submit availability" : (detail ?? action);
+    default:
+      return detail ?? action;
+  }
+}
+
 function formatTime(time24: string): string {
   const [hStr, mStr] = time24.split(":");
   let h = Number(hStr);

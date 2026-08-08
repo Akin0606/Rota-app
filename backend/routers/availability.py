@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from config import get_settings
 from database import get_supabase
 from models.schemas import (
+    ActivityOut,
     AvailabilityAuthResponse,
     AvailabilityClaimRequest,
     AvailabilityDropRequest,
@@ -33,6 +34,30 @@ FORGOT_MAX_REQUESTS = 3
 FORGOT_WINDOW_SECONDS = 60 * 60
 
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+# Notification bell: only the shift-lifecycle events staff care about — excludes
+# manager/admin-internal actions (rule changes, PIN resets, venue admin,
+# reminders, rota_generated pre-publish) and submitted_availability (too
+# noisy at volume).
+STAFF_ACTIVITY_ACTIONS = [
+    "shift_dropped",
+    "shift_claimed_auto",
+    "shift_claim_pending",
+    "shift_claim_approved",
+    "shift_claim_rejected",
+    "shift_given",
+    "shift_given_accepted",
+    "shift_given_accept_pending",
+    "shift_given_declined",
+    "shift_swap_proposed",
+    "shift_swap_accept_pending",
+    "shift_swap_accepted",
+    "shift_swap_declined",
+    "shift_swap_approved",
+    "shift_swap_rejected",
+    "rota_published",
+    "staff_added",
+]
 
 router = APIRouter(prefix="/api/availability", tags=["availability"])
 
@@ -1359,3 +1384,41 @@ def decline_swap(venue_token: str, payload: AvailabilitySwapActionRequest):
     ).execute()
 
     return _build_staff_rota(venue, staff["id"])
+
+
+@router.get("/{venue_token}/activity", response_model=list[ActivityOut])
+def get_staff_activity(venue_token: str, pin: str = Query(pattern=r"^\d{4}$"), limit: int = Query(default=20, le=50)):
+    """Venue-wide notification feed for the hub bell — same shape and join
+    pattern as the manager's GET /api/activity, just PIN-gated instead of a
+    manager session, and filtered to STAFF_ACTIVITY_ACTIONS so rule-change/
+    admin/PIN-reset noise doesn't show up for staff."""
+    venue = _get_venue_or_404(venue_token)
+    _get_staff_by_pin(venue["id"], pin)
+    supabase = get_supabase()
+
+    rows = (
+        supabase.table("activity_log")
+        .select("*")
+        .eq("venue_id", venue["id"])
+        .in_("action", STAFF_ACTIVITY_ACTIONS)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+        .data
+    )
+
+    staff_ids = {r["staff_id"] for r in rows if r.get("staff_id")}
+    names_by_id: dict[str, str] = {}
+    if staff_ids:
+        staff_res = (
+            supabase.table("staff_members")
+            .select("id, name")
+            .in_("id", list(staff_ids))
+            .execute()
+        )
+        names_by_id = {s["id"]: s["name"] for s in staff_res.data}
+
+    for row in rows:
+        row["staff_name"] = names_by_id.get(row["staff_id"]) if row.get("staff_id") else None
+
+    return rows
