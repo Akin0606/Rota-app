@@ -11,6 +11,7 @@ import {
   PinAuthData,
   authenticatePin,
   getWeekAvailability,
+  setAutoSubmit,
   submitAvailability,
 } from "@/lib/api";
 import { DAY_LABELS, formatDeadline, formatWeekRange, pinStorageKey } from "@/lib/utils";
@@ -42,6 +43,8 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   const [selectedWeek, setSelectedWeek] = useState<string>(WEEK_OPTIONS[0].weekStart);
   const [editable, setEditable] = useState(true);
   const [weekLoading, setWeekLoading] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
+  const [autoSubmit, setAutoSubmitState] = useState(false);
 
   const [grid, setGrid] = useState<Grid>({});
   const [notes, setNotes] = useState<Record<number, string>>({});
@@ -62,6 +65,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
     authenticatePin(venue_token, storedPin)
       .then((res) => {
         setData(res);
+        setAutoSubmitState(res.staff.auto_submit_availability);
         if (res.period && WEEK_OPTIONS.some((w) => w.weekStart === res.period!.week_start)) {
           setSelectedWeek(res.period.week_start);
         }
@@ -98,12 +102,14 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
         setGrid(g);
         setNotes(n);
         setEditable(res.editable);
+        setPrefilled(res.prefilled);
       })
       .catch(() => {
         if (!cancelled) {
           setGrid({});
           setNotes({});
           setEditable(true);
+          setPrefilled(false);
         }
       })
       .finally(() => {
@@ -117,6 +123,19 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
+  }
+
+  async function handleToggleAutoSubmit() {
+    if (!pin) return;
+    const next = !autoSubmit;
+    setAutoSubmitState(next);
+    try {
+      await setAutoSubmit(venue_token, pin, next);
+      showToast(next ? "Auto-submit turned on" : "Auto-submit turned off");
+    } catch (err) {
+      setAutoSubmitState(!next);
+      showToast(err instanceof ApiError ? err.message : "Could not update auto-submit");
+    }
   }
 
   function toggle(dayIndex: number, shiftId: string) {
@@ -197,6 +216,29 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
             <div className="mt-1 text-[22px] font-bold text-ink">Hi, {firstName}</div>
           </div>
 
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-[10px] bg-surface-subtle px-3.5 py-2.5">
+            <div className="min-w-0">
+              <div className="text-[13px] font-semibold text-ink">Auto-submit</div>
+              <div className="text-[11px] text-ink-faint">
+                If nothing&apos;s changed, submit it for me automatically each week
+              </div>
+            </div>
+            <button
+              onClick={handleToggleAutoSubmit}
+              role="switch"
+              aria-checked={autoSubmit}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+                autoSubmit ? "bg-accent" : "bg-unset-border"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                  autoSubmit ? "translate-x-[22px]" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
+
           {/* Week switcher — plan up to a month ahead */}
           <div className="mb-4 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
             {WEEK_OPTIONS.map((opt) => {
@@ -234,6 +276,12 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
           <div className="mb-3 text-[13px] font-semibold text-ink-muted">
             Week of {formatWeekRange(selectedWeek)}
           </div>
+
+          {prefilled && editable && (
+            <div className="mb-3 rounded-[10px] bg-accent-light px-3.5 py-2.5 text-center text-[13px] text-accent">
+              This is what you submitted last time — still right? Just hit Submit.
+            </div>
+          )}
 
           <div className={!editable || weekLoading ? "pointer-events-none opacity-60" : ""}>
             <AvailabilityGrid shifts={data.shifts} value={grid} onToggle={toggle} />

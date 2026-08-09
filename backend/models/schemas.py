@@ -18,6 +18,7 @@ class StaffOut(BaseModel):
     id: str
     name: str
     role: str
+    auto_submit_availability: bool = False
 
 
 class PeriodOut(BaseModel):
@@ -101,6 +102,18 @@ class WeekAvailabilityOut(BaseModel):
     period: Optional[PeriodOut] = None
     editable: bool
     submissions: list[AvailabilityEntryOut] = []
+    # True when `submissions` wasn't actually saved for this week yet, but is
+    # the staff member's most recent prior pattern shown as a starting point.
+    prefilled: bool = False
+
+
+class AutoSubmitToggleRequest(BaseModel):
+    pin: str = Field(pattern=r"^\d{4}$")
+    enabled: bool
+
+
+class AutoSubmitOut(BaseModel):
+    auto_submit_availability: bool
 
 
 class ForgotPinRequest(BaseModel):

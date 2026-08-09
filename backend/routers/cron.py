@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 
 from config import get_settings
 from database import get_supabase
+from routers.availability import _most_recent_submission_pattern
 from routers.rota import _build_summary, run_solver_for_period
 from routers.staff import _reminder_context
 from services import cron_scheduler, email_service, notice_window, schedule_windows
@@ -81,9 +82,55 @@ def open_availability_for_venue(venue: dict) -> Optional[dict]:
         }
     ).execute()
 
+    _auto_submit_for_new_period(venue, period)
     _send_open_emails(venue, target_monday)
 
     return period
+
+
+def _auto_submit_for_new_period(venue: dict, period: dict) -> None:
+    """Copies forward the most recent prior submission for every active staff
+    member who has opted into auto-submit, the moment their new week opens —
+    so it's already done before they'd ever think to log in. They can still
+    open the app and change it any time before the window closes."""
+    supabase = get_supabase()
+    week_monday = date.fromisoformat(str(period["week_start"]))
+
+    opted_in = (
+        supabase.table("staff_members")
+        .select("id, name")
+        .eq("venue_id", venue["id"])
+        .eq("is_active", True)
+        .eq("auto_submit_availability", True)
+        .execute()
+        .data
+    )
+    for member in opted_in:
+        rows = _most_recent_submission_pattern(venue["id"], member["id"], week_monday)
+        if not rows:
+            continue
+
+        insert_rows = [
+            {
+                "period_id": period["id"],
+                "staff_id": member["id"],
+                "day_index": r["day_index"],
+                "shift_id": r["shift_id"],
+                "status": r["status"],
+                "note": r["note"],
+            }
+            for r in rows
+        ]
+        supabase.table("availability_submissions").insert(insert_rows).execute()
+
+        supabase.table("activity_log").insert(
+            {
+                "venue_id": venue["id"],
+                "staff_id": member["id"],
+                "action": "availability_auto_submitted",
+                "detail": f"{member['name']}'s availability was auto-submitted for week of {period['week_start']} (no changes)",
+            }
+        ).execute()
 
 
 def _send_open_emails(venue: dict, week_monday: date) -> None:

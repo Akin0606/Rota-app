@@ -26,7 +26,7 @@ export type VenueInfo = {
 };
 
 export type PinAuthData = {
-  staff: { id: string; name: string; role: string };
+  staff: { id: string; name: string; role: string; auto_submit_availability: boolean };
   venue_name: string;
   period: { id: string; week_start: string; status: string } | null;
   shifts: Shift[];
@@ -123,6 +123,7 @@ export type WeekAvailability = {
   period: { id: string; week_start: string; status: string } | null;
   editable: boolean;
   submissions: AvailabilityEntry[];
+  prefilled: boolean;
 };
 
 export function getWeekAvailability(
@@ -133,6 +134,17 @@ export function getWeekAvailability(
   return request(`/api/availability/${venueToken}/week`, {
     method: "POST",
     body: JSON.stringify({ pin, week_start: weekStart }),
+  });
+}
+
+export function setAutoSubmit(
+  venueToken: string,
+  pin: string,
+  enabled: boolean,
+): Promise<{ auto_submit_availability: boolean }> {
+  return request(`/api/availability/${venueToken}/auto-submit`, {
+    method: "PUT",
+    body: JSON.stringify({ pin, enabled }),
   });
 }
 

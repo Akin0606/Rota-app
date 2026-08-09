@@ -6,6 +6,8 @@ from config import get_settings
 from database import get_supabase
 from models.schemas import (
     ActivityOut,
+    AutoSubmitOut,
+    AutoSubmitToggleRequest,
     AvailabilityAuthResponse,
     AvailabilityClaimRequest,
     AvailabilityDropRequest,
@@ -286,7 +288,12 @@ def authenticate(venue_token: str, payload: PinAuthRequest, request: Request):
     )
 
     return {
-        "staff": {"id": staff["id"], "name": staff["name"], "role": staff["role"]},
+        "staff": {
+            "id": staff["id"],
+            "name": staff["name"],
+            "role": staff["role"],
+            "auto_submit_availability": staff.get("auto_submit_availability", False),
+        },
         "venue_name": venue["name"],
         "period": (
             {
@@ -301,6 +308,35 @@ def authenticate(venue_token: str, payload: PinAuthRequest, request: Request):
         "submissions": submissions,
         "rules": _get_rules(venue["id"]),
     }
+
+
+def _most_recent_submission_pattern(venue_id: str, staff_id: str, before_monday: "date") -> list[dict]:
+    """This staff member's most recent prior week's submission rows (any
+    period earlier than `before_monday`), or [] if they've never submitted.
+    Used to pre-fill a blank week and to auto-carry-forward on open."""
+    supabase = get_supabase()
+    earlier_periods = (
+        supabase.table("availability_periods")
+        .select("id, week_start")
+        .eq("venue_id", venue_id)
+        .lt("week_start", before_monday.isoformat())
+        .order("week_start", desc=True)
+        .limit(8)
+        .execute()
+        .data
+    )
+    for p in earlier_periods:
+        rows = (
+            supabase.table("availability_submissions")
+            .select("day_index, shift_id, status, note")
+            .eq("period_id", p["id"])
+            .eq("staff_id", staff_id)
+            .execute()
+            .data
+        )
+        if rows:
+            return rows
+    return []
 
 
 @router.post("/{venue_token}/week", response_model=WeekAvailabilityOut)
@@ -330,8 +366,16 @@ def get_week_availability(venue_token: str, payload: WeekAvailabilityRequest):
             .data
         )
 
+    # Nothing saved for this week yet — show their last pattern as a
+    # starting point so a no-change week is a single tap, not a rebuild.
+    prefilled = False
+    if editable and not submissions:
+        submissions = _most_recent_submission_pattern(venue["id"], staff["id"], monday)
+        prefilled = bool(submissions)
+
     return {
         "week_start": monday.isoformat(),
+        "prefilled": prefilled,
         "period": (
             {"id": period["id"], "week_start": str(period["week_start"]), "status": period["status"]}
             if period
@@ -340,6 +384,23 @@ def get_week_availability(venue_token: str, payload: WeekAvailabilityRequest):
         "editable": editable,
         "submissions": submissions,
     }
+
+
+@router.put("/{venue_token}/auto-submit", response_model=AutoSubmitOut)
+def set_auto_submit(venue_token: str, payload: AutoSubmitToggleRequest):
+    """Turns weekly auto-carry-forward on/off for this staff member. When on,
+    `open_availability_for_venue` (services/cron) copies their most recent
+    pattern into each new week the moment it opens, so they don't have to log
+    in at all if nothing's changed."""
+    venue = _get_venue_or_404(venue_token)
+    staff = _get_staff_by_pin(venue["id"], payload.pin)
+    supabase = get_supabase()
+
+    supabase.table("staff_members").update(
+        {"auto_submit_availability": payload.enabled}
+    ).eq("id", staff["id"]).execute()
+
+    return {"auto_submit_availability": payload.enabled}
 
 
 @router.post("/{venue_token}/submit")
