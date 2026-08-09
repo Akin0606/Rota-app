@@ -297,6 +297,7 @@ def get_venue_detail(venue_id: str):
         "created_at": venue["created_at"],
         "link_token": venue["link_token"],
         "is_active": venue.get("is_active", True),
+        "admin_notes": venue.get("admin_notes"),
         "staff": staff,
         "period": (
             {"id": period["id"], "week_start": str(period["week_start"]), "status": period["status"]}
@@ -312,23 +313,27 @@ def get_venue_detail(venue_id: str):
     dependencies=[Depends(require_admin)],
 )
 def set_venue_active(venue_id: str, payload: AdminVenueUpdateRequest):
-    """Enables or disables a venue. When disabled, manager login and staff PIN
-    entry for this venue are blocked. This is the hook a payment gateway can flip
-    automatically later."""
+    """Enables/disables a venue and/or updates the admin's support notes for it.
+    Disabling blocks manager login and staff PIN entry immediately — this is the
+    hook a payment gateway can flip automatically later. Notes are admin-only,
+    never shown to managers or staff."""
     supabase = get_supabase()
     venue = _get_venue_or_404(venue_id)
 
-    supabase.table("venues").update({"is_active": payload.is_active}).eq("id", venue_id).execute()
+    updates = payload.model_dump(exclude_unset=True)
+    if updates:
+        supabase.table("venues").update(updates).eq("id", venue_id).execute()
 
-    supabase.table("activity_log").insert(
-        {
-            "venue_id": venue_id,
-            "action": "venue_activated" if payload.is_active else "venue_deactivated",
-            "detail": (
-                f"Venue {'enabled' if payload.is_active else 'disabled'} via admin console"
-            ),
-        }
-    ).execute()
+    if "is_active" in updates:
+        supabase.table("activity_log").insert(
+            {
+                "venue_id": venue_id,
+                "action": "venue_activated" if payload.is_active else "venue_deactivated",
+                "detail": (
+                    f"Venue {'enabled' if payload.is_active else 'disabled'} via admin console"
+                ),
+            }
+        ).execute()
 
     return get_venue_detail(venue_id)
 

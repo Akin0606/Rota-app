@@ -23,6 +23,16 @@ function isStale(lastActiveAt: string | null): boolean {
   return Date.now() - last > STALE_DAYS * 24 * 60 * 60 * 1000;
 }
 
+type StatusFilter = "all" | "active" | "inactive" | "stale" | "pending";
+
+const FILTERS: { key: StatusFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "active", label: "Active" },
+  { key: "inactive", label: "Inactive" },
+  { key: "stale", label: "Stale" },
+  { key: "pending", label: "Pending" },
+];
+
 function initials(name: string): string {
   return name
     .split(" ")
@@ -46,6 +56,8 @@ export default function AdminVenuesPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +115,26 @@ export default function AdminVenuesPage() {
     }
   }
 
+  const query = search.trim().toLowerCase();
+  const filteredVenues = venues.filter((v) => {
+    if (query) {
+      const haystack = `${v.pending ? "" : v.name} ${v.manager_email}`.toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+    switch (statusFilter) {
+      case "active":
+        return !v.pending && v.is_active;
+      case "inactive":
+        return !v.pending && !v.is_active;
+      case "stale":
+        return !v.pending && isStale(v.last_active_at);
+      case "pending":
+        return v.pending;
+      default:
+        return true;
+    }
+  });
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
@@ -143,12 +175,38 @@ export default function AdminVenuesPage() {
         </div>
       )}
 
+      <div className="mb-4 flex flex-wrap items-center gap-2.5">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name or email…"
+          className="min-w-[220px] flex-1 rounded-[10px] border-[1.5px] border-unset-border bg-surface-card px-3.5 py-2 text-sm outline-none focus:border-accent"
+        />
+        <div className="flex flex-wrap gap-1.5">
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setStatusFilter(f.key)}
+              className={`rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
+                statusFilter === f.key
+                  ? "bg-accent text-white"
+                  : "border border-hairline bg-surface-card text-ink-muted hover:bg-surface-subtle"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-panel border border-hairline bg-surface-card">
         {venues.length === 0 ? (
           <div className="p-10 text-center text-sm text-ink-faint">No venues yet.</div>
+        ) : filteredVenues.length === 0 ? (
+          <div className="p-10 text-center text-sm text-ink-faint">No venues match your search.</div>
         ) : (
-          venues.map((v, i) => {
-            const border = i < venues.length - 1 ? "border-b border-surface-page" : "";
+          filteredVenues.map((v, i) => {
+            const border = i < filteredVenues.length - 1 ? "border-b border-surface-page" : "";
             const inner = (
               <>
                 <div

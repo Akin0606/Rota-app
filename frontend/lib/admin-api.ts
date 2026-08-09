@@ -78,6 +78,7 @@ export type AdminVenueDetail = {
   created_at: string;
   link_token: string;
   is_active: boolean;
+  admin_notes: string | null;
   staff: AdminStaff[];
   period: { id: string; week_start: string; status: string } | null;
 };
@@ -142,6 +143,13 @@ export function setVenueActive(id: string, isActive: boolean): Promise<AdminVenu
   return adminRequest(`/api/admin/venues/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ is_active: isActive }),
+  });
+}
+
+export function setVenueNotes(id: string, notes: string): Promise<AdminVenueDetail> {
+  return adminRequest(`/api/admin/venues/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ admin_notes: notes }),
   });
 }
 

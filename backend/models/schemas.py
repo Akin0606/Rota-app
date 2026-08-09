@@ -405,7 +405,8 @@ class AdminVenueOut(BaseModel):
 
 
 class AdminVenueUpdateRequest(BaseModel):
-    is_active: bool
+    is_active: Optional[bool] = None
+    admin_notes: Optional[str] = None
 
 
 class WaitlistRequest(BaseModel):
@@ -449,6 +450,7 @@ class AdminVenueDetailOut(BaseModel):
     created_at: str
     link_token: str
     is_active: bool = True
+    admin_notes: Optional[str] = None
     staff: list[AdminStaffOut]
     period: Optional[PeriodOut] = None
 

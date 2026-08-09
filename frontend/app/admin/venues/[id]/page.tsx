@@ -18,6 +18,7 @@ import {
   getAdminVenueDetail,
   getAdminVenueRota,
   setVenueActive,
+  setVenueNotes,
 } from "@/lib/admin-api";
 import { formatWeekRange } from "@/lib/utils";
 
@@ -51,6 +52,8 @@ export default function AdminVenueDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [loginLink, setLoginLink] = useState<string | null>(null);
   const [linkLoading, setLinkLoading] = useState(false);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -63,7 +66,10 @@ export default function AdminVenueDetailPage() {
     setError(false);
     getAdminVenueDetail(venueId)
       .then((res) => {
-        if (!cancelled) setVenue(res);
+        if (!cancelled) {
+          setVenue(res);
+          setNotesDraft(res.admin_notes ?? "");
+        }
       })
       .catch(() => {
         if (!cancelled) setError(true);
@@ -75,6 +81,23 @@ export default function AdminVenueDetailPage() {
       cancelled = true;
     };
   }, [venueId, reloadToken]);
+
+  const notesDirty = venue !== null && notesDraft !== (venue.admin_notes ?? "");
+
+  async function handleSaveNotes() {
+    if (!venue) return;
+    setSavingNotes(true);
+    try {
+      const updated = await setVenueNotes(venue.id, notesDraft);
+      setVenue(updated);
+      setNotesDraft(updated.admin_notes ?? "");
+      showToast("Notes saved");
+    } catch (err) {
+      showToast(err instanceof AdminApiError ? err.message : "Could not save notes");
+    } finally {
+      setSavingNotes(false);
+    }
+  }
 
   function copyLink() {
     if (!venue) return;
@@ -248,6 +271,30 @@ export default function AdminVenueDetailPage() {
         >
           {togglingActive ? "Saving…" : venue.is_active ? "Disable venue" : "Enable venue"}
         </button>
+      </div>
+
+      <div className="mb-6 rounded-panel border border-hairline bg-surface-card p-5">
+        <div className="mb-2 flex items-center justify-between">
+          <div className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+            Admin notes
+          </div>
+          {notesDirty && (
+            <button
+              onClick={handleSaveNotes}
+              disabled={savingNotes}
+              className="rounded-lg bg-accent px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
+            >
+              {savingNotes ? "Saving…" : "Save notes"}
+            </button>
+          )}
+        </div>
+        <textarea
+          value={notesDraft}
+          onChange={(e) => setNotesDraft(e.target.value)}
+          placeholder="Support context only you can see — e.g. refund requests, onboarding calls, quirks with this venue…"
+          rows={3}
+          className="w-full resize-y rounded-input border border-hairline bg-surface-subtle px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-accent"
+        />
       </div>
 
       {showRota && (
