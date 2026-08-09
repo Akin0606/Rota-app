@@ -87,6 +87,16 @@ export function formatRelativeTime(iso: string): string {
   return `${d} days ago`;
 }
 
+// Activity `detail` strings embed the staff name for most actions (e.g. "Sam
+// dropped their Monday shift"), but not all (e.g. "Manager rejected a shift
+// claim..." has no name in it at all even though it's staff-scoped). Feeds
+// that also render a separate name label need this check first, or names
+// referenced in the front of the text end up doubled.
+export function startsWithName(text: string, name: string | null): boolean {
+  if (!name) return false;
+  return text.toLowerCase().startsWith(name.toLowerCase());
+}
+
 export function describeAction(action: string, detail: string | null, staffName: string | null): string {
   switch (action) {
     case "submitted_availability":

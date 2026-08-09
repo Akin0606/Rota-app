@@ -34,6 +34,7 @@ import {
   formatRelativeTime,
   formatWeekRange,
   shiftDurationHours,
+  startsWithName,
 } from "@/lib/utils";
 
 const CACHE_KEY = "crewplan_dashboard_snapshot";
@@ -319,18 +320,22 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {activity.map((a) => (
-                    <div key={a.id} className="flex items-start gap-2.5">
-                      <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
-                      <div>
-                        <div className="text-[13px] text-ink-label">
-                          {a.staff_name && <span className="font-semibold">{a.staff_name} </span>}
-                          {describeAction(a.action, a.detail, a.staff_name)}
+                  {activity.map((a) => {
+                    const text = describeAction(a.action, a.detail, a.staff_name);
+                    const showNamePrefix = a.staff_name && !startsWithName(text, a.staff_name);
+                    return (
+                      <div key={a.id} className="flex items-start gap-2.5">
+                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
+                        <div>
+                          <div className="text-[13px] text-ink-label">
+                            {showNamePrefix && <span className="font-semibold">{a.staff_name} </span>}
+                            {text}
+                          </div>
+                          <div className="text-[11px] text-ink-faint">{formatRelativeTime(a.created_at)}</div>
                         </div>
-                        <div className="text-[11px] text-ink-faint">{formatRelativeTime(a.created_at)}</div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

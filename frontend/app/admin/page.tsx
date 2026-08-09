@@ -13,6 +13,7 @@ import {
   addAdminManager,
   getAdminStats,
   listAdminVenues,
+  resendPendingManagerLoginLink,
 } from "@/lib/admin-api";
 
 // A live venue with no activity in the last 14 days is worth a nudge.
@@ -58,6 +59,8 @@ export default function AdminVenuesPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [resendingFor, setResendingFor] = useState<string | null>(null);
+  const [loginLink, setLoginLink] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,6 +115,18 @@ export default function AdminVenuesPage() {
       setFormError(err instanceof AdminApiError ? err.message : "Could not create the account.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleResendLink(email: string) {
+    setResendingFor(email);
+    try {
+      const res = await resendPendingManagerLoginLink(email);
+      setLoginLink(res.login_url);
+    } catch (err) {
+      showToast(err instanceof AdminApiError ? err.message : "Could not create login link");
+    } finally {
+      setResendingFor(null);
     }
   }
 
@@ -255,6 +270,13 @@ export default function AdminVenuesPage() {
             return v.pending ? (
               <div key={v.id} className={`flex flex-wrap items-center gap-3 px-5 py-4 ${border}`}>
                 {inner}
+                <button
+                  onClick={() => handleResendLink(v.manager_email)}
+                  disabled={resendingFor === v.manager_email}
+                  className="rounded-lg border border-hairline bg-surface-card px-3 py-1.5 text-xs font-medium text-ink-muted disabled:opacity-50"
+                >
+                  {resendingFor === v.manager_email ? "Creating…" : "Resend login link"}
+                </button>
               </div>
             ) : (
               <Link
@@ -318,6 +340,25 @@ export default function AdminVenuesPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal open={!!loginLink} onClose={() => setLoginLink(null)} title="Login link">
+        <div className="mb-3 text-[13px] text-ink-muted">
+          One-time link for them to sign in and finish onboarding. Send it directly — don&apos;t
+          share it anywhere public.
+        </div>
+        <div className="mb-4 break-all rounded-[10px] border border-hairline bg-surface-subtle px-3.5 py-2.5 text-[12px] text-ink-label">
+          {loginLink}
+        </div>
+        <button
+          onClick={() => {
+            if (loginLink) navigator.clipboard.writeText(loginLink);
+            showToast("Link copied");
+          }}
+          className="w-full rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-white"
+        >
+          Copy link
+        </button>
       </Modal>
 
       <Toast message={toast} />

@@ -194,6 +194,12 @@ export function createSupportLoginLink(id: string): Promise<AdminManager> {
   return adminRequest(`/api/admin/venues/${id}/login-link`, { method: "POST" });
 }
 
+export function resendPendingManagerLoginLink(email: string): Promise<AdminManager> {
+  return adminRequest(`/api/admin/managers/${encodeURIComponent(email)}/login-link`, {
+    method: "POST",
+  });
+}
+
 export function listAdminActivity(limit = 50): Promise<AdminActivity[]> {
   return adminRequest(`/api/admin/activity?limit=${limit}`);
 }
