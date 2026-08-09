@@ -29,7 +29,12 @@ export default function AdminActivityPage() {
   }, []);
 
   if (loading) {
-    return <div className="p-10 text-center text-sm text-ink-muted">Loading…</div>;
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-hairline border-t-accent" />
+        <div className="text-sm text-ink-muted">Loading activity…</div>
+      </div>
+    );
   }
 
   if (error) {
@@ -37,8 +42,13 @@ export default function AdminActivityPage() {
   }
 
   return (
-    <div>
-      <div className="mb-6 text-2xl font-bold text-ink">Activity (last {activity.length})</div>
+    <div className="animate-fadeIn">
+      <div className="mb-6">
+        <div className="text-[13px] font-medium text-ink-faint">Across every venue</div>
+        <div className="font-display text-[26px] font-bold text-ink md:text-[28px]">
+          Activity (last {activity.length})
+        </div>
+      </div>
       <div className="overflow-hidden rounded-panel border border-hairline bg-surface-card">
         {activity.length === 0 ? (
           <div className="p-10 text-center text-sm text-ink-faint">No activity yet.</div>

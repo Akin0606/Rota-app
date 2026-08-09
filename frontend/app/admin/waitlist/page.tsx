@@ -10,6 +10,16 @@ import {
   listWaitlist,
 } from "@/lib/admin-api";
 
+function initials(name: string): string {
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .filter(Boolean)
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export default function AdminWaitlistPage() {
   const [entries, setEntries] = useState<WaitlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,7 +63,12 @@ export default function AdminWaitlistPage() {
   }
 
   if (loading) {
-    return <div className="p-10 text-center text-sm text-ink-muted">Loading…</div>;
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-hairline border-t-accent" />
+        <div className="text-sm text-ink-muted">Loading waitlist…</div>
+      </div>
+    );
   }
 
   if (error) {
@@ -61,8 +76,13 @@ export default function AdminWaitlistPage() {
   }
 
   return (
-    <div>
-      <div className="mb-6 text-2xl font-bold text-ink">Waitlist ({entries.length})</div>
+    <div className="animate-fadeIn">
+      <div className="mb-6">
+        <div className="text-[13px] font-medium text-ink-faint">Founders waiting to get started</div>
+        <div className="font-display text-[26px] font-bold text-ink md:text-[28px]">
+          Waitlist ({entries.length})
+        </div>
+      </div>
       <div className="overflow-hidden rounded-panel border border-hairline bg-surface-card">
         {entries.length === 0 ? (
           <div className="p-10 text-center text-sm text-ink-faint">No signups yet.</div>
@@ -74,6 +94,9 @@ export default function AdminWaitlistPage() {
                 i < entries.length - 1 ? "border-b border-surface-page" : ""
               }`}
             >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-accent-light text-[11px] font-bold text-accent">
+                {initials(e.venue_name)}
+              </div>
               <div className="min-w-[180px] flex-1">
                 <div className="text-sm font-semibold text-ink">{e.venue_name}</div>
                 <div className="text-xs text-ink-faint">{e.email}</div>

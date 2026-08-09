@@ -23,6 +23,16 @@ function isStale(lastActiveAt: string | null): boolean {
   return Date.now() - last > STALE_DAYS * 24 * 60 * 60 * 1000;
 }
 
+function initials(name: string): string {
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .filter(Boolean)
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export default function AdminVenuesPage() {
   const [venues, setVenues] = useState<AdminVenue[]>([]);
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -94,7 +104,12 @@ export default function AdminVenuesPage() {
   }
 
   if (loading) {
-    return <div className="p-10 text-center text-sm text-ink-muted">Loading…</div>;
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-hairline border-t-accent" />
+        <div className="text-sm text-ink-muted">Loading venues…</div>
+      </div>
+    );
   }
 
   if (error) {
@@ -102,14 +117,17 @@ export default function AdminVenuesPage() {
   }
 
   return (
-    <div>
+    <div className="animate-fadeIn">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="text-2xl font-bold text-ink">Venues ({venues.length})</div>
+        <div>
+          <div className="text-[13px] font-medium text-ink-faint">Every pub, one place</div>
+          <div className="font-display text-[26px] font-bold text-ink md:text-[28px]">Venues</div>
+        </div>
         <button
           onClick={openModal}
-          className="rounded-lg bg-accent px-3.5 py-2 text-[13px] font-semibold text-white"
+          className="rounded-[10px] bg-accent px-4 py-2.5 text-[13px] font-semibold text-white transition hover:bg-accent-hover"
         >
-          + Add Manager
+          + Add manager
         </button>
       </div>
 
@@ -133,6 +151,13 @@ export default function AdminVenuesPage() {
             const border = i < venues.length - 1 ? "border-b border-surface-page" : "";
             const inner = (
               <>
+                <div
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-[11px] font-bold ${
+                    v.pending ? "bg-warn-bg text-warn-text" : "bg-accent-light text-accent"
+                  }`}
+                >
+                  {initials(v.pending ? v.manager_email : v.name)}
+                </div>
                 <div className="min-w-[180px] flex-1">
                   <div className="text-sm font-semibold text-ink">
                     {v.pending ? v.manager_email : v.name}
@@ -177,7 +202,7 @@ export default function AdminVenuesPage() {
               <Link
                 key={v.id}
                 href={`/admin/venues/${v.id}`}
-                className={`flex flex-wrap items-center gap-3 px-5 py-4 hover:bg-surface-subtle ${border} ${
+                className={`flex flex-wrap items-center gap-3 px-5 py-4 transition hover:bg-surface-subtle ${border} ${
                   v.is_active ? "" : "opacity-60"
                 }`}
               >
@@ -188,7 +213,7 @@ export default function AdminVenuesPage() {
         )}
       </div>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add Manager">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add manager">
         {result ? (
           <div>
             <div className="mb-5 rounded-input border border-avail-border bg-avail-bg px-3.5 py-3 text-[13px] text-avail-text">
@@ -244,11 +269,11 @@ export default function AdminVenuesPage() {
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: "warn" }) {
   return (
-    <div className="rounded-panel border border-hairline bg-surface-card px-4 py-3">
-      <div className={`text-2xl font-bold ${tone === "warn" ? "text-warn-text" : "text-ink"}`}>
+    <div className="rounded-panel border border-hairline bg-surface-card p-4 transition hover:border-accent-border">
+      <div className={`text-2xl font-bold md:text-[26px] ${tone === "warn" ? "text-warn-text" : "text-ink"}`}>
         {value}
       </div>
-      <div className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</div>
+      <div className="mt-1 text-[11px] font-medium uppercase tracking-wide text-ink-faint">{label}</div>
     </div>
   );
 }

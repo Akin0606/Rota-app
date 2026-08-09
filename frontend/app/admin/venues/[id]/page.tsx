@@ -21,6 +21,16 @@ import {
 } from "@/lib/admin-api";
 import { formatWeekRange } from "@/lib/utils";
 
+function initials(name: string): string {
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .filter(Boolean)
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export default function AdminVenueDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -161,7 +171,12 @@ export default function AdminVenueDetailPage() {
   }
 
   if (loading) {
-    return <div className="p-10 text-center text-sm text-ink-muted">Loading…</div>;
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-hairline border-t-accent" />
+        <div className="text-sm text-ink-muted">Loading venue…</div>
+      </div>
+    );
   }
 
   if (error || !venue) {
@@ -169,22 +184,29 @@ export default function AdminVenueDetailPage() {
   }
 
   return (
-    <div>
+    <div className="animate-fadeIn">
       <Link href="/admin" className="mb-4 inline-block text-[13px] font-medium text-accent">
         ← Back to venues
       </Link>
-      <div className="mb-1 flex flex-wrap items-center gap-2.5">
-        <span className="text-2xl font-bold text-ink">{venue.name}</span>
-        <span
-          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-            venue.is_active ? "bg-avail-bg text-avail-text" : "bg-unavail-bg text-unavail-text"
-          }`}
-        >
-          {venue.is_active ? "Active" : "Inactive"}
-        </span>
-      </div>
-      <div className="mb-6 text-sm text-ink-faint">
-        {venue.manager_email} · created {new Date(venue.created_at).toLocaleDateString()}
+      <div className="mb-6 flex flex-wrap items-center gap-3.5">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-accent-light text-sm font-bold text-accent">
+          {initials(venue.name)}
+        </div>
+        <div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="font-display text-2xl font-bold text-ink">{venue.name}</span>
+            <span
+              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                venue.is_active ? "bg-avail-bg text-avail-text" : "bg-unavail-bg text-unavail-text"
+              }`}
+            >
+              {venue.is_active ? "Active" : "Inactive"}
+            </span>
+          </div>
+          <div className="text-sm text-ink-faint">
+            {venue.manager_email} · created {new Date(venue.created_at).toLocaleDateString()}
+          </div>
+        </div>
       </div>
 
       <div className="mb-6 flex flex-wrap items-center gap-3 rounded-panel border border-hairline bg-surface-card p-5">
@@ -261,7 +283,7 @@ export default function AdminVenueDetailPage() {
         </div>
       )}
 
-      <div className="mb-3 text-base font-bold text-ink">Staff ({venue.staff.length})</div>
+      <div className="mb-3 font-display text-base font-bold text-ink">Staff ({venue.staff.length})</div>
       <div className="overflow-hidden rounded-panel border border-hairline bg-surface-card">
         {venue.staff.length === 0 ? (
           <div className="p-10 text-center text-sm text-ink-faint">No staff yet.</div>
@@ -273,6 +295,9 @@ export default function AdminVenueDetailPage() {
                 i < venue.staff.length - 1 ? "border-b border-surface-page" : ""
               } ${s.is_active ? "" : "opacity-50"}`}
             >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-surface-page text-[10px] font-bold text-ink-faint">
+                {initials(s.name)}
+              </div>
               <div className="min-w-[160px] flex-1">
                 <div className="text-sm font-semibold text-ink">{s.name}</div>
                 <div className="text-xs text-ink-faint">
