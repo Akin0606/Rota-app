@@ -58,7 +58,7 @@ export default function RotaDayView({ shifts, staff, assignments, onAdd, onRemov
             </div>
             <div className="flex flex-col gap-1.5">
               {assigned.map((a) => {
-                const member = staffById.get(a.staff_id);
+                const member = a.staff_id ? staffById.get(a.staff_id) : undefined;
                 if (!member) return null;
                 return (
                   <div
@@ -80,7 +80,7 @@ export default function RotaDayView({ shifts, staff, assignments, onAdd, onRemov
                       <div className="text-sm font-semibold text-ink">{member.name}</div>
                       <div className="text-[11px] text-ink-faint">{member.role}</div>
                     </div>
-                    <button onClick={() => onRemove(day, shift.id, a.staff_id)} className="p-1 text-xs text-ink-faint">
+                    <button onClick={() => onRemove(day, shift.id, a.staff_id!)} className="p-1 text-xs text-ink-faint">
                       ✕
                     </button>
                   </div>

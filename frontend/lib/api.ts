@@ -157,12 +157,13 @@ export function forgotPin(venueToken: string, email: string): Promise<{ status: 
 
 export type StaffRotaAssignment = {
   id: string;
-  staff_id: string;
+  staff_id: string | null;
   day_index: number;
   shift_id: string | null;
   drop_status: "pending_pickup" | "pending_approval" | null;
   claim_staff_id: string | null;
   target_staff_id: string | null;
+  required_role: string | null;
 };
 
 export type StaffRotaTeamMember = {
@@ -597,10 +598,11 @@ export function remindStaff(params: {
 
 export type AssignmentOut = {
   id: string;
-  staff_id: string;
+  staff_id: string | null;
   day_index: number;
   shift_id: string | null;
   manually_assigned: boolean;
+  required_role: string | null;
 };
 
 export type EmailDelivery = {
@@ -634,6 +636,24 @@ export function generateRota(periodId: string): Promise<RotaSummary> {
 
 export function copyPreviousRota(periodId: string): Promise<RotaSummary> {
   return authedRequest(`/api/rota/${periodId}/copy-previous`, { method: "POST" });
+}
+
+export function postOpenShift(
+  periodId: string,
+  dayIndex: number,
+  shiftId: string,
+  requiredRole: string | null,
+): Promise<RotaSummary> {
+  return authedRequest(`/api/rota/${periodId}/assignments/open`, {
+    method: "POST",
+    body: JSON.stringify({ day_index: dayIndex, shift_id: shiftId, required_role: requiredRole }),
+  });
+}
+
+export function cancelOpenShift(periodId: string, assignmentId: string): Promise<RotaSummary> {
+  return authedRequest(`/api/rota/${periodId}/assignments/open/${assignmentId}`, {
+    method: "DELETE",
+  });
 }
 
 export type AssignmentEditResult = {

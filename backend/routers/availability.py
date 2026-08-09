@@ -42,6 +42,7 @@ DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
 # reminders, rota_generated pre-publish) and submitted_availability (too
 # noisy at volume).
 STAFF_ACTIVITY_ACTIONS = [
+    "shift_posted_open",
     "shift_dropped",
     "shift_claimed_auto",
     "shift_claim_pending",
@@ -577,14 +578,18 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
     supabase = get_supabase()
     assignments = (
         supabase.table("rota_assignments")
-        .select("id, staff_id, day_index, shift_id, drop_status, claim_staff_id, target_staff_id")
+        .select(
+            "id, staff_id, day_index, shift_id, drop_status, claim_staff_id, target_staff_id, required_role"
+        )
         .eq("period_id", period["id"])
         .execute()
         .data
     )
     assignments_by_id = {a["id"]: a for a in assignments}
 
-    staff_ids = list({a["staff_id"] for a in assignments})
+    # A manager-posted open shift has no owner yet — exclude the None before
+    # looking up team members, or the .in_() lookup chokes on it.
+    staff_ids = list({a["staff_id"] for a in assignments if a["staff_id"]})
     team = (
         supabase.table("staff_members").select("id, name, role").in_("id", staff_ids).execute().data
         if staff_ids
@@ -754,14 +759,16 @@ def claim_shift(venue_token: str, payload: AvailabilityClaimRequest):
     if not shift:
         raise HTTPException(status_code=404, detail="Shift not found")
 
-    original_res = (
-        supabase.table("staff_members")
-        .select("id, name, role")
-        .eq("id", assignment["staff_id"])
-        .limit(1)
-        .execute()
-    )
-    original_staff = original_res.data[0] if original_res.data else None
+    original_staff = None
+    if assignment["staff_id"]:
+        original_res = (
+            supabase.table("staff_members")
+            .select("id, name, role")
+            .eq("id", assignment["staff_id"])
+            .limit(1)
+            .execute()
+        )
+        original_staff = original_res.data[0] if original_res.data else None
 
     claimant = (
         supabase.table("staff_members")
@@ -772,7 +779,12 @@ def claim_shift(venue_token: str, payload: AvailabilityClaimRequest):
         .data[0]
     )
 
-    role_mismatch = bool(original_staff) and claimant["role"] != original_staff["role"]
+    # A manager-posted open shift (no original assignee) carries its own
+    # explicit required_role instead — unset means it's open to any role.
+    if assignment.get("required_role"):
+        role_mismatch = claimant["role"] != assignment["required_role"]
+    else:
+        role_mismatch = bool(original_staff) and claimant["role"] != original_staff["role"]
 
     sub_res = (
         supabase.table("availability_submissions")
@@ -805,7 +817,8 @@ def claim_shift(venue_token: str, payload: AvailabilityClaimRequest):
 
     reasons = []
     if role_mismatch:
-        reasons.append(f"different role ({claimant['role']} vs {original_staff['role'] if original_staff else 'unknown'})")
+        needed_role = assignment.get("required_role") or (original_staff["role"] if original_staff else "unknown")
+        reasons.append(f"different role ({claimant['role']} vs {needed_role})")
     if marked_unavailable:
         reasons.append("marked unavailable for this shift")
     if check["severity"] == "confirm":

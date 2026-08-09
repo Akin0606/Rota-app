@@ -311,10 +311,17 @@ class SchedulerOverrideResponse(BaseModel):
 
 class AssignmentOut(BaseModel):
     id: str
-    staff_id: str
+    staff_id: Optional[str] = None
     day_index: int
     shift_id: Optional[str] = None
     manually_assigned: bool
+    required_role: Optional[str] = None
+
+
+class OpenShiftCreateRequest(BaseModel):
+    day_index: int = Field(ge=0, le=6)
+    shift_id: str
+    required_role: Optional[str] = None
 
 
 class UncoveredSlot(BaseModel):
@@ -470,12 +477,13 @@ class AdminVenueDetailOut(BaseModel):
 
 class StaffRotaAssignmentOut(BaseModel):
     id: str
-    staff_id: str
+    staff_id: Optional[str] = None
     day_index: int
     shift_id: Optional[str] = None
     drop_status: Optional[str] = None
     claim_staff_id: Optional[str] = None
     target_staff_id: Optional[str] = None
+    required_role: Optional[str] = None
 
 
 class StaffRotaTeamMemberOut(BaseModel):

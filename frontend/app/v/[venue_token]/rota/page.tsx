@@ -190,7 +190,7 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
                     <div className="flex flex-col gap-1.5">
                       {dayAssignments.map((a) => {
                         const shift = a.shift_id ? shiftsById.get(a.shift_id) : undefined;
-                        const member = teamById.get(a.staff_id);
+                        const member = a.staff_id ? teamById.get(a.staff_id) : undefined;
                         if (!shift || !member) return null;
                         const isMe = a.staff_id === data.staff_id;
                         return (

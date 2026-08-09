@@ -14,6 +14,7 @@ import SwapsPanel from "@/components/swaps-panel";
 import Toast from "@/components/toast";
 import {
   ApiError,
+  AssignmentOut,
   Claim,
   EmailDelivery,
   Period,
@@ -24,6 +25,7 @@ import {
   Swap,
   approveClaim,
   approveSwap,
+  cancelOpenShift,
   clearSubmission,
   createPeriod,
   editAssignment,
@@ -37,10 +39,12 @@ import {
   listPeriods,
   listShifts,
   listStaff,
+  postOpenShift,
   publishRota,
   rejectClaim,
   rejectSwap,
 } from "@/lib/api";
+import { STAFF_ROLES } from "@/lib/constants";
 import { DAY_LABELS, formatWeekRange } from "@/lib/utils";
 
 // This week's Monday (offset 0) and the following weeks, as YYYY-MM-DD.
@@ -82,6 +86,10 @@ export default function RotaPage() {
   const [error, setError] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [copying, setCopying] = useState(false);
+  const [postingKey, setPostingKey] = useState<string | null>(null);
+  const [postingRole, setPostingRole] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [cancelingOpenId, setCancelingOpenId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<EmailDelivery | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -342,6 +350,41 @@ export default function RotaPage() {
     }
   }
 
+  function openPostPicker(shiftId: string, dayIndex: number) {
+    setPostingKey(`${shiftId}:${dayIndex}`);
+    setPostingRole("");
+  }
+
+  async function handlePostOpen(dayIndex: number, shiftId: string) {
+    const p = await ensurePeriod();
+    if (!p) return;
+    setPosting(true);
+    try {
+      const result = await postOpenShift(p.id, dayIndex, shiftId, postingRole || null);
+      setSummary(result);
+      setPostingKey(null);
+      showToast("Posted as an open shift");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not post this shift");
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  async function handleCancelOpen(assignmentId: string) {
+    if (!period) return;
+    setCancelingOpenId(assignmentId);
+    try {
+      const result = await cancelOpenShift(period.id, assignmentId);
+      setSummary(result);
+      showToast("Open shift withdrawn");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not withdraw this open shift");
+    } finally {
+      setCancelingOpenId(null);
+    }
+  }
+
   async function submitAdd(dayIndex: number, shiftId: string, staffId: string, confirm: boolean) {
     const p = await ensurePeriod();
     if (!p) return;
@@ -450,6 +493,71 @@ export default function RotaPage() {
     underCoveredByShift.set(u.shift_id, list);
   }
   const shiftsById = new Map(shifts.map((s) => [s.id, s]));
+
+  // Manager-posted open shifts (no owner yet) — keyed by shift+day so the
+  // uncovered/under-staffed lists can show "already posted" instead of the
+  // post control once one exists for that slot.
+  const openPostsByKey = new Map<string, AssignmentOut>();
+  for (const a of summary?.assignments ?? []) {
+    if (!a.staff_id && a.shift_id) {
+      openPostsByKey.set(`${a.shift_id}:${a.day_index}`, a);
+    }
+  }
+
+  function renderOpenSlotControl(shiftId: string, dayIndex: number) {
+    const key = `${shiftId}:${dayIndex}`;
+    const posted = openPostsByKey.get(key);
+    if (posted) {
+      return (
+        <div className="flex items-center gap-2 rounded-lg bg-surface-subtle px-2.5 py-1.5">
+          <span className="text-[12px] font-medium text-ink-muted">
+            Posted{posted.required_role ? ` — needs ${posted.required_role}` : " — any role"}
+          </span>
+          <button
+            onClick={() => handleCancelOpen(posted.id)}
+            disabled={cancelingOpenId === posted.id}
+            className="text-[12px] font-semibold text-unavail-text disabled:opacity-60"
+          >
+            {cancelingOpenId === posted.id ? "…" : "Withdraw"}
+          </button>
+        </div>
+      );
+    }
+    if (postingKey === key) {
+      return (
+        <div className="flex items-center gap-1.5 rounded-lg bg-surface-subtle px-2 py-1.5">
+          <select
+            value={postingRole}
+            onChange={(e) => setPostingRole(e.target.value)}
+            className="rounded-md border border-hairline bg-surface-card px-1.5 py-1 text-[12px] outline-none"
+          >
+            <option value="">Any role</option>
+            {STAFF_ROLES.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => handlePostOpen(dayIndex, shiftId)}
+            disabled={posting}
+            className="rounded-md bg-accent px-2 py-1 text-[12px] font-semibold text-white disabled:opacity-60"
+          >
+            {posting ? "…" : "Post"}
+          </button>
+          <button onClick={() => setPostingKey(null)} className="text-[12px] text-ink-faint">
+            ✕
+          </button>
+        </div>
+      );
+    }
+    return (
+      <button
+        onClick={() => openPostPicker(shiftId, dayIndex)}
+        className="rounded-lg border border-dashed border-hairline px-2.5 py-1.5 text-[12px] font-semibold text-accent"
+      >
+        Post as open
+      </button>
+    );
+  }
 
   return (
     <div className="animate-fadeIn px-5 py-6 pb-24 md:px-10 md:py-8 md:pb-8">
@@ -581,18 +689,18 @@ export default function RotaPage() {
           <div className="mb-2 text-[12px] text-unavail-text">
             Willing staff couldn&apos;t be scheduled — nobody assigned.
           </div>
-          <div className="flex flex-wrap gap-2">
-            {Array.from(uncoveredByShift.entries()).map(([shiftId, days]) => {
+          <div className="flex flex-col gap-2">
+            {Array.from(uncoveredByShift.entries()).flatMap(([shiftId, days]) => {
               const shift = shiftsById.get(shiftId);
-              if (!shift) return null;
-              return (
-                <span
-                  key={shiftId}
-                  className="rounded-lg bg-surface-subtle px-2.5 py-1.5 text-[12px] font-medium text-unavail-text"
-                >
-                  {shift.name}: {days.map((d) => DAY_LABELS[d]).join(", ")}
-                </span>
-              );
+              if (!shift) return [];
+              return days.map((d) => (
+                <div key={`${shiftId}-${d}`} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="rounded-lg bg-surface-subtle px-2.5 py-1.5 text-[12px] font-medium text-unavail-text">
+                    {shift.name}: {DAY_LABELS[d]}
+                  </span>
+                  {renderOpenSlotControl(shiftId, d)}
+                </div>
+              ));
             })}
           </div>
         </div>
@@ -604,21 +712,18 @@ export default function RotaPage() {
           <div className="mb-2 text-[12px] text-warn-text">
             Below the minimum staffing you set — not enough available staff to reach it.
           </div>
-          <div className="flex flex-wrap gap-2">
-            {Array.from(underCoveredByShift.entries()).map(([shiftId, slots]) => {
+          <div className="flex flex-col gap-2">
+            {Array.from(underCoveredByShift.entries()).flatMap(([shiftId, slots]) => {
               const shift = shiftsById.get(shiftId);
-              if (!shift) return null;
-              return (
-                <span
-                  key={shiftId}
-                  className="rounded-lg bg-surface-subtle px-2.5 py-1.5 text-[12px] font-medium text-warn-text"
-                >
-                  {shift.name}:{" "}
-                  {slots
-                    .map((s) => `${DAY_LABELS[s.day]} (${s.assigned}/${s.required})`)
-                    .join(", ")}
-                </span>
-              );
+              if (!shift) return [];
+              return slots.map((s) => (
+                <div key={`${shiftId}-${s.day}`} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="rounded-lg bg-surface-subtle px-2.5 py-1.5 text-[12px] font-medium text-warn-text">
+                    {shift.name}: {DAY_LABELS[s.day]} ({s.assigned}/{s.required})
+                  </span>
+                  {renderOpenSlotControl(shiftId, s.day)}
+                </div>
+              ));
             })}
           </div>
         </div>

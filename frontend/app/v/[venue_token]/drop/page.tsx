@@ -289,8 +289,8 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
             <div className="flex flex-col gap-2">
               {openShifts.map((a) => {
                 const shift = shiftsById.get(a.shift_id!);
-                const member = teamById.get(a.staff_id);
-                if (!shift || !member) return null;
+                const member = a.staff_id ? teamById.get(a.staff_id) : null;
+                if (!shift) return null;
                 const dayDate = addDays(weekStart, a.day_index);
                 const isMine = a.staff_id === data.staff_id;
                 const isMyClaim = a.claim_staff_id === data.staff_id;
@@ -305,7 +305,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <ShiftBadge name={shift.name} time={`${shift.start_time} – ${shift.end_time}`} color={shift.color} />
                       <span className="text-[12px] text-ink-faint">
-                        {member.name} · {member.role}
+                        {member ? `${member.name} · ${member.role}` : a.required_role ? `Open · needs ${a.required_role}` : "Open · any role"}
                       </span>
                     </div>
                     {a.drop_status === "pending_approval" ? (

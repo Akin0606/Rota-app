@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
@@ -11,6 +11,7 @@ from models.schemas import (
     ClaimApproveRequest,
     ClaimOut,
     EmailDeliveryOut,
+    OpenShiftCreateRequest,
     PeriodClaimsOut,
     PeriodSubmissionsOut,
     PeriodSwapsOut,
@@ -109,7 +110,7 @@ def _build_summary(
     total_hours = sum(
         shift_duration_hours(shifts_by_id[a["shift_id"]])
         for a in assignments
-        if a["shift_id"] in shifts_by_id
+        if a["shift_id"] in shifts_by_id and a["staff_id"]
     )
 
     # A slot is "demanded" if at least one person marked themselves
@@ -120,8 +121,14 @@ def _build_summary(
         for s in submissions
         if s["shift_id"] and s["status"] in (AVAILABLE, PREFERRED)
     }
+    # A manager-posted open shift (staff_id null) hasn't actually been picked
+    # up by anyone yet, so it doesn't count as real coverage — otherwise it'd
+    # vanish from uncovered/under-covered the instant it's posted, instead of
+    # showing as "posted, waiting to be claimed" until someone actually claims it.
     assigned_count: dict[tuple, int] = {}
     for a in assignments:
+        if not a["staff_id"]:
+            continue
         key = (a["day_index"], a["shift_id"])
         assigned_count[key] = assigned_count.get(key, 0) + 1
 
@@ -1021,6 +1028,87 @@ def edit_assignment(
         ).execute()
 
     return AssignmentEditResponse(status="saved", summary=_build_summary(venue["id"], period))
+
+
+@router.post("/{period_id}/assignments/open", response_model=RotaSummaryOut)
+def post_open_shift(
+    period_id: str,
+    payload: OpenShiftCreateRequest,
+    manager: dict = Depends(get_current_manager),
+):
+    """Posts an uncovered/under-staffed slot as claimable by any staff member,
+    without assigning it to anyone first — the same pending_pickup pool a
+    staff-initiated drop feeds, just entering it from the manager's side.
+    `required_role` is an explicit choice: set it to only let a matching role
+    auto-approve on claim (same as a like-for-like drop claim), or leave it
+    unset to let anyone claim outright."""
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+    supabase = get_supabase()
+
+    shifts_by_id = {
+        s["id"]: s for s in supabase.table("shifts").select("id, name").eq("venue_id", venue["id"]).execute().data
+    }
+    shift = shifts_by_id.get(payload.shift_id)
+    if not shift:
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    supabase.table("rota_assignments").insert(
+        {
+            "period_id": period_id,
+            "staff_id": None,
+            "day_index": payload.day_index,
+            "shift_id": payload.shift_id,
+            "manually_assigned": True,
+            "drop_status": "pending_pickup",
+            "dropped_at": datetime.utcnow().isoformat(),
+            "required_role": payload.required_role,
+        }
+    ).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "action": "shift_posted_open",
+            "detail": (
+                f"Manager posted the {DAY_NAMES[payload.day_index]} {shift['name']} shift as open"
+                + (f" — needs {payload.required_role}" if payload.required_role else " — any role")
+            ),
+        }
+    ).execute()
+
+    return _build_summary(venue["id"], period)
+
+
+@router.delete("/{period_id}/assignments/open/{assignment_id}", response_model=RotaSummaryOut)
+def cancel_open_shift(
+    period_id: str,
+    assignment_id: str,
+    manager: dict = Depends(get_current_manager),
+):
+    """Withdraws a manager-posted open shift that nobody has claimed yet.
+    Scoped to staff_id is null so this can never be used to delete a real
+    assignment or a staff-initiated drop through this path."""
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+    supabase = get_supabase()
+
+    res = (
+        supabase.table("rota_assignments")
+        .select("id")
+        .eq("id", assignment_id)
+        .eq("period_id", period_id)
+        .is_("staff_id", "null")
+        .eq("drop_status", "pending_pickup")
+        .limit(1)
+        .execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="This open shift isn't there any more")
+
+    supabase.table("rota_assignments").delete().eq("id", assignment_id).execute()
+
+    return _build_summary(venue["id"], period)
 
 
 def _send_published_rota_emails(
