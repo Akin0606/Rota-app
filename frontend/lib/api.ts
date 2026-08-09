@@ -620,6 +620,10 @@ export function generateRota(periodId: string): Promise<RotaSummary> {
   return authedRequest(`/api/rota/${periodId}/generate`, { method: "POST" });
 }
 
+export function copyPreviousRota(periodId: string): Promise<RotaSummary> {
+  return authedRequest(`/api/rota/${periodId}/copy-previous`, { method: "POST" });
+}
+
 export type AssignmentEditResult = {
   status: "saved" | "needs_confirm";
   reason?: string | null;
@@ -644,6 +648,10 @@ export function editAssignment(
 
 export function publishRota(periodId: string): Promise<RotaSummary> {
   return authedRequest(`/api/rota/${periodId}/publish`, { method: "POST" });
+}
+
+export function unpublishRota(periodId: string): Promise<RotaSummary> {
+  return authedRequest(`/api/rota/${periodId}/unpublish`, { method: "POST" });
 }
 
 export type SubmissionEntry = {

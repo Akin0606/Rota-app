@@ -798,6 +798,93 @@ def generate(period_id: str, manager: dict = Depends(get_current_manager)):
     return run_solver_for_period(venue, period)
 
 
+@router.post("/{period_id}/copy-previous", response_model=RotaSummaryOut)
+def copy_previous(period_id: str, manager: dict = Depends(get_current_manager)):
+    """Copies the venue's most recent earlier rota (any period with
+    assignments) into this one, staff/shifts that no longer exist skipped.
+    Only allowed onto an empty period — this is a clean-slate copy, not a
+    merge. Doesn't re-run compliance checks (same as solver output), so any
+    conflicts show up the normal way on review before publish."""
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+    supabase = get_supabase()
+
+    existing = (
+        supabase.table("rota_assignments").select("id").eq("period_id", period_id).limit(1).execute()
+    )
+    if existing.data:
+        raise HTTPException(status_code=400, detail="This week already has assignments")
+
+    earlier_periods = (
+        supabase.table("availability_periods")
+        .select("id, week_start")
+        .eq("venue_id", venue["id"])
+        .lt("week_start", str(period["week_start"]))
+        .order("week_start", desc=True)
+        .execute()
+        .data
+    )
+
+    source_assignments = None
+    for candidate in earlier_periods:
+        rows = (
+            supabase.table("rota_assignments")
+            .select("staff_id, day_index, shift_id")
+            .eq("period_id", candidate["id"])
+            .execute()
+            .data
+        )
+        if rows:
+            source_assignments = rows
+            break
+
+    if not source_assignments:
+        raise HTTPException(status_code=404, detail="No previous rota to copy from")
+
+    active_staff_ids = {
+        s["id"]
+        for s in supabase.table("staff_members")
+        .select("id")
+        .eq("venue_id", venue["id"])
+        .eq("is_active", True)
+        .execute()
+        .data
+    }
+    valid_shift_ids = {s["id"] for s in supabase.table("shifts").select("id").eq("venue_id", venue["id"]).execute().data}
+
+    rows = [
+        {
+            "period_id": period_id,
+            "staff_id": a["staff_id"],
+            "day_index": a["day_index"],
+            "shift_id": a["shift_id"],
+            "manually_assigned": True,
+        }
+        for a in source_assignments
+        if a["staff_id"] in active_staff_ids and a["shift_id"] in valid_shift_ids
+    ]
+    if rows:
+        supabase.table("rota_assignments").insert(rows).execute()
+
+    supabase.table("availability_periods").update({"status": "generated"}).eq("id", period_id).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "action": "rota_generated",
+            "detail": f"Rota for week of {period['week_start']} copied from the previous week",
+        }
+    ).execute()
+
+    updated_period = {**period, "status": "generated"}
+    warnings = (
+        ["Some staff or shifts from the previous rota no longer exist and were skipped."]
+        if len(rows) < len(source_assignments)
+        else []
+    )
+    return _build_summary(venue["id"], updated_period, warnings=warnings)
+
+
 @router.put("/{period_id}/assignments", response_model=AssignmentEditResponse)
 def edit_assignment(
     period_id: str,
@@ -1057,6 +1144,34 @@ def publish(period_id: str, manager: dict = Depends(get_current_manager)):
     summary["email"] = _send_published_rota_emails(venue, updated_period, summary["assignments"])
 
     return summary
+
+
+@router.post("/{period_id}/unpublish", response_model=RotaSummaryOut)
+def unpublish(period_id: str, manager: dict = Depends(get_current_manager)):
+    """Pulls a published/confirmed rota back to "generated" — off the
+    staff-facing view, assignments untouched, so a mistake can be fixed and
+    re-published. Does not recall any "rota published" emails already sent,
+    and does not undo any drop/claim/swap actions staff already took while it
+    was live — those stay in place if the rota is re-published."""
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+
+    if period["status"] not in ("published", "confirmed"):
+        raise HTTPException(status_code=400, detail="This rota isn't published")
+
+    supabase = get_supabase()
+    supabase.table("availability_periods").update({"status": "generated"}).eq("id", period_id).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "action": "rota_unpublished",
+            "detail": f"Rota for week of {period['week_start']} was unpublished",
+        }
+    ).execute()
+
+    updated_period = {**period, "status": "generated"}
+    return _build_summary(venue["id"], updated_period)
 
 
 def confirm_published_periods_for_venue(venue: dict) -> list[dict]:

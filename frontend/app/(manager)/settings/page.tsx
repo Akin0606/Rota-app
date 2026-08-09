@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 
 import LoadingScreen from "@/components/loading-screen";
+import Modal from "@/components/modal";
+import StatusBanner from "@/components/status-banner";
 import ThemeToggle from "@/components/theme-toggle";
 import Toast from "@/components/toast";
 import {
   ApiError,
+  Period,
   SchedulingRules,
   Shift,
   Venue,
@@ -14,18 +17,21 @@ import {
   deleteShift,
   getRules,
   getVenue,
+  listPeriods,
   listShifts,
+  unpublishRota,
   updateRules,
   updateShift,
   updateVenue,
 } from "@/lib/api";
 import { END_TIMES, SHIFT_COLORS, START_TIMES } from "@/lib/constants";
-import { DAY_NAMES } from "@/lib/utils";
+import { DAY_NAMES, formatWeekRange } from "@/lib/utils";
 
 export default function SettingsPage() {
   const [venue, setVenue] = useState<Venue | null>(null);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [rules, setRules] = useState<SchedulingRules | null>(null);
+  const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -34,6 +40,8 @@ export default function SettingsPage() {
 
   const [venueName, setVenueName] = useState("");
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
+  const [unpublishTarget, setUnpublishTarget] = useState<Period | null>(null);
+  const [unpublishing, setUnpublishing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,12 +49,18 @@ export default function SettingsPage() {
       setLoading(true);
       setError(false);
       try {
-        const [venueRes, shiftsRes, rulesRes] = await Promise.all([getVenue(), listShifts(), getRules()]);
+        const [venueRes, shiftsRes, rulesRes, periodsRes] = await Promise.all([
+          getVenue(),
+          listShifts(),
+          getRules(),
+          listPeriods(),
+        ]);
         if (cancelled) return;
         setVenue(venueRes);
         setVenueName(venueRes.name);
         setShifts(shiftsRes);
         setRules(rulesRes);
+        setPeriods(periodsRes);
       } catch {
         if (!cancelled) setError(true);
       } finally {
@@ -58,6 +72,25 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [reloadToken]);
+
+  const livePeriods = periods.filter((p) => p.status === "published" || p.status === "confirmed");
+
+  async function handleUnpublish() {
+    if (!unpublishTarget) return;
+    setUnpublishing(true);
+    try {
+      await unpublishRota(unpublishTarget.id);
+      setPeriods((prev) =>
+        prev.map((p) => (p.id === unpublishTarget.id ? { ...p, status: "generated" } : p)),
+      );
+      showToast(`Week of ${formatWeekRange(unpublishTarget.week_start)} unpublished`);
+      setUnpublishTarget(null);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not unpublish this rota");
+    } finally {
+      setUnpublishing(false);
+    }
+  }
 
   function showToast(msg: string) {
     setToast(msg);
@@ -297,6 +330,36 @@ export default function SettingsPage() {
             </RuleRow>
           </div>
         </div>
+
+        {/* Unpublish */}
+        {livePeriods.length > 0 && (
+          <div className="rounded-panel border border-hairline bg-surface-card p-6 md:col-span-2">
+            <div className="mb-1 text-base font-bold text-ink">Live Rotas</div>
+            <div className="mb-4 text-[13px] text-ink-faint">
+              Unpublish a rota to pull it off the staff-facing view and make changes before
+              re-publishing. Assignments stay intact — this doesn&apos;t recall emails already sent.
+            </div>
+            <div className="flex flex-col gap-2">
+              {livePeriods.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-surface-subtle px-3.5 py-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm font-semibold text-ink">{formatWeekRange(p.week_start)}</div>
+                    <StatusBanner status={p.status} />
+                  </div>
+                  <button
+                    onClick={() => setUnpublishTarget(p)}
+                    className="rounded-lg px-3 py-2 text-[13px] font-medium text-unavail-text"
+                  >
+                    Unpublish
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <button
@@ -306,6 +369,36 @@ export default function SettingsPage() {
       >
         {saving ? "Saving…" : "Save Changes"}
       </button>
+
+      <Modal
+        open={!!unpublishTarget}
+        onClose={() => setUnpublishTarget(null)}
+        title="Unpublish this rota?"
+      >
+        <div className="mb-5 text-[13px] text-ink-muted">
+          Staff won&apos;t be able to see the rota for{" "}
+          <span className="font-semibold text-ink">
+            {unpublishTarget ? formatWeekRange(unpublishTarget.week_start) : ""}
+          </span>{" "}
+          until you re-publish it. Assignments aren&apos;t touched, and any drop, claim or swap
+          actions already made stay in place.
+        </div>
+        <div className="flex gap-2.5">
+          <button
+            onClick={() => setUnpublishTarget(null)}
+            className="flex-1 rounded-xl bg-unset-bg py-3.5 text-center text-sm font-semibold text-ink-muted"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleUnpublish}
+            disabled={unpublishing}
+            className="flex-1 rounded-xl bg-unavail-text py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
+          >
+            {unpublishing ? "Unpublishing…" : "Unpublish"}
+          </button>
+        </div>
+      </Modal>
 
       <Toast message={toast} />
     </div>

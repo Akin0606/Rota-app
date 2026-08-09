@@ -27,6 +27,7 @@ import {
   clearSubmission,
   createPeriod,
   editAssignment,
+  copyPreviousRota,
   generateRota,
   getClaims,
   getPeriodSubmissions,
@@ -80,6 +81,7 @@ export default function RotaPage() {
   const [rotaLoading, setRotaLoading] = useState(false);
   const [error, setError] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [copying, setCopying] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<EmailDelivery | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -324,6 +326,22 @@ export default function RotaPage() {
     }
   }
 
+  async function handleCopyPrevious() {
+    const p = await ensurePeriod();
+    if (!p) return;
+    setCopying(true);
+    try {
+      const result = await copyPreviousRota(p.id);
+      setSummary(result);
+      setPeriods((prev) => prev.map((x) => (x.id === p.id ? { ...x, status: result.status } : x)));
+      showToast(result.warnings.length ? result.warnings[0] : "Copied last week's rota");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not copy the previous rota");
+    } finally {
+      setCopying(false);
+    }
+  }
+
   async function submitAdd(dayIndex: number, shiftId: string, staffId: string, confirm: boolean) {
     const p = await ensurePeriod();
     if (!p) return;
@@ -438,6 +456,15 @@ export default function RotaPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="text-[26px] font-bold text-ink md:text-[28px]">Rota Builder</div>
         <div className="flex flex-wrap items-center gap-2.5">
+          {(summary?.assignments.length ?? 0) === 0 && (
+            <button
+              onClick={handleCopyPrevious}
+              disabled={copying}
+              className="rounded-[10px] border border-hairline bg-surface-card px-4 py-2.5 text-[13px] font-medium text-ink-muted disabled:opacity-60"
+            >
+              {copying ? "Copying…" : "Copy last week"}
+            </button>
+          )}
           <button
             onClick={handleGenerate}
             disabled={generating}
