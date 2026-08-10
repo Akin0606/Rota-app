@@ -8,6 +8,7 @@ from routers import (
     admin,
     availability,
     cron,
+    leave,
     periods,
     rota,
     rules,
@@ -53,6 +54,7 @@ app.include_router(activity.router)
 app.include_router(rules.router)
 app.include_router(scheduler.router)
 app.include_router(rota.router)
+app.include_router(leave.router)
 app.include_router(admin.router)
 app.include_router(cron.router)
 app.include_router(waitlist.router)

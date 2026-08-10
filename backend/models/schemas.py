@@ -362,6 +362,9 @@ class RotaSummaryOut(BaseModel):
     uncovered: list[UncoveredSlot]
     # Demanded slots below the shift's min_staff (but not empty).
     under_covered: list[UnderCoveredSlot] = []
+    # Approved leave overlapping this period's week: {staff_id: [day_index, ...]},
+    # so the grid can show "On leave" instead of a blank/"+ Add" cell.
+    leave: dict[str, list[int]] = {}
     warnings: list[str] = []
     # Non-blocking notes — e.g. an under-18's hours trimmed by the 40h weekly
     # cap or the 2-consecutive-days-off rule. Distinct from warnings: these
@@ -627,3 +630,43 @@ class AdminActivityOut(BaseModel):
     action: str
     detail: Optional[str] = None
     created_at: str
+
+
+class LeaveRequestCreateRequest(BaseModel):
+    pin: str = Field(pattern=r"^\d{4}$")
+    start_date: str
+    end_date: str
+    reason: Optional[str] = None
+
+
+class LeaveRequestPinRequest(BaseModel):
+    pin: str = Field(pattern=r"^\d{4}$")
+
+
+class LeaveRequestCancelRequest(BaseModel):
+    pin: str = Field(pattern=r"^\d{4}$")
+    request_id: str
+
+
+class LeaveDecisionRequest(BaseModel):
+    manager_note: Optional[str] = None
+
+
+class LeaveRequestOut(BaseModel):
+    id: str
+    staff_id: str
+    staff_name: str
+    start_date: str
+    end_date: str
+    status: Literal["pending", "approved", "rejected", "cancelled"]
+    reason: Optional[str] = None
+    manager_note: Optional[str] = None
+    created_at: str
+    decided_at: Optional[str] = None
+    # Manager view only: how many of this staff member's existing rota
+    # assignments fall inside the requested range — 0 on the staff-facing view.
+    conflicting_assignments: int = 0
+
+
+class LeaveRequestsOut(BaseModel):
+    requests: list[LeaveRequestOut] = []

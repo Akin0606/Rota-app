@@ -620,6 +620,8 @@ export type RotaSummary = {
   conflicts: number;
   uncovered: { day_index: number; shift_id: string }[];
   under_covered: { day_index: number; shift_id: string; assigned: number; required: number }[];
+  // Approved leave overlapping this week: { staff_id: [day_index, ...] }.
+  leave: Record<string, number[]>;
   warnings: string[];
   info: string[];
   // Present only on the publish response.
@@ -824,6 +826,69 @@ export function emailRota(
   return authedRequest(`/api/rota/${periodId}/email`, {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+// --- Holiday / annual leave requests ----------------------------------------
+
+export type LeaveRequest = {
+  id: string;
+  staff_id: string;
+  staff_name: string;
+  start_date: string;
+  end_date: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  reason: string | null;
+  manager_note: string | null;
+  created_at: string;
+  decided_at: string | null;
+  // Manager view only: existing rota assignments that fall inside the range.
+  conflicting_assignments: number;
+};
+
+export function requestLeave(
+  venueToken: string,
+  pin: string,
+  startDate: string,
+  endDate: string,
+  reason: string | null,
+): Promise<LeaveRequest> {
+  return request(`/api/leave/${venueToken}/request`, {
+    method: "POST",
+    body: JSON.stringify({ pin, start_date: startDate, end_date: endDate, reason }),
+  });
+}
+
+export function myLeaveRequests(venueToken: string, pin: string): Promise<{ requests: LeaveRequest[] }> {
+  return request(`/api/leave/${venueToken}/mine`, {
+    method: "POST",
+    body: JSON.stringify({ pin }),
+  });
+}
+
+export function cancelLeaveRequest(venueToken: string, pin: string, requestId: string): Promise<LeaveRequest> {
+  return request(`/api/leave/${venueToken}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ pin, request_id: requestId }),
+  });
+}
+
+export function listLeaveRequests(status?: string): Promise<{ requests: LeaveRequest[] }> {
+  const query = status ? `?status=${status}` : "";
+  return authedRequest(`/api/leave${query}`);
+}
+
+export function approveLeave(requestId: string, managerNote?: string): Promise<LeaveRequest> {
+  return authedRequest(`/api/leave/${requestId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ manager_note: managerNote ?? null }),
+  });
+}
+
+export function rejectLeave(requestId: string, managerNote?: string): Promise<LeaveRequest> {
+  return authedRequest(`/api/leave/${requestId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ manager_note: managerNote ?? null }),
   });
 }
 

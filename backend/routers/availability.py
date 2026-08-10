@@ -61,6 +61,10 @@ STAFF_ACTIVITY_ACTIONS = [
     "rota_published",
     "rota_confirmed",
     "staff_added",
+    "leave_requested",
+    "leave_approved",
+    "leave_rejected",
+    "leave_cancelled",
 ]
 
 router = APIRouter(prefix="/api/availability", tags=["availability"])

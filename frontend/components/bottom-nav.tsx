@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: "📊", href: "/dashboard" },
   { key: "rota", label: "Rota", icon: "📅", href: "/rota" },
   { key: "team", label: "Team", icon: "👥", href: "/team" },
+  { key: "leave", label: "Leave", icon: "🌴", href: "/leave" },
   { key: "scheduler", label: "Scheduler", icon: "⏱️", href: "/scheduler" },
   { key: "settings", label: "Settings", icon: "⚙️", href: "/settings" },
 ];
@@ -15,7 +16,7 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-unset-border bg-surface-card pb-[env(safe-area-inset-bottom,0px)] md:hidden">
+    <div className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-unset-border bg-surface-card pb-[env(safe-area-inset-bottom,0px)] md:hidden">
       {NAV_ITEMS.map((item) => {
         const active = pathname?.startsWith(item.href);
         return (

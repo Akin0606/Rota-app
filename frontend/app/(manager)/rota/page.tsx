@@ -807,6 +807,7 @@ export default function RotaPage() {
             staff={staff}
             assignments={summary?.assignments ?? []}
             orientation={orientation}
+            leave={summary?.leave ?? {}}
             onAdd={handleAdd}
             onRemove={handleRemove}
           />

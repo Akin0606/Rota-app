@@ -22,7 +22,7 @@ from models.schemas import (
     SwapApproveRequest,
     SwapOut,
 )
-from services import email_service, notice_window, rota_export, schedule_windows, swap_guard
+from services import email_service, leave, notice_window, rota_export, schedule_windows, swap_guard
 from services.auth_service import get_current_manager, get_manager_venue
 from services.solver import (
     AVAILABLE,
@@ -148,6 +148,8 @@ def _build_summary(
                 {"day_index": d, "shift_id": shid, "assigned": count, "required": required}
             )
 
+    leave_blocked = leave.blocked_days_for_week(supabase, venue_id, str(period["week_start"]))
+
     return {
         "period_id": period["id"],
         "status": period["status"],
@@ -156,6 +158,7 @@ def _build_summary(
         "conflicts": len(uncovered) + len(under_covered),
         "uncovered": uncovered,
         "under_covered": under_covered,
+        "leave": {sid: sorted(days) for sid, days in leave_blocked.items()},
         "warnings": warnings or [],
         "info": info or [],
     }
@@ -750,7 +753,8 @@ def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
         "require_day_off": True,
     }
 
-    result = generate_rota(staff, shifts, submissions, rules)
+    leave_blocked = leave.blocked_days_for_week(supabase, venue["id"], str(period["week_start"]))
+    result = generate_rota(staff, shifts, submissions, rules, leave_days=leave_blocked)
 
     # Replace solver-generated assignments, but preserve any manager overrides
     # from a previous manual-edit pass on this period.
@@ -974,7 +978,12 @@ def edit_assignment(
         "require_day_off": True,
     }
 
-    check = check_manual_assignment(staff, payload.day_index, shift, other_assignments, shifts_by_id, rules)
+    leave_blocked = leave.blocked_days_for_week(supabase, venue["id"], str(period["week_start"]))
+    on_leave = payload.day_index in leave_blocked.get(payload.staff_id, set())
+
+    check = check_manual_assignment(
+        staff, payload.day_index, shift, other_assignments, shifts_by_id, rules, on_leave=on_leave
+    )
 
     # Under-18 violations are a hard block — no override, regardless of confirm.
     if check["severity"] == "block":

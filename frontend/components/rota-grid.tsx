@@ -13,6 +13,8 @@ type RotaGridProps = {
   staff: StaffManager[];
   assignments: AssignmentOut[];
   orientation: RotaOrientation;
+  // Approved leave overlapping this week: { staff_id: [day_index, ...] }.
+  leave: Record<string, number[]>;
   onAdd: (dayIndex: number, shiftId: string, staffId: string) => void;
   onRemove: (dayIndex: number, shiftId: string, staffId: string) => void;
 };
@@ -30,6 +32,7 @@ export default function RotaGrid({
   staff,
   assignments,
   orientation,
+  leave,
   onAdd,
   onRemove,
 }: RotaGridProps) {
@@ -88,6 +91,14 @@ export default function RotaGrid({
             </option>
           ))}
         </select>
+      );
+    }
+
+    if (leave[staffId]?.includes(dayIndex)) {
+      return (
+        <div className="w-full rounded-md bg-unset-bg py-1 text-center text-[11px] font-medium text-ink-faint">
+          On leave
+        </div>
       );
     }
 

@@ -82,6 +82,7 @@ def check_manual_assignment(
     other_assignments: list[dict],
     shifts_by_id: dict,
     rules: dict,
+    on_leave: bool = False,
 ) -> dict:
     """Validates a single proposed manual "add" against the same rules
     generate_rota enforces, so the one-off manual-edit path can't bypass them.
@@ -94,6 +95,7 @@ def check_manual_assignment(
         day first. [{day_index, shift_id}]
     shifts_by_id: all of the venue's shifts, keyed by id
     rules: {max_hours_per_week, min_rest_hours, require_day_off}
+    on_leave: True if this staff member has approved leave covering day_index
 
     Judges the proposed add against the POST-add state of the staff member's
     week (their other assignments plus this one) so an adjacent-day rest gap
@@ -179,7 +181,19 @@ def check_manual_assignment(
                 ),
             }
 
+        if on_leave:
+            return {
+                "severity": "confirm",
+                "reason": f"{name} has approved leave covering this day.",
+            }
+
         return {"severity": "ok", "reason": None}
+
+    if on_leave:
+        return {
+            "severity": "confirm",
+            "reason": f"{name} has approved leave covering this day.",
+        }
 
     max_hours = rules.get("max_hours_per_week", 48)
     total_hours = sum(
@@ -222,6 +236,7 @@ def generate_rota(
     shifts: list[dict],
     submissions: list[dict],
     rules: dict,
+    leave_days: dict[str, set[int]] | None = None,
 ) -> dict:
     """
     staff: [{id, name, is_under_18, ...}] active staff members
@@ -229,6 +244,9 @@ def generate_rota(
     submissions: [{staff_id, day_index, shift_id, status}] (shift_id may be
         None for day-level notes — those are ignored here)
     rules: {max_hours_per_week, min_rest_hours, require_day_off}
+    leave_days: {staff_id: {day_index, ...}} approved-leave days this week —
+        no shift variable is created for that staff member on that day at
+        all, same as if they'd marked themselves UNAVAILABLE all day.
 
     Returns {
         "assignments": [{"staff_id", "day_index", "shift_id"}],
@@ -241,6 +259,7 @@ def generate_rota(
     max_hours = rules.get("max_hours_per_week", 48)
     min_rest = rules.get("min_rest_hours", 11)
     require_day_off = rules.get("require_day_off", True)
+    leave_days = leave_days or {}
 
     shifts_by_id = {sh["id"]: sh for sh in shifts}
     duration = {shid: shift_duration_hours(sh) for shid, sh in shifts_by_id.items()}
@@ -276,7 +295,10 @@ def generate_rota(
     x: dict[tuple, cp_model.IntVar] = {}
     for sid in staff_ids:
         under18 = is_under18.get(sid, False)
+        blocked_days = leave_days.get(sid, set())
         for d in DAYS:
+            if d in blocked_days:
+                continue
             for shid in shift_ids:
                 if availability.get((sid, d, shid), 0) not in (AVAILABLE, PREFERRED):
                     continue
