@@ -4,10 +4,35 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-import ShiftBadge from "@/components/shift-badge";
-import StatusBanner from "@/components/status-banner";
-import { ApiError, StaffRota, StaffRotaAssignment, getStaffRota } from "@/lib/api";
-import { DAY_LABELS, DAY_NAMES, addDays, buildShiftsIcs, formatWeekRange, parseISODate, pinStorageKey } from "@/lib/utils";
+import BackButton from "@/components/staff/back-button";
+import CalendarBlock from "@/components/staff/calendar-block";
+import Icon from "@/components/staff/icon";
+import ModeToggle from "@/components/staff/mode-toggle";
+import StaffScreen, { FootNote, ScreenTitle, StaffTopBar } from "@/components/staff/screen";
+import StatusBadge, { StatusTone } from "@/components/staff/status-badge";
+import { STATUS_CONFIG } from "@/components/status-banner";
+import { ApiError, StaffRota, getStaffRota } from "@/lib/api";
+import {
+  DAY_LABELS,
+  addDays,
+  buildShiftsIcs,
+  formatHoursTotal,
+  formatWeekRangeCompact,
+  parseISODate,
+  pinStorageKey,
+  shiftDurationHours,
+  sumShiftHours,
+} from "@/lib/utils";
+
+// The rota's own status wording is shared with the manager app so the two
+// never drift; only the colour tone is re-mapped onto the staff palette.
+const STATUS_TONES: Record<string, StatusTone> = {
+  confirmed: "green",
+  published: "amber",
+  generated: "accent",
+  closed: "neutral",
+  collecting: "amber",
+};
 
 export default function StaffRotaViewPage({ params }: { params: { venue_token: string } }) {
   const { venue_token } = params;
@@ -16,7 +41,6 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
   const [data, setData] = useState<StaffRota | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
   useEffect(() => {
     const pin = sessionStorage.getItem(pinStorageKey(venue_token));
@@ -37,17 +61,6 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [venue_token]);
-
-  // Default the day strip to today, clamped into this week — so a Sunday
-  // check-in during next week's rota still lands on a valid column.
-  useEffect(() => {
-    if (!data?.period || selectedDay !== null) return;
-    const weekStart = parseISODate(data.period.week_start);
-    const now = new Date();
-    const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-    const offset = Math.round((todayUTC - weekStart.getTime()) / 86_400_000);
-    setSelectedDay(Math.min(6, Math.max(0, offset)));
-  }, [data, selectedDay]);
 
   function handleAddToCalendar() {
     if (!data?.period) return;
@@ -84,36 +97,31 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
   }
 
   if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
-  if (error) return <CenteredMessage>{error}</CenteredMessage>;
-  if (!data) return <CenteredMessage>Something went wrong.</CenteredMessage>;
+  if (error || !data) return <CenteredMessage>{error || "Something went wrong."}</CenteredMessage>;
 
   if (!data.period) {
     return (
-      <div className="min-h-screen bg-surface-page pb-10">
-        <div className="mx-auto max-w-[480px] px-5 pt-6">
-          <a href={`/v/${venue_token}/hub`} className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
-            ← Back
-          </a>
-          <div className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
-            {data.venue_name}
-          </div>
-          <div className="mt-0.5 font-display text-xl font-bold text-ink">Your rota</div>
-
-          <div className="mt-5 rounded-card border border-hairline bg-surface-card p-6 text-center">
-            <div className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">No rota yet</div>
-            <div className="mt-3 font-display text-lg font-bold text-ink">Nothing published</div>
-            <div className="mt-1 text-sm text-ink-muted">
-              Check back once your manager publishes the rota for {data.venue_name}.
-            </div>
-            <Link
-              href={`/v/${venue_token}/availability`}
-              className="mt-5 inline-block text-[13px] font-semibold text-accent"
-            >
-              ← Back to availability
-            </Link>
-          </div>
+      <StaffScreen>
+        <StaffTopBar
+          left={<BackButton href={`/v/${venue_token}/hub`} />}
+          right={<ModeToggle venueToken={venue_token} />}
+        />
+        <div className="mb-5 mt-4">
+          <ScreenTitle title="My shifts" sub={data.venue_name} />
         </div>
-      </div>
+        <div className="cp-hairline rounded-cp-card bg-surface-card p-6 text-center">
+          <div className="text-[15px] font-medium text-ink">Nothing published yet</div>
+          <div className="mt-1.5 text-[13px] leading-[1.45] text-ink-muted">
+            Your shifts appear here once your manager publishes the rota.
+          </div>
+          <Link
+            href={`/v/${venue_token}/availability`}
+            className="mt-4 inline-block text-[13px] font-medium !text-accent"
+          >
+            Submit your availability
+          </Link>
+        </div>
+      </StaffScreen>
     );
   }
 
@@ -122,162 +130,226 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
   const shiftsById = new Map(data.shifts.map((s) => [s.id, s]));
   const teamById = new Map(data.team.map((t) => [t.id, t]));
 
-  const myAssignments = data.assignments
-    .filter((a) => a.staff_id === data.staff_id)
-    .sort((a, b) => a.day_index - b.day_index);
+  const myAssignments = data.assignments.filter((a) => a.staff_id === data.staff_id && a.shift_id);
   const myAssignmentsByDay = new Map(myAssignments.map((a) => [a.day_index, a]));
 
-  const byDay = new Map<number, StaffRotaAssignment[]>();
-  for (const a of data.assignments) {
-    const list = byDay.get(a.day_index) ?? [];
-    list.push(a);
-    byDay.set(a.day_index, list);
-  }
+  const myShifts = myAssignments
+    .map((a) => shiftsById.get(a.shift_id!))
+    .filter((s): s is NonNullable<typeof s> => Boolean(s));
+  const { hours, unmeasured } = sumShiftHours(myShifts);
 
   const now = new Date();
   const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const todayIndex = Math.round((todayUTC - weekStart.getTime()) / 86_400_000);
 
-  const day = selectedDay ?? 0;
-  const myDayAssignment = myAssignmentsByDay.get(day);
-  const myDayShift = myDayAssignment?.shift_id ? shiftsById.get(myDayAssignment.shift_id) : undefined;
-
-  const dayTeam = (byDay.get(day) ?? [])
-    .slice()
-    .sort((x, y) => {
-      const sx = x.shift_id ? shiftsById.get(x.shift_id)?.sort_order ?? 0 : 0;
-      const sy = y.shift_id ? shiftsById.get(y.shift_id)?.sort_order ?? 0 : 0;
-      return sx - sy;
-    });
+  const statusLabel = (STATUS_CONFIG[period.status] ?? STATUS_CONFIG.collecting).label;
+  const statusTone = STATUS_TONES[period.status] ?? "neutral";
+  // The API doesn't expose when the rota was published, so this frames the
+  // week rather than claiming a notice period we can't actually measure.
+  const timing =
+    todayIndex < 0
+      ? todayIndex === -1
+        ? "starts tomorrow"
+        : `starts in ${-todayIndex} days`
+      : todayIndex > 6
+        ? "last week"
+        : "this week";
 
   return (
-    <div className="min-h-screen bg-surface-page pb-10">
-      <div className="mx-auto max-w-[480px]">
-        <div className="px-5 pt-6">
-          <a href={`/v/${venue_token}/hub`} className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
-            ← Back
-          </a>
-          <div className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
-            {data.venue_name}
+    <StaffScreen>
+      <StaffTopBar
+        left={<BackButton href={`/v/${venue_token}/hub`} />}
+        right={<ModeToggle venueToken={venue_token} />}
+      />
+
+      <div className="mb-[18px] mt-4 flex items-end justify-between gap-3">
+        <ScreenTitle
+          title="My shifts"
+          sub={`Week of ${formatWeekRangeCompact(period.week_start)} · ${data.venue_name}`}
+        />
+        <div className="shrink-0 text-right">
+          <div className="text-[22px] font-medium tracking-[-0.5px] text-ink">
+            {formatHoursTotal(hours, unmeasured)}
           </div>
-          <div className="mt-0.5 flex items-center justify-between gap-3">
-            <div className="font-display text-xl font-bold text-ink">Your rota</div>
-            <StatusBanner status={period.status} />
-          </div>
-          <div className="mt-1 text-[13px] font-semibold text-ink-muted">
-            Week of {formatWeekRange(period.week_start)}
+          <div className="text-[11px] text-ink-faint transition-colors duration-[350ms]">
+            {myAssignmentsByDay.size} shift{myAssignmentsByDay.size === 1 ? "" : "s"}
           </div>
         </div>
+      </div>
 
-        <div className="mt-5 px-5">
-          {/* Day strip — tap a day to inspect it below */}
-          <div className="flex justify-between gap-1 rounded-panel border border-hairline bg-surface-card p-1.5">
-            {DAY_LABELS.map((label, i) => {
-              const isSelected = i === day;
-              const isToday = i === todayIndex;
-              const assignment = myAssignmentsByDay.get(i);
-              const shift = assignment?.shift_id ? shiftsById.get(assignment.shift_id) : null;
-              return (
-                <button
-                  key={i}
-                  onClick={() => setSelectedDay(i)}
-                  className={`flex flex-1 flex-col items-center gap-1 rounded-[10px] py-2 transition ${
-                    isSelected ? "bg-accent-light" : ""
-                  }`}
-                >
-                  <span
-                    className={`text-[10px] font-semibold ${
-                      isSelected ? "text-accent" : isToday ? "text-ink" : "text-ink-faint"
-                    }`}
-                  >
-                    {label}
-                  </span>
-                  <span className={`text-sm font-bold ${isSelected ? "text-accent" : "text-ink"}`}>
-                    {addDays(weekStart, i).getUTCDate()}
-                  </span>
-                  <span
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ background: shift ? shift.color : "var(--c-hairline)" }}
-                  />
-                </button>
-              );
-            })}
-          </div>
+      <StatusBadge
+        tone={statusTone}
+        // A tick on an amber "Provisional" pill would read as settled when it
+        // explicitly isn't — only a confirmed rota earns the check.
+        icon={statusTone === "green" ? "circle-check" : "clock"}
+        className="mb-5"
+      >
+        {statusLabel} · {timing}
+      </StatusBadge>
 
-          {/* Selected day's shift, hero-style */}
-          <div className="mt-4">
-            {myDayShift ? (
-              <div className="relative overflow-hidden rounded-card border border-hairline bg-surface-card p-6">
-                <div
-                  className="pointer-events-none absolute inset-0 opacity-[0.10]"
-                  style={{ background: `radial-gradient(circle at 100% -10%, ${myDayShift.color}, transparent 55%)` }}
+      {/* Vertical timeline. The rule is positioned to run through the centre
+          of the 40px day nodes, and inset top/bottom so it doesn't overhang
+          the first and last one. */}
+      <div className="relative">
+        <span
+          aria-hidden="true"
+          className="absolute bottom-2 left-[19px] top-2 w-[1.5px] bg-cp-track transition-colors duration-[350ms]"
+        />
+        {DAY_LABELS.map((_, dayIndex) => {
+          const assignment = myAssignmentsByDay.get(dayIndex);
+          const shift = assignment?.shift_id ? shiftsById.get(assignment.shift_id) : undefined;
+          const date = addDays(weekStart, dayIndex);
+          const isPast = date.getTime() < todayUTC;
+
+          const colleagues = shift
+            ? data.assignments
+                .filter(
+                  (a) =>
+                    a.day_index === dayIndex &&
+                    a.shift_id === shift.id &&
+                    a.staff_id &&
+                    a.staff_id !== data.staff_id,
+                )
+                .map((a) => teamById.get(a.staff_id!))
+                .filter((m): m is NonNullable<typeof m> => Boolean(m))
+            : [];
+
+          const duration = shift ? shiftDurationHours(shift.start_time, shift.end_time) : null;
+          // A shift that's already been dropped, given or claimed can't be
+          // acted on again — it shows its state instead of a tap affordance.
+          const inFlight = Boolean(assignment?.drop_status);
+
+          return (
+            <div key={dayIndex} className="relative mb-2.5 flex gap-[14px]">
+              <div className="z-[1] w-10 shrink-0">
+                <CalendarBlock
+                  variant="node"
+                  dayIndex={dayIndex}
+                  dateNumber={date.getUTCDate()}
+                  active={Boolean(shift)}
                 />
-                <div className="relative">
-                  <div className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
-                    {day === todayIndex ? "Today" : DAY_NAMES[day]}
-                  </div>
-                  <div className="mt-2 flex items-end justify-between gap-3">
-                    <div className="text-xl font-bold text-ink">
-                      {myDayShift.start_time} – {myDayShift.end_time}
-                    </div>
-                    <ShiftBadge name={myDayShift.name} color={myDayShift.color} />
-                  </div>
-                </div>
               </div>
-            ) : (
-              <div className="rounded-card border border-hairline bg-surface-card p-6 text-center">
-                <div className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
-                  {day === todayIndex ? "Today" : DAY_NAMES[day]}
+
+              {!shift ? (
+                <div className="flex flex-1 items-center px-[15px] py-[13px] text-[13px] text-ink-faint transition-colors duration-[350ms]">
+                  Day off
                 </div>
-                <div className="mt-2 text-sm font-semibold text-ink-muted">You&apos;re not scheduled this day.</div>
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={handleAddToCalendar}
-            disabled={myAssignments.length === 0}
-            className="mt-3 w-full rounded-control border border-accent-border bg-surface-card py-3 text-center text-sm font-semibold text-accent disabled:opacity-50"
-          >
-            + Add all shifts to calendar
-          </button>
-
-          <div className="mb-3 mt-6 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-            {DAY_NAMES[day]} · full team
-          </div>
-          {dayTeam.length === 0 ? (
-            <div className="rounded-panel border border-hairline bg-surface-subtle p-4 text-center text-sm text-ink-muted">
-              No one scheduled.
+              ) : (
+                <ShiftRow
+                  href={
+                    isPast || inFlight ? null : `/v/${venue_token}/drop?assignment=${assignment!.id}`
+                  }
+                  time={`${shift.start_time} – ${shift.end_time}`}
+                  name={shift.name}
+                  colleagues={colleagues}
+                  duration={duration}
+                  inFlight={inFlight}
+                  dimmed={isPast}
+                />
+              )}
             </div>
-          ) : (
-            <div className="flex flex-col gap-1.5 rounded-panel border border-hairline bg-surface-card p-3.5">
-              {dayTeam.map((a) => {
-                const shift = a.shift_id ? shiftsById.get(a.shift_id) : undefined;
-                const member = a.staff_id ? teamById.get(a.staff_id) : undefined;
-                if (!shift || !member) return null;
-                const isMe = a.staff_id === data.staff_id;
-                return (
-                  <div key={a.id} className="flex items-center gap-2 text-[13px]">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: shift.color }} />
-                    <span className={isMe ? "font-bold text-accent" : "text-ink-label"}>
-                      {member.name}
-                      {isMe ? " (you)" : ""}
-                    </span>
-                    <span className="text-ink-faint">— {shift.name}</span>
-                  </div>
-                );
-              })}
-            </div>
+          );
+        })}
+      </div>
+
+      <button
+        onClick={handleAddToCalendar}
+        disabled={myAssignmentsByDay.size === 0}
+        className="cp-hairline mt-4 flex w-full items-center justify-center gap-2 rounded-cp-panel bg-surface-card py-3.5 text-[14px] font-medium text-accent transition-colors hover:bg-surface-subtle disabled:opacity-40"
+      >
+        <Icon name="calendar-plus" size={16} />
+        Add all shifts to calendar
+      </button>
+
+      <FootNote>Tap a shift to drop, give or swap it</FootNote>
+    </StaffScreen>
+  );
+}
+
+function ShiftRow({
+  href,
+  time,
+  name,
+  colleagues,
+  duration,
+  inFlight,
+  dimmed,
+}: {
+  href: string | null;
+  time: string;
+  name: string;
+  colleagues: { id: string; name: string }[];
+  duration: number | null;
+  inFlight: boolean;
+  dimmed: boolean;
+}) {
+  const body = (
+    <>
+      <div className="min-w-0 flex-1">
+        <div className="text-[14px] font-medium text-ink">{time}</div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-ink-muted transition-colors duration-[350ms]">
+          <span className="shrink-0">{name}</span>
+          {colleagues.length > 0 && (
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="shrink-0">· with</span>
+              <span className="flex shrink-0 -space-x-1">
+                {colleagues.slice(0, 3).map((c) => (
+                  <span
+                    key={c.id}
+                    className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-cp-icon text-[9px] font-medium text-ink-muted ring-1 ring-[var(--c-surface-card)] transition-colors duration-[350ms]"
+                  >
+                    {c.name.charAt(0).toUpperCase()}
+                  </span>
+                ))}
+              </span>
+              <span className="truncate">
+                {colleagues
+                  .slice(0, 2)
+                  .map((c) => c.name.split(" ")[0])
+                  .join(", ")}
+                {colleagues.length > 2 ? ` +${colleagues.length - 2}` : ""}
+              </span>
+            </span>
           )}
         </div>
       </div>
-    </div>
+
+      {inFlight ? (
+        <StatusBadge tone="amber" className="shrink-0">
+          Pending
+        </StatusBadge>
+      ) : (
+        duration !== null && (
+          <span className="shrink-0 rounded-cp-badge bg-cp-icon px-2.5 py-1 text-[12px] font-medium text-ink-muted transition-colors duration-[350ms]">
+            {duration}h
+          </span>
+        )
+      )}
+
+      {href && (
+        <span className="shrink-0 text-ink-faint transition-[color,transform] duration-200 group-hover:translate-x-0.5 group-hover:text-accent">
+          <Icon name="chevron-right" size={15} />
+        </span>
+      )}
+    </>
+  );
+
+  const shell = `group flex flex-1 items-center gap-3 cp-hairline rounded-cp-panel bg-surface-card px-[15px] py-[13px] transition-all duration-200 ${
+    dimmed ? "opacity-50" : ""
+  }`;
+
+  if (!href) return <div className={shell}>{body}</div>;
+
+  return (
+    <Link href={href} className={`${shell} hover:!border-accent hover:bg-surface-subtle`}>
+      {body}
+    </Link>
   );
 }
 
 function CenteredMessage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center px-6 text-center text-sm text-ink-muted">
+    <div className="cp-staff flex min-h-screen items-center justify-center bg-surface-page px-6 text-center text-sm text-ink-muted">
       {children}
     </div>
   );

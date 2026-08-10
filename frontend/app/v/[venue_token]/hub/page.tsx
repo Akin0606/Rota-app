@@ -28,9 +28,10 @@ import {
 import {
   DAY_NAMES,
   formatDeadlineDay,
+  formatHoursTotal,
   formatWeekOf,
   pinStorageKey,
-  shiftDurationHours,
+  sumShiftHours,
   weeksFromThisWeek,
 } from "@/lib/utils";
 
@@ -39,10 +40,6 @@ function greeting(): string {
   if (h < 12) return "Good morning";
   if (h < 18) return "Good afternoon";
   return "Good evening";
-}
-
-function formatHours(h: number): string {
-  return Number.isInteger(h) ? String(h) : h.toFixed(1);
 }
 
 function todayISO(): string {
@@ -211,19 +208,11 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
     : [];
 
   const shiftsById = new Map((rota?.shifts ?? []).map((s) => [s.id, s]));
-  // Shift ends can be free text ("close" is common in pubs), which has no
-  // measurable duration. Those shifts contribute nothing to the total, so the
-  // badge says "4+ hrs" rather than silently under-reporting as "4 hrs".
-  let totalHours = 0;
-  let unmeasuredShifts = 0;
-  for (const a of myAssignments) {
-    const shift = a.shift_id ? shiftsById.get(a.shift_id) : undefined;
-    if (!shift) continue;
-    const hours = shiftDurationHours(shift.start_time, shift.end_time);
-    if (hours === null) unmeasuredShifts += 1;
-    else totalHours += hours;
-  }
-  const hoursBadge = `${formatHours(totalHours)}${unmeasuredShifts > 0 ? "+" : ""} hrs`;
+  const myShifts = myAssignments
+    .map((a) => (a.shift_id ? shiftsById.get(a.shift_id) : undefined))
+    .filter((s): s is NonNullable<typeof s> => Boolean(s));
+  const { hours, unmeasured } = sumShiftHours(myShifts);
+  const hoursBadge = `${formatHoursTotal(hours, unmeasured, "")} hrs`;
 
   // Anything of this person's that's mid-flight: their own drops and claims,
   // shifts offered to them, and either side of a swap.

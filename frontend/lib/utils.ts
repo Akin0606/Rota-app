@@ -36,6 +36,41 @@ export function formatWeekRange(weekStart: string): string {
   return `${startFmt} – ${endFmt}`;
 }
 
+// "18–24 Aug", or "28 Aug – 3 Sep" when the week straddles two months. The
+// staff screens are 375px wide, so the month is only repeated when it has to
+// be.
+export function formatWeekRangeCompact(weekStart: string): string {
+  const start = parseISODate(weekStart);
+  const end = addDays(start, 6);
+  const month = (d: Date) => d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
+  if (start.getUTCMonth() === end.getUTCMonth()) {
+    return `${start.getUTCDate()}–${end.getUTCDate()} ${month(end)}`;
+  }
+  return `${start.getUTCDate()} ${month(start)} – ${end.getUTCDate()} ${month(end)}`;
+}
+
+// Total hours across a set of shifts. Shift ends are free text and pubs
+// routinely use "close", which has no measurable duration — those are counted
+// separately rather than silently folded in as zero, so callers can render an
+// honest "28.5+h" instead of a confident, wrong "28.5h".
+export function sumShiftHours(
+  shifts: { start_time: string; end_time: string }[],
+): { hours: number; unmeasured: number } {
+  let hours = 0;
+  let unmeasured = 0;
+  for (const s of shifts) {
+    const d = shiftDurationHours(s.start_time, s.end_time);
+    if (d === null) unmeasured += 1;
+    else hours += d;
+  }
+  return { hours, unmeasured };
+}
+
+export function formatHoursTotal(hours: number, unmeasured: number, unit = "h"): string {
+  const value = Number.isInteger(hours) ? String(hours) : hours.toFixed(1);
+  return `${value}${unmeasured > 0 ? "+" : ""}${unit}`;
+}
+
 function deadlineDate(weekStart: string, closesDay: string): Date {
   const dayIndex = DAY_NAMES.indexOf(closesDay);
   return addDays(parseISODate(weekStart), dayIndex < 0 ? 0 : dayIndex);
