@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 import Modal from "@/components/modal";
 import ShiftBadge from "@/components/shift-badge";
@@ -162,16 +161,22 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
 
   if (!data.period) {
     return (
-      <div className="mx-auto max-w-[420px] py-4">
-        <div className="mx-4 animate-fadeIn overflow-hidden rounded-card bg-surface shadow-card">
-          <div className="flex min-h-[420px] flex-col items-center justify-center px-6 py-10 text-center">
-            <div className="mb-2 text-xl font-bold text-ink">No rota published yet</div>
-            <div className="text-sm leading-relaxed text-ink-muted">
+      <div className="min-h-screen bg-surface-page pb-10">
+        <div className="mx-auto max-w-[480px] px-5 pt-6">
+          <a href={`/v/${venue_token}/hub`} className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
+            ← Back
+          </a>
+          <div className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            {data.venue_name}
+          </div>
+          <div className="mt-0.5 font-display text-xl font-bold text-ink">Drop or swap</div>
+
+          <div className="mt-5 rounded-card border border-hairline bg-surface-card p-6 text-center">
+            <div className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">No rota yet</div>
+            <div className="mt-3 font-display text-lg font-bold text-ink">Nothing to drop</div>
+            <div className="mt-1 text-sm text-ink-muted">
               There&apos;s nothing to drop until a rota&apos;s been published for {data.venue_name}.
             </div>
-            <Link href={`/v/${venue_token}/hub`} className="mt-6 text-[13px] font-semibold text-accent">
-              ← Hub
-            </Link>
           </div>
         </div>
       </div>
@@ -200,17 +205,19 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
     .sort((a, b) => a.day_index - b.day_index);
 
   return (
-    <div className="mx-auto max-w-[420px] py-4">
-      <div className="mx-4 animate-fadeIn overflow-hidden rounded-card bg-surface shadow-card">
-        <div className="px-6 pb-7 pt-5">
-          <Link href={`/v/${venue_token}/hub`} className="text-[13px] font-semibold text-accent">
-            ← Hub
-          </Link>
-          <div className="py-2 pb-4 text-center">
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-faint">{data.venue_name}</div>
-            <div className="mt-1 text-[22px] font-bold text-ink">Drop a Shift</div>
+    <div className="min-h-screen bg-surface-page pb-10">
+      <div className="mx-auto max-w-[480px]">
+        <div className="px-5 pt-6">
+          <a href={`/v/${venue_token}/hub`} className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
+            ← Back
+          </a>
+          <div className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            {data.venue_name}
           </div>
+          <div className="mt-0.5 font-display text-xl font-bold text-ink">Drop or swap</div>
+        </div>
 
+        <div className="mt-5 px-5">
           <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">
             Your upcoming shifts
           </div>

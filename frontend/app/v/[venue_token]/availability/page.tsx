@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 import AvailabilityGrid from "@/components/availability-grid";
 import Toast from "@/components/toast";
@@ -200,26 +199,24 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
     return <CenteredMessage>{error || "Something went wrong."}</CenteredMessage>;
   }
 
-  const firstName = data.staff.name.split(" ")[0];
-
   return (
-    <div className="mx-auto max-w-[420px] py-4">
-      <div className="mx-4 overflow-hidden rounded-card bg-surface shadow-card">
-        <div className="px-6 pb-7 pt-5">
-          <Link href={`/v/${venue_token}/hub`} className="text-[13px] font-semibold text-accent">
-            ← Hub
-          </Link>
-          <div className="py-2 pb-4 text-center">
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-faint">
-              {data.venue_name}
-            </div>
-            <div className="mt-1 text-[22px] font-bold text-ink">Hi, {firstName}</div>
+    <div className="min-h-screen bg-surface-page pb-10">
+      <div className="mx-auto max-w-[480px]">
+        <div className="px-5 pt-6">
+          <a href={`/v/${venue_token}/hub`} className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
+            ← Back
+          </a>
+          <div className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            {data.venue_name}
           </div>
+          <div className="mt-0.5 font-display text-xl font-bold text-ink">Availability</div>
+        </div>
 
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-[10px] bg-surface-subtle px-3.5 py-2.5">
+        <div className="mt-5 flex flex-col gap-3 px-5">
+          <div className="flex items-center justify-between gap-3 rounded-panel border border-hairline bg-surface-card p-4">
             <div className="min-w-0">
               <div className="text-[13px] font-semibold text-ink">Auto-submit</div>
-              <div className="text-[11px] text-ink-faint">
+              <div className="mt-0.5 text-[11px] leading-relaxed text-ink-faint">
                 If nothing&apos;s changed, submit it for me automatically each week
               </div>
             </div>
@@ -240,7 +237,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
           </div>
 
           {/* Week switcher — plan up to a month ahead */}
-          <div className="mb-4 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
             {WEEK_OPTIONS.map((opt) => {
               const active = opt.weekStart === selectedWeek;
               return (
@@ -248,7 +245,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                   key={opt.weekStart}
                   onClick={() => setSelectedWeek(opt.weekStart)}
                   className={`shrink-0 rounded-[10px] px-3 py-2 text-[13px] font-semibold transition ${
-                    active ? "bg-accent text-white" : "bg-surface-subtle text-ink-muted"
+                    active ? "bg-accent text-white" : "border border-hairline bg-surface-card text-ink-muted"
                   }`}
                 >
                   {opt.label}
@@ -257,37 +254,35 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
             })}
           </div>
 
-          {editable ? (
-            <div className="mb-5 flex justify-center">
-              <div className="flex items-center gap-1.5 rounded-full bg-warn-bg px-3.5 py-1.5 text-xs font-semibold text-warn-text">
-                <span className="h-1.5 w-1.5 rounded-full bg-warn-dot" />
-                Submit by{" "}
-                {formatDeadline(selectedWeek, data.rules.avail_closes_day, data.rules.avail_closes_time)}
+          <div className="rounded-panel border border-hairline bg-surface-card p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[13px] font-semibold text-ink-muted">
+                Week of {formatWeekRange(selectedWeek)}
               </div>
+              {editable ? (
+                <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-warn-bg px-3 py-1 text-[11px] font-semibold text-warn-text">
+                  <span className="h-1.5 w-1.5 rounded-full bg-warn-dot" />
+                  Due {formatDeadline(selectedWeek, data.rules.avail_closes_day, data.rules.avail_closes_time)}
+                </div>
+              ) : (
+                <div className="shrink-0 rounded-full bg-unset-bg px-3 py-1 text-[11px] font-semibold text-ink-muted">
+                  Closed
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="mb-5 flex justify-center">
-              <div className="rounded-full bg-unset-bg px-3.5 py-1.5 text-xs font-semibold text-ink-muted">
-                Availability for this week has closed
-              </div>
-            </div>
-          )}
 
-          <div className="mb-3 text-[13px] font-semibold text-ink-muted">
-            Week of {formatWeekRange(selectedWeek)}
+            {prefilled && editable && (
+              <div className="mt-3 rounded-[10px] bg-accent-light px-3.5 py-2.5 text-center text-[13px] text-accent">
+                This is what you submitted last time — still right? Just hit Submit.
+              </div>
+            )}
+
+            <div className={`mt-4 ${!editable || weekLoading ? "pointer-events-none opacity-60" : ""}`}>
+              <AvailabilityGrid shifts={data.shifts} value={grid} onToggle={toggle} />
+            </div>
           </div>
 
-          {prefilled && editable && (
-            <div className="mb-3 rounded-[10px] bg-accent-light px-3.5 py-2.5 text-center text-[13px] text-accent">
-              This is what you submitted last time — still right? Just hit Submit.
-            </div>
-          )}
-
-          <div className={!editable || weekLoading ? "pointer-events-none opacity-60" : ""}>
-            <AvailabilityGrid shifts={data.shifts} value={grid} onToggle={toggle} />
-          </div>
-
-          <div className="mt-3">
+          <div className="rounded-panel border border-hairline bg-surface-card p-4">
             <div className="mb-2 text-xs font-semibold text-ink-label">Notes (optional)</div>
             {DAY_LABELS.map((day, di) =>
               notes[di] ? (
@@ -361,9 +356,9 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
             <button
               onClick={handleSubmit}
               disabled={submitting || weekLoading}
-              className="mt-5 w-full rounded-control bg-accent py-4 text-center text-base font-semibold text-white disabled:opacity-60"
+              className="w-full rounded-control bg-accent py-4 text-center text-base font-semibold text-white disabled:opacity-60"
             >
-              {submitting ? "Submitting…" : "Submit Availability"}
+              {submitting ? "Submitting…" : "Submit availability"}
             </button>
           )}
         </div>
@@ -375,7 +370,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
 
 function CenteredMessage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex max-w-[420px] items-center justify-center px-6 py-24 text-center text-sm text-ink-muted">
+    <div className="flex min-h-screen items-center justify-center px-6 text-center text-sm text-ink-muted">
       {children}
     </div>
   );

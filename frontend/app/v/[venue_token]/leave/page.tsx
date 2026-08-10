@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 import Modal from "@/components/modal";
 import Toast from "@/components/toast";
@@ -125,20 +124,25 @@ export default function LeavePage({ params }: { params: { venue_token: string } 
     r.status === "pending" || (r.status === "approved" && r.start_date >= today);
 
   return (
-    <div className="mx-auto max-w-[420px] py-4">
-      <div className="mx-4 animate-fadeIn overflow-hidden rounded-card bg-surface shadow-card">
-        <div className="px-6 pb-7 pt-5">
-          <Link href={`/v/${venue_token}/hub`} className="text-[13px] font-semibold text-accent">
-            ← Hub
-          </Link>
-          <div className="py-2 pb-4 text-center">
-            <div className="text-xs font-medium uppercase tracking-wide text-ink-faint">{venueName}</div>
-            <div className="mt-1 text-[22px] font-bold text-ink">Request Time Off</div>
+    <div className="min-h-screen bg-surface-page pb-10">
+      <div className="mx-auto max-w-[480px]">
+        <div className="px-5 pt-6">
+          <a href={`/v/${venue_token}/hub`} className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
+            ← Back
+          </a>
+          <div className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            {venueName}
           </div>
+          <div className="mt-0.5 font-display text-xl font-bold text-ink">Time off</div>
+        </div>
 
-          <div className="mb-6 rounded-panel border border-hairline bg-surface-card p-4">
+        <div className="mt-5 flex flex-col gap-5 px-5">
+          <div className="rounded-panel border border-hairline bg-surface-card p-4">
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">New request</div>
             <div className="mb-3 flex gap-3">
-              <label className="flex-1 text-xs font-semibold text-ink-faint">
+              {/* min-w-0: a bare flex-1 won't shrink below a date input's
+                  intrinsic width, which overflows the page at 375px. */}
+              <label className="min-w-0 flex-1 text-xs font-semibold text-ink-faint">
                 From
                 <input
                   type="date"
@@ -148,7 +152,9 @@ export default function LeavePage({ params }: { params: { venue_token: string } 
                   className="mt-1.5 w-full rounded-[10px] border border-unset-border bg-surface-page px-2.5 py-2 text-sm text-ink outline-none"
                 />
               </label>
-              <label className="flex-1 text-xs font-semibold text-ink-faint">
+              {/* min-w-0: a bare flex-1 won't shrink below a date input's
+                  intrinsic width, which overflows the page at 375px. */}
+              <label className="min-w-0 flex-1 text-xs font-semibold text-ink-faint">
                 To
                 <input
                   type="date"
@@ -178,40 +184,42 @@ export default function LeavePage({ params }: { params: { venue_token: string } 
             </button>
           </div>
 
-          <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">Your requests</div>
-          {requests.length === 0 ? (
-            <div className="rounded-panel border border-hairline bg-surface-subtle p-4 text-center text-sm text-ink-muted">
-              You haven&apos;t requested any time off yet.
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {requests.map((r) => {
-                const status = STATUS_CONFIG[r.status] ?? STATUS_CONFIG.pending;
-                return (
-                  <div key={r.id} className="rounded-panel border border-hairline bg-surface-card p-3.5">
-                    <div className="mb-1.5 flex items-center justify-between gap-2">
-                      <span className="text-sm font-bold text-ink">{formatDateRange(r.start_date, r.end_date)}</span>
-                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.bg} ${status.text}`}>
-                        {status.label}
-                      </span>
+          <div>
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">Your requests</div>
+            {requests.length === 0 ? (
+              <div className="rounded-panel border border-hairline bg-surface-subtle p-4 text-center text-sm text-ink-muted">
+                You haven&apos;t requested any time off yet.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {requests.map((r) => {
+                  const status = STATUS_CONFIG[r.status] ?? STATUS_CONFIG.pending;
+                  return (
+                    <div key={r.id} className="rounded-panel border border-hairline bg-surface-card p-3.5">
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <span className="text-sm font-bold text-ink">{formatDateRange(r.start_date, r.end_date)}</span>
+                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.bg} ${status.text}`}>
+                          {status.label}
+                        </span>
+                      </div>
+                      {r.reason && <div className="mb-1 text-[13px] text-ink-muted">{r.reason}</div>}
+                      {r.manager_note && (
+                        <div className="mb-1 text-[12px] italic text-ink-faint">Manager note: {r.manager_note}</div>
+                      )}
+                      {canCancel(r) && (
+                        <button
+                          onClick={() => setCancelTarget(r)}
+                          className="mt-1.5 rounded-lg border border-unavail-border bg-surface-card px-3 py-1.5 text-[12px] font-semibold text-unavail-text"
+                        >
+                          Cancel request
+                        </button>
+                      )}
                     </div>
-                    {r.reason && <div className="mb-1 text-[13px] text-ink-muted">{r.reason}</div>}
-                    {r.manager_note && (
-                      <div className="mb-1 text-[12px] italic text-ink-faint">Manager note: {r.manager_note}</div>
-                    )}
-                    {canCancel(r) && (
-                      <button
-                        onClick={() => setCancelTarget(r)}
-                        className="mt-1.5 rounded-lg border border-unavail-border bg-surface-card px-3 py-1.5 text-[12px] font-semibold text-unavail-text"
-                      >
-                        Cancel request
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -247,7 +255,7 @@ export default function LeavePage({ params }: { params: { venue_token: string } 
 
 function CenteredMessage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex max-w-[420px] items-center justify-center px-6 py-24 text-center text-sm text-ink-muted">
+    <div className="flex min-h-screen items-center justify-center px-6 text-center text-sm text-ink-muted">
       {children}
     </div>
   );

@@ -19,11 +19,15 @@ export default function RootLayout({
     <html lang="en">
       <head>
         {/* Apply the saved theme before first paint to avoid a flash. Dark is
-            the default; only "light" needs the attribute. */}
+            the default; only "light" needs the attribute.
+
+            Staff screens (/v/{venue_token}/…) have no accounts, so their
+            choice is keyed to the venue link rather than shared with the
+            manager app — same reason the PIN is. */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{if(localStorage.getItem('crewplan_theme')==='light')document.documentElement.setAttribute('data-theme','light')}catch(e){}",
+              "try{var m=location.pathname.match(/^\\/v\\/([^/]+)/);var k=m?'crewplan-theme:'+m[1]:'crewplan_theme';if(localStorage.getItem(k)==='light')document.documentElement.setAttribute('data-theme','light')}catch(e){}",
           }}
         />
       </head>

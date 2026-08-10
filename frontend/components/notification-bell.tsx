@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import Icon from "@/components/staff/icon";
 import Modal from "@/components/modal";
 import { Activity, getStaffActivity } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/utils";
@@ -51,10 +52,10 @@ export default function NotificationBell({ venueToken, pin }: { venueToken: stri
       <button
         onClick={handleOpen}
         aria-label="Recent activity"
-        className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg"
+        className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:text-accent"
       >
-        🔔
-        {hasNew && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent" />}
+        <Icon name="bell" size={19} />
+        {hasNew && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-accent" />}
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Recent activity">

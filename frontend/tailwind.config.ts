@@ -57,12 +57,31 @@ const config: Config = {
           text: "var(--c-unset-text)",
         },
         warn: { bg: "var(--c-warn-bg)", text: "var(--c-warn-text)", dot: "var(--c-warn-dot)" },
+        // Staff PWA only — status + surface tones the manager palette has no
+        // equivalent for. Defined in globals.css under `.cp-staff`.
+        cp: {
+          green: "var(--cp-green)",
+          "green-soft": "var(--cp-green-soft)",
+          amber: "var(--cp-amber)",
+          "amber-soft": "var(--cp-amber-soft)",
+          icon: "var(--cp-icon-bg)",
+          track: "var(--cp-track)",
+        },
       },
       borderRadius: {
         card: "24px",
         panel: "16px",
         control: "14px",
         input: "12px",
+        // Staff PWA radii — cards 12–14px, controls 8–11px, chips/badges
+        // smaller still. Named so screens never hardcode their own.
+        "cp-card": "14px",
+        "cp-tile": "13px",
+        "cp-panel": "12px",
+        "cp-control": "11px",
+        "cp-slot": "9px",
+        "cp-chip": "7px",
+        "cp-badge": "6px",
       },
       boxShadow: {
         card: "0 8px 32px var(--c-shadow)",

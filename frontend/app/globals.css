@@ -122,3 +122,104 @@ a {
 a:hover {
   color: var(--c-accent-hover);
 }
+
+/* ==========================================================================
+   Staff PWA palette
+   --------------------------------------------------------------------------
+   The staff design language has its own exact tokens, scoped to `.cp-staff`.
+   Every colour token the rest of the app already uses (bg-surface-card,
+   text-ink, border-hairline …) re-resolves to these values inside a staff
+   screen and is untouched everywhere else — so the manager app and the admin
+   console keep the palette they were designed against.
+
+   Light mode still hangs off :root[data-theme="light"] so it flips from the
+   same pre-paint script as everything else; the staff toggle just writes a
+   venue-keyed localStorage entry instead of the shared one.
+   ========================================================================== */
+.cp-staff {
+  --c-surface-page: #0d0d0d;
+  --c-surface-card: #141414;
+  --c-surface-subtle: #1a1a1a;
+  --c-hairline: rgba(255, 255, 255, 0.07);
+  --c-ink: #f0efe9;
+  --c-ink-label: #f0efe9;
+  --c-ink-muted: #7a7a75;
+  --c-ink-faint: #4a4a47;
+  --c-accent: #ff4d00;
+  --c-accent-hover: #e64500;
+  --c-accent-light: rgba(255, 77, 0, 0.12);
+  --c-accent-border: rgba(255, 77, 0, 0.25);
+
+  --cp-icon-bg: #1e1e1e;
+  --cp-track: #1e1e1e;
+  --cp-green: #2ecc71;
+  --cp-green-soft: rgba(46, 204, 113, 0.14);
+  --cp-amber: #e5a800;
+  --cp-amber-soft: rgba(255, 193, 7, 0.14);
+
+  transition:
+    background-color 0.35s ease,
+    color 0.35s ease;
+}
+
+:root[data-theme="light"] .cp-staff {
+  --c-surface-page: #faf9f5;
+  --c-surface-card: #ffffff;
+  --c-surface-subtle: #fdfcf8;
+  --c-hairline: rgba(0, 0, 0, 0.08);
+  --c-ink: #1a1815;
+  --c-ink-label: #1a1815;
+  --c-ink-muted: #78766f;
+  --c-ink-faint: #a8a69e;
+  --c-accent-light: rgba(255, 77, 0, 0.08);
+
+  --cp-icon-bg: #f2f0ea;
+  --cp-track: #eceae2;
+  --cp-green-soft: rgba(46, 204, 113, 0.12);
+  --cp-amber-soft: rgba(255, 193, 7, 0.16);
+}
+
+@layer components {
+  /* Staff borders are always 0.5px. Tailwind's border utilities bottom out at
+     1px, so this is the one rule that has to be a class rather than a
+     utility — kept in @layer components so `border-accent` and friends can
+     still override the colour. */
+  .cp-hairline {
+    border: 0.5px solid var(--c-hairline);
+  }
+
+  /* Sun/moon knob. Driven entirely by the data-theme attribute rather than
+     React state, so it is already in the right position on first paint (the
+     pre-paint script sets the attribute) — no hydration flash, no jump. */
+  .cp-knob {
+    transform: translateX(0);
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  :root[data-theme="light"] .cp-knob {
+    transform: translateX(24px);
+  }
+  .cp-knob-sun {
+    display: none;
+  }
+  :root[data-theme="light"] .cp-knob-sun {
+    display: block;
+  }
+  :root[data-theme="light"] .cp-knob-moon {
+    display: none;
+  }
+}
+
+.cp-staff :focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-staff,
+  .cp-staff *,
+  .cp-knob {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

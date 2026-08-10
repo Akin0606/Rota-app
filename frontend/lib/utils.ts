@@ -57,6 +57,35 @@ export function formatDeadline(
   return `${dateFmt}, ${timeFmt}`;
 }
 
+// "Thursday, 6pm" — the weekday name on its own, without a date. The staff
+// hub frames the availability deadline as a recurring habit ("closes
+// Thursday") rather than a calendar date, so it deliberately drops the day
+// number that formatDeadline includes.
+export function formatDeadlineDay(closesDay: string, closesTime: string): string {
+  const dayIndex = DAY_NAMES.indexOf(closesDay);
+  const dayName = dayIndex < 0 ? closesDay : DAY_NAMES[dayIndex];
+  return `${dayName}, ${formatTime(closesTime)}`;
+}
+
+// "11 Aug" — the week-start date alone, for the hub's venue strip.
+export function formatWeekOf(weekStart: string): string {
+  return parseISODate(weekStart).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
+// How many whole weeks ahead a week-start is relative to the current week's
+// Monday. 0 = this week, 1 = next week.
+export function weeksFromThisWeek(weekStart: string): number {
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const dow = (new Date(todayUTC).getUTCDay() + 6) % 7;
+  const thisMonday = todayUTC - dow * 86_400_000;
+  return Math.round((parseISODate(weekStart).getTime() - thisMonday) / (7 * 86_400_000));
+}
+
 export function daysUntilDeadline(weekStart: string, closesDay: string): number {
   const date = deadlineDate(weekStart, closesDay);
   const now = new Date();
