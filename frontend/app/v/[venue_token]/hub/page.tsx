@@ -75,7 +75,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
     }
     setPin(storedPin);
 
-    authenticatePin(venue_token, storedPin)
+    authenticatePin(venue_token, storedPin, { onRevalidate: setAuth })
       .then(setAuth)
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) {
@@ -95,12 +95,12 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
     // several requests land together (see CLAUDE.md), and this tile's badge
     // is the least important thing on the screen — chaining it keeps the
     // hub's peak in-flight count where it was before the tile existed.
-    getStaffRota(venue_token, storedPin)
+    getStaffRota(venue_token, storedPin, { onRevalidate: setRota })
       .then(setRota)
       .catch(() => {})
       .finally(() => {
         setRotaLoaded(true);
-        myLeaveRequests(venue_token, storedPin)
+        myLeaveRequests(venue_token, storedPin, { onRevalidate: (res) => setLeave(res.requests) })
           .then((res) => setLeave(res.requests))
           .catch(() => {});
       });

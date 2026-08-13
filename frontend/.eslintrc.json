@@ -1,3 +1,21 @@
 {
-  "extends": ["next/core-web-vitals", "next/typescript"]
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "overrides": [
+    {
+      "files": ["app/v/**/*.tsx", "components/staff/**/*.tsx"],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "JSXOpeningElement[name.name='a'] JSXAttribute[name.name='href'][value.type='Literal'][value.value=/^\\//]",
+            "message": "Use next/link inside the staff screens. A plain <a> with an internal href does a full document load, which drops the app shell and refetches everything — indistinguishable from a working link in review. This exact defect shipped on the leave screen once."
+          },
+          {
+            "selector": "JSXOpeningElement[name.name='a'] JSXAttribute[name.name='href'] JSXExpressionContainer TemplateLiteral[quasis.0.value.raw=/^\\//]",
+            "message": "Use next/link inside the staff screens. A plain <a> with an internal href does a full document load, which drops the app shell and refetches everything — indistinguishable from a working link in review. This exact defect shipped on the leave screen once."
+          }
+        ]
+      }
+    }
+  ]
 }

@@ -21,14 +21,17 @@ export default function NotificationBell({ venueToken, pin }: { venueToken: stri
 
   useEffect(() => {
     let cancelled = false;
-    getStaffActivity(venueToken, pin)
-      .then((rows) => {
-        if (cancelled) return;
-        setActivity(rows);
-        const lastSeen = localStorage.getItem(lastSeenKey(venueToken));
-        const newest = rows[0]?.created_at;
-        setHasNew(Boolean(newest) && (!lastSeen || newest > lastSeen));
-      })
+    const apply = (rows: Activity[]) => {
+      if (cancelled) return;
+      setActivity(rows);
+      const lastSeen = localStorage.getItem(lastSeenKey(venueToken));
+      const newest = rows[0]?.created_at;
+      setHasNew(Boolean(newest) && (!lastSeen || newest > lastSeen));
+    };
+    // The cached copy paints the bell immediately; the background refresh runs
+    // through the same handler, so a new entry still lights the badge.
+    getStaffActivity(venueToken, pin, 20, { onRevalidate: apply })
+      .then(apply)
       .catch(() => {
         // Best-effort — a failed fetch just means no bell badge, not a
         // blocking error for the rest of the hub.

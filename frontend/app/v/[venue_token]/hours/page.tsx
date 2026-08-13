@@ -61,7 +61,7 @@ export default function StaffHoursPage({ params }: { params: { venue_token: stri
     setRate(readNumber(rateKey(venue_token)));
     setTarget(readNumber(targetKey(venue_token)));
 
-    getStaffRota(venue_token, pin)
+    getStaffRota(venue_token, pin, { onRevalidate: setData })
       .then(setData)
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) {

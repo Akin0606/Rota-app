@@ -114,6 +114,10 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
     }
     setPin(storedPin);
 
+    // Deliberately no `onRevalidate` here, unlike the read-only screens: this
+    // one is an editing surface, and a background refresh landing mid-edit
+    // could overwrite the auto-submit toggle the user just flipped. It still
+    // gets the cache's instant paint and request de-duplication.
     authenticatePin(venue_token, storedPin)
       .then((res) => {
         setData(res);

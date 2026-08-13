@@ -48,7 +48,7 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
       router.replace(`/v/${venue_token}`);
       return;
     }
-    getStaffRota(venue_token, pin)
+    getStaffRota(venue_token, pin, { onRevalidate: setData })
       .then(setData)
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) {

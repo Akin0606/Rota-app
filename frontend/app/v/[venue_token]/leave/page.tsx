@@ -89,7 +89,13 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
       // Private-mode storage failures just leave the statutory default.
     }
 
-    Promise.all([authenticatePin(venue_token, storedPin), myLeaveRequests(venue_token, storedPin)])
+    Promise.all([
+      authenticatePin(venue_token, storedPin),
+      // Safe to refresh in the background: every mutation on this screen
+      // already writes its own result into `requests`, and any staff write
+      // drops the cached copy, so a revalidate can only ever bring newer data.
+      myLeaveRequests(venue_token, storedPin, { onRevalidate: (res) => setRequests(res.requests) }),
+    ])
       .then(([auth, mine]) => {
         setVenueName(auth.venue_name);
         setRequests(mine.requests);

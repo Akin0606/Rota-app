@@ -75,7 +75,10 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
     // useSearchParams so the page needs no Suspense boundary.
     const preselect = new URLSearchParams(window.location.search).get("assignment");
 
-    getStaffRota(venue_token, storedPin)
+    // The background refresh only replaces the data, never the selection: if
+    // the selected shift is gone from the fresh copy, `selected` resolves to
+    // undefined and the actions dim themselves, which is the honest outcome.
+    getStaffRota(venue_token, storedPin, { onRevalidate: setData })
       .then((rota) => {
         setData(rota);
         if (preselect && rota.assignments.some((a) => a.id === preselect && a.staff_id === rota.staff_id)) {

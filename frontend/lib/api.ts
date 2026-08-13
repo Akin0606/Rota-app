@@ -57,8 +57,107 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(res.status, body.detail || `Request failed (${res.status})`);
   }
 
+  invalidateStaffCacheFor(path);
   return res.json();
 }
+
+/* ---------------------------------------------------------------------------
+   Staff screen cache
+
+   Every staff screen fetches /auth and/or /rota on mount, so a
+   hub -> screen -> hub round trip asked the backend for the same payload three
+   times and showed a blank "Loading…" on each hop. This keeps the last
+   response per (path, venue, pin) in module memory — which survives soft
+   navigation between screens and dies with the document, exactly the lifetime
+   we want — and serves it immediately while refreshing behind the screen, so a
+   hop paints instantly and is never stale by more than one round trip.
+
+   The four read endpoints every screen shares are cached: /auth, /rota,
+   /activity and /leave/mine. /week is deliberately not — it is the grid the
+   user is actively editing on the availability screen.
+--------------------------------------------------------------------------- */
+
+// Serve from cache below this age; above it, fetch normally.
+const CACHE_MAX_AGE_MS = 60_000;
+// Below this age, don't even revalidate — stops the hub's two simultaneous
+// mounts (and React StrictMode's doubled effects in dev) from stampeding.
+const CACHE_DEDUPE_MS = 3_000;
+
+type CacheEntry<T> = { data?: T; at: number; inFlight?: Promise<T> };
+
+const staffCache = new Map<string, CacheEntry<unknown>>();
+
+// POST is used for reads on the staff side too — the PIN travels in the body
+// rather than the URL — so "is this a write?" cannot be inferred from the
+// method. These are the staff endpoints that only read; anything else under
+// /api/availability/{token} or /api/leave/{token} is treated as a write and
+// drops that venue's cached entries. Defaulting the unknown case to "write"
+// means a staff endpoint added later can only ever be too cautious, never
+// silently serve stale data.
+const STAFF_READ_TAILS = new Set(["", "auth", "rota", "week", "activity", "mine"]);
+
+function invalidateStaffCacheFor(path: string) {
+  const m = path.match(/^\/api\/(?:availability|leave)\/([^/?]+)\/?([^?]*)/);
+  if (!m) return;
+  const [, venueToken, tail] = m;
+  if (STAFF_READ_TAILS.has(tail)) return;
+  const stale: string[] = [];
+  staffCache.forEach((_, key) => {
+    if (key.includes(`|${venueToken}|`)) stale.push(key);
+  });
+  stale.forEach((key) => staffCache.delete(key));
+}
+
+function runCached<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+  const promise = fetcher().then(
+    (data) => {
+      staffCache.set(key, { data, at: Date.now() });
+      return data;
+    },
+    (err) => {
+      const current = staffCache.get(key) as CacheEntry<T> | undefined;
+      if (current?.data !== undefined) {
+        // A background refresh failed. Keep the last good copy — on pub wifi a
+        // dropped request must not cost the user a screen they already have —
+        // but clear `inFlight` so the next hop can retry, and leave `at`
+        // untouched so the entry still ages out of the serve window on time.
+        staffCache.set(key, { data: current.data, at: current.at });
+      } else {
+        // A first load failed: cache nothing, or the stale connection pool
+        // would pin an error in place for a full minute.
+        staffCache.delete(key);
+      }
+      throw err;
+    },
+  );
+  const existing = staffCache.get(key) as CacheEntry<T> | undefined;
+  staffCache.set(key, { ...existing, at: existing?.at ?? 0, inFlight: promise });
+  return promise;
+}
+
+function cached<T>(key: string, fetcher: () => Promise<T>, onRevalidate?: (fresh: T) => void): Promise<T> {
+  const entry = staffCache.get(key) as CacheEntry<T> | undefined;
+  const age = entry ? Date.now() - entry.at : Infinity;
+
+  if (entry?.data !== undefined && age < CACHE_MAX_AGE_MS) {
+    if (age > CACHE_DEDUPE_MS && !entry.inFlight) {
+      // Refresh behind the screen. A failure here is deliberately swallowed:
+      // the caller already has usable data, and on pub wifi a background
+      // failure should never turn a rendered screen into an error.
+      void runCached(key, fetcher)
+        .then((fresh) => onRevalidate?.(fresh))
+        .catch(() => {});
+    }
+    return Promise.resolve(entry.data);
+  }
+
+  // Nothing usable cached: join a request already in flight rather than
+  // starting a second one.
+  if (entry?.inFlight) return entry.inFlight;
+  return runCached(key, fetcher);
+}
+
+export type CacheOpts<T> = { onRevalidate?: (fresh: T) => void };
 
 // Pings the backend so Render's free-tier instance is awake before we
 // navigate to a page that server-renders against it. Best-effort — never
@@ -99,11 +198,20 @@ export function getVenueInfo(venueToken: string): Promise<VenueInfo> {
   return request(`/api/availability/${venueToken}`);
 }
 
-export function authenticatePin(venueToken: string, pin: string): Promise<PinAuthData> {
-  return request(`/api/availability/${venueToken}/auth`, {
-    method: "POST",
-    body: JSON.stringify({ pin }),
-  });
+export function authenticatePin(
+  venueToken: string,
+  pin: string,
+  opts?: CacheOpts<PinAuthData>,
+): Promise<PinAuthData> {
+  return cached(
+    `auth|${venueToken}|${pin}`,
+    () =>
+      request<PinAuthData>(`/api/availability/${venueToken}/auth`, {
+        method: "POST",
+        body: JSON.stringify({ pin }),
+      }),
+    opts?.onRevalidate,
+  );
 }
 
 export function submitAvailability(
@@ -199,8 +307,16 @@ export type StaffRota = {
   pending_swaps: SwapForStaff[];
 };
 
-export function getStaffRota(venueToken: string, pin: string): Promise<StaffRota> {
-  return request(`/api/availability/${venueToken}/rota?pin=${pin}`);
+export function getStaffRota(
+  venueToken: string,
+  pin: string,
+  opts?: CacheOpts<StaffRota>,
+): Promise<StaffRota> {
+  return cached(
+    `rota|${venueToken}|${pin}`,
+    () => request<StaffRota>(`/api/availability/${venueToken}/rota?pin=${pin}`),
+    opts?.onRevalidate,
+  );
 }
 
 export function dropShift(venueToken: string, pin: string, assignmentId: string): Promise<StaffRota> {
@@ -289,8 +405,17 @@ export function declineSwap(venueToken: string, pin: string, swapId: string): Pr
   });
 }
 
-export function getStaffActivity(venueToken: string, pin: string, limit = 20): Promise<Activity[]> {
-  return request(`/api/availability/${venueToken}/activity?pin=${pin}&limit=${limit}`);
+export function getStaffActivity(
+  venueToken: string,
+  pin: string,
+  limit = 20,
+  opts?: CacheOpts<Activity[]>,
+): Promise<Activity[]> {
+  return cached(
+    `activity|${venueToken}|${pin}|${limit}`,
+    () => request<Activity[]>(`/api/availability/${venueToken}/activity?pin=${pin}&limit=${limit}`),
+    opts?.onRevalidate,
+  );
 }
 
 export async function requestLoginCode(email: string): Promise<{ status: string }> {
@@ -859,11 +984,20 @@ export function requestLeave(
   });
 }
 
-export function myLeaveRequests(venueToken: string, pin: string): Promise<{ requests: LeaveRequest[] }> {
-  return request(`/api/leave/${venueToken}/mine`, {
-    method: "POST",
-    body: JSON.stringify({ pin }),
-  });
+export function myLeaveRequests(
+  venueToken: string,
+  pin: string,
+  opts?: CacheOpts<{ requests: LeaveRequest[] }>,
+): Promise<{ requests: LeaveRequest[] }> {
+  return cached(
+    `leave-mine|${venueToken}|${pin}`,
+    () =>
+      request<{ requests: LeaveRequest[] }>(`/api/leave/${venueToken}/mine`, {
+        method: "POST",
+        body: JSON.stringify({ pin }),
+      }),
+    opts?.onRevalidate,
+  );
 }
 
 export function cancelLeaveRequest(venueToken: string, pin: string, requestId: string): Promise<LeaveRequest> {
