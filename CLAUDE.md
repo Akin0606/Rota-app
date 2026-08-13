@@ -83,10 +83,11 @@ Running list — nothing here is fixed. Grouped by what it blocks.
   had more than one person. Layout proven with a temporary stub only.
 - **Drop's "already-passed" guard is code-reviewed only, never live-verified**
   (can't reach the state without publishing a period with a past day).
-- **`ReferenceError: formatWeekOf is not defined`** seen once in the dev console
-  (batch 4 session), did not reproduce on fresh loads of either page that uses
-  it, and the production build is clean. Probably a stale HMR chunk. Noted in
-  case it resurfaces.
+- ~~`ReferenceError: formatWeekOf is not defined`~~ — **explained, not a bug.**
+  See the HMR entry in Learnings: editing a `lib/utils.ts` import into a page
+  that's already open in the browser leaves the hot-replaced module holding a
+  stale binding. Seen twice (`formatWeekOf`, then `DAY_LABELS`). Fresh loads and
+  the production build are always clean. Reload before believing it.
 
 ### Pre-existing, unrelated to the rebuild
 - "Send code" button fails silently for unregistered emails (no error shown)
@@ -111,6 +112,10 @@ Running list — nothing here is fixed. Grouped by what it blocks.
   one is correct — audit logs freeze historical fact).
 
 ## Learnings (append after each session — most recent first)
+- Staff-side UI rebuild, batch 5 of 6: **My hours** (`hours/page.tsx`, was a placeholder). Reference-exact hero verified in both modes — 38px/500/`-1.5px` total, 26px/500/`-0.8px` accent pay figure, 6px `--cp-track` progress bar, day-off rows at `opacity 0.5`, and only font-weights 400/500 anywhere on the screen.
+- **The `"close"` trap the hub flagged three batches ago landed exactly as predicted, and the `sumShiftHours` discipline is what caught it.** David's week is one measurable 4h shift plus two Evening shifts ending at the free text `"close"`: the total reads **`4+hrs`** and the pay estimate reads **`£46+`**, not a confident `£46`. A naive `hours * rate` would have under-reported by two entire evening shifts with nothing on screen suggesting anything was missing — the single worst failure mode available on a screen about money. The `+` propagates from `sumShiftHours().unmeasured` into the hours label, the pay label, and an explicit foot note ("2 shifts end at a time we can't measure, so totals show as a minimum"). Per-shift rows show `—` for the unmeasurable ones rather than a fabricated number.
+- Rate and weekly target live in `localStorage` keyed per venue (`crewplan-rate:{token}`, `crewplan-target:{token}`), same pattern as the theme, no migration — they exist nowhere in the schema. Deliberately **no pay figure at all until a rate is set** (the slot reads "Add your rate" instead of showing `£0`), and clearing either field independently removes just that key — verified both directions plus persistence across reload.
+- **Two `ReferenceError: X is not defined` scares this session were both the same dev-loop artifact, not bugs**: editing a `lib/utils.ts` import into a page that is *already open* in the browser hot-replaces the module but leaves the component holding a stale binding (`formatWeekOf`, then `DAY_LABELS` — the latter in code I'd already watched render correctly). A fresh load and `next build` are always clean. Reload before chasing one; the giveaway is that the named symbol is one you just added to an import.
 - Staff-side UI rebuild, batch 4 of 6: **Drop/give/swap** (`drop/page.tsx`) rebuilt as the reference's progressive-disclosure flow — pick a shift (22px accent-filled tick circle, verified), *then* the three action tiles (Drop/Give/Swap) come live. Dimmed state verified as the reference specifies it: `opacity 0.4` + `pointer-events: none`, and the buttons carry a real `disabled` attribute too so it's not a visual-only lock. The old per-row stack of three text buttons is gone.
 - The `?assignment={id}` param batch 2 started emitting is now consumed here, so tapping a shift on My shifts lands on this screen with it preselected and the actions already live — verified end-to-end (My shifts renders exactly two `/drop?assignment=…` hrefs, both resolving to real assignment ids). Read off `window.location.search` inside the existing effect rather than `useSearchParams`, which would have forced a Suspense boundary on the route for no benefit. Guarded: an id that isn't one of *your own* assignments falls through to nothing selected (verified with an all-zeros UUID — actions stayed dimmed).
 - **The four modals now render inside `StaffScreen`, not as siblings of it.** `Modal` isn't a portal — it renders in place — so as a sibling it sat outside `.cp-staff` and would have picked up the manager palette. Verified `insideCpStaff: true` and the modal card computing `#141414` in dark mode. Anything else reusing a shared component inside a staff screen needs the same check.
