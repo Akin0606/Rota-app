@@ -56,8 +56,59 @@ claims and approvals — right now managers only see these via activity_log
 ("Recent Activity" on the dashboard), and claimers/droppers only find out
 by reopening the app.
 
-## Known bugs
+## Known bugs / open issues
+Running list — nothing here is fixed. Grouped by what it blocks.
+
+### Blocking-ish (decide before the rebuild merges to main)
+- **Staff-to-staff navigation does full document loads.** Every hub↔sub-screen
+  hop reloads the document and refetches, despite all of them being `next/link`.
+  Confirmed batch 4 by watching a `window` sentinel vanish across a link click
+  in both directions. Kills the PWA feel and doubles load on the flaky backend.
+  Root cause not yet investigated.
+- **Manager-side availability grid will show explicit "unavailable" cells where
+  it used to show blanks** — consequence of batch 3 submitting every slot
+  explicitly (status `2` instead of absent). Scheduling is unaffected (solver
+  treats 0 and 2 identically) but the manager UI needs a look, or the payload
+  needs an "unset" state back.
+- **Four of six staff screens are mid-rebuild.** Leave is still old-styled;
+  `hours/page.tsx` is a placeholder shipped only so the hub's fifth tile
+  doesn't 404. Batches 5 and 6 close these.
+
+### Unverified, not known-broken
+- **Keyboard `:focus-visible` has never been tested with a real Tab press** —
+  the Browser pane can't composite, so `computer` key/click actions time out.
+  The rule is present in the cascade but unproven. Needs a real browser.
+- **Colleague avatars on My shifts can't be verified against real data** —
+  every shift at Bar So16 is `max_staff: 1` and no (period, day, shift) has ever
+  had more than one person. Layout proven with a temporary stub only.
+- **Drop's "already-passed" guard is code-reviewed only, never live-verified**
+  (can't reach the state without publishing a period with a past day).
+- **`ReferenceError: formatWeekOf is not defined`** seen once in the dev console
+  (batch 4 session), did not reproduce on fresh loads of either page that uses
+  it, and the production build is clean. Probably a stale HMR chunk. Noted in
+  case it resurfaces.
+
+### Pre-existing, unrelated to the rebuild
 - "Send code" button fails silently for unregistered emails (no error shown)
+- **Cold/stale Supabase connection pool** → `httpx.RemoteProtocolError`, which
+  surfaces in the browser as a phantom CORS error / `net::ERR_FAILED`. Retry
+  once or twice before believing it. React StrictMode's double-fired effects
+  make it far worse in local dev than in production.
+- **`RotaGrid` renders "On leave" *instead of* "+ Add"**, so the manual-add
+  confirm-override the backend genuinely supports has no UI path once a day
+  shows leave. Manager has to cancel the leave first.
+- **The manual-add risk popup title is generic** ("This assignment breaks a rest
+  rule") but is now reused for three different confirm reasons (rest-gap,
+  day-off-in-7, max-hours). Should say which rule actually fired.
+- **Week 17 Aug is stuck in `generated`** — there's still no in-app path from
+  `generated` back to `collecting`, so real availability collection for that
+  week is blocked until someone runs the SQL by hand.
+- **No notification system** for shift claims/approvals — managers only see them
+  via `activity_log`, and claimers/droppers only find out by reopening the app.
+- Activity-feed oddities deliberately left alone: a `detail` that mentions the
+  actor mid-sentence rather than leading with it reads awkwardly next to the
+  name label, and renamed staff show their *old* name in historical rows (that
+  one is correct — audit logs freeze historical fact).
 
 ## Learnings (append after each session — most recent first)
 - Staff-side UI rebuild, batch 4 of 6: **Drop/give/swap** (`drop/page.tsx`) rebuilt as the reference's progressive-disclosure flow — pick a shift (22px accent-filled tick circle, verified), *then* the three action tiles (Drop/Give/Swap) come live. Dimmed state verified as the reference specifies it: `opacity 0.4` + `pointer-events: none`, and the buttons carry a real `disabled` attribute too so it's not a visual-only lock. The old per-row stack of three text buttons is gone.
