@@ -6,12 +6,25 @@ type MetricCardProps = {
   suffix?: React.ReactNode;
   accent?: boolean;
   className?: string;
+  // A tappable card renders as the button *itself* rather than being wrapped in
+  // one: a wrapper is a second flex item in the strip and sizes differently
+  // from its plain-div siblings, which visibly shrinks that one card.
+  onClick?: () => void;
 };
 
-export default function MetricCard({ label, value, suffix, accent = false, className = "" }: MetricCardProps) {
+export default function MetricCard({
+  label,
+  value,
+  suffix,
+  accent = false,
+  className = "",
+  onClick,
+}: MetricCardProps) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div
-      className={`cp-hairline flex-1 rounded-cp-panel bg-surface-card px-4 py-3.5 transition-all duration-[350ms] ${className}`}
+    <Tag
+      onClick={onClick}
+      className={`cp-hairline flex-1 rounded-cp-panel bg-surface-card px-4 py-3.5 text-left transition-all duration-[350ms] ${className}`}
     >
       <div className="mb-1.5 text-[11px] text-ink-muted transition-colors duration-[350ms]">{label}</div>
       <div
@@ -24,6 +37,6 @@ export default function MetricCard({ label, value, suffix, accent = false, class
           </span>
         )}
       </div>
-    </div>
+    </Tag>
   );
 }

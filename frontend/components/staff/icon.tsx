@@ -14,6 +14,7 @@ export type IconName =
   | "clock"
   | "clock-hour-4"
   | "circle-check"
+  | "circle-x"
   | "info-circle"
   | "calendar-plus"
   | "calendar-week"
@@ -38,6 +39,7 @@ const PATHS: Record<IconName, string[]> = {
   clock: ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0", "M12 7v5l3 3"],
   "clock-hour-4": ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0", "M12 12l3 2", "M12 7v5"],
   "circle-check": ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0", "M9 12l2 2l4 -4"],
+  "circle-x": ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0", "M10 10l4 4", "M14 10l-4 4"],
   "info-circle": ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0", "M12 9h.01", "M11 12h1v4h1"],
   "calendar-plus": [
     "M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v6",

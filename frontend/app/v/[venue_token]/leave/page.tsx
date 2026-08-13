@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 
 import Modal from "@/components/modal";
 import Toast from "@/components/toast";
+import BackButton from "@/components/staff/back-button";
+import Icon, { IconName } from "@/components/staff/icon";
+import MetricCard from "@/components/staff/metric-card";
+import ModeToggle from "@/components/staff/mode-toggle";
+import StaffScreen, { FootNote, ScreenTitle, SectionLabel, StaffTopBar } from "@/components/staff/screen";
+import StatusBadge, { StatusTone } from "@/components/staff/status-badge";
 import {
   ApiError,
   LeaveRequest,
@@ -13,29 +19,38 @@ import {
   myLeaveRequests,
   requestLeave,
 } from "@/lib/api";
-import { parseISODate, pinStorageKey } from "@/lib/utils";
+import {
+  formatLeaveDates,
+  formatRelativeTime,
+  leaveDayCount,
+  parseISODate,
+  pinStorageKey,
+} from "@/lib/utils";
 
-const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
-  pending: { label: "Pending", bg: "bg-warn-bg", text: "text-warn-text" },
-  approved: { label: "Approved", bg: "bg-avail-bg", text: "text-avail-text" },
-  rejected: { label: "Rejected", bg: "bg-unavail-bg", text: "text-unavail-text" },
-  cancelled: { label: "Cancelled", bg: "bg-unset-bg", text: "text-unset-text" },
+// 28 days is the UK statutory minimum for a 5-day worker, and nothing in the
+// schema records a real per-staff entitlement — so it's a default with a local
+// override, keyed per venue like the theme and the hours screen's rate.
+const DEFAULT_ALLOWANCE = 28;
+const allowanceKey = (token: string) => `crewplan-allowance:${token}`;
+
+const STATUS_VISUAL: Record<
+  LeaveRequest["status"],
+  { label: string; tone: StatusTone; icon: IconName }
+> = {
+  pending: { label: "Pending", tone: "amber", icon: "clock" },
+  approved: { label: "Approved", tone: "green", icon: "beach" },
+  rejected: { label: "Rejected", tone: "neutral", icon: "circle-x" },
+  cancelled: { label: "Cancelled", tone: "neutral", icon: "circle-x" },
 };
-
-function formatDateRange(startIso: string, endIso: string): string {
-  const fmt = (d: Date) =>
-    d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-  const start = parseISODate(startIso);
-  if (startIso === endIso) return fmt(start);
-  return `${fmt(start)} – ${fmt(parseISODate(endIso))}`;
-}
 
 function todayISO(): string {
   const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate(),
+  ).padStart(2, "0")}`;
 }
 
-export default function LeavePage({ params }: { params: { venue_token: string } }) {
+export default function StaffLeavePage({ params }: { params: { venue_token: string } }) {
   const { venue_token } = params;
   const router = useRouter();
 
@@ -46,6 +61,11 @@ export default function LeavePage({ params }: { params: { venue_token: string } 
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  const [allowance, setAllowance] = useState(DEFAULT_ALLOWANCE);
+  const [allowanceDraft, setAllowanceDraft] = useState("");
+  const [editingAllowance, setEditingAllowance] = useState(false);
+
+  const [requesting, setRequesting] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
@@ -61,6 +81,13 @@ export default function LeavePage({ params }: { params: { venue_token: string } 
       return;
     }
     setPin(storedPin);
+
+    try {
+      const stored = Number(localStorage.getItem(allowanceKey(venue_token)));
+      if (Number.isFinite(stored) && stored > 0) setAllowance(stored);
+    } catch {
+      // Private-mode storage failures just leave the statutory default.
+    }
 
     Promise.all([authenticatePin(venue_token, storedPin), myLeaveRequests(venue_token, storedPin)])
       .then(([auth, mine]) => {
@@ -84,15 +111,20 @@ export default function LeavePage({ params }: { params: { venue_token: string } 
     setTimeout(() => setToast(null), 3000);
   }
 
+  function openRequest() {
+    setStartDate("");
+    setEndDate("");
+    setReason("");
+    setRequesting(true);
+  }
+
   async function submitRequest() {
     if (!pin || !startDate || !endDate) return;
     setSubmitting(true);
     try {
       const created = await requestLeave(venue_token, pin, startDate, endDate, reason.trim() || null);
       setRequests((prev) => [created, ...prev]);
-      setStartDate("");
-      setEndDate("");
-      setReason("");
+      setRequesting(false);
       showToast("Leave requested — your manager will review it");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not submit this request");
@@ -116,130 +148,182 @@ export default function LeavePage({ params }: { params: { venue_token: string } 
     }
   }
 
+  function saveAllowance() {
+    const n = Number(allowanceDraft);
+    const next = allowanceDraft.trim() && Number.isFinite(n) && n > 0 ? n : DEFAULT_ALLOWANCE;
+    try {
+      if (next === DEFAULT_ALLOWANCE) localStorage.removeItem(allowanceKey(venue_token));
+      else localStorage.setItem(allowanceKey(venue_token), String(next));
+    } catch {
+      // As above — keep the in-session value even if storage is unavailable.
+    }
+    setAllowance(next);
+    setEditingAllowance(false);
+  }
+
   if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
   if (error) return <CenteredMessage>{error}</CenteredMessage>;
 
   const today = todayISO();
+  const thisYear = new Date().getFullYear();
+
+  // The allowance is a per-year figure, so only this year's requests count
+  // against it — otherwise last year's holiday would keep eating into it. A
+  // request is attributed to the year it starts in.
+  const countsThisYear = (r: LeaveRequest) => parseISODate(r.start_date).getUTCFullYear() === thisYear;
+  const daysIn = (status: LeaveRequest["status"]) =>
+    requests
+      .filter((r) => r.status === status && countsThisYear(r))
+      .reduce((sum, r) => sum + leaveDayCount(r.start_date, r.end_date), 0);
+
+  const booked = daysIn("approved");
+  const pendingDays = daysIn("pending");
+  const remaining = allowance - booked - pendingDays;
+
   const canCancel = (r: LeaveRequest) =>
     r.status === "pending" || (r.status === "approved" && r.start_date >= today);
 
+  // Anything still to come reads top-down in the order it will happen; anything
+  // finished falls below it, most recent first.
+  const sorted = [...requests].sort((a, b) => {
+    const aUpcoming = a.end_date >= today;
+    const bUpcoming = b.end_date >= today;
+    if (aUpcoming !== bUpcoming) return aUpcoming ? -1 : 1;
+    return aUpcoming ? a.start_date.localeCompare(b.start_date) : b.start_date.localeCompare(a.start_date);
+  });
+
   return (
-    <div className="min-h-screen bg-surface-page pb-10">
-      <div className="mx-auto max-w-[480px]">
-        <div className="px-5 pt-6">
-          <a href={`/v/${venue_token}/hub`} className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
-            ← Back
-          </a>
-          <div className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">
-            {venueName}
-          </div>
-          <div className="mt-0.5 font-display text-xl font-bold text-ink">Time off</div>
-        </div>
+    <StaffScreen>
+      <StaffTopBar
+        left={<BackButton href={`/v/${venue_token}/hub`} />}
+        right={<ModeToggle venueToken={venue_token} />}
+      />
 
-        <div className="mt-5 flex flex-col gap-5 px-5">
-          <div className="rounded-panel border border-hairline bg-surface-card p-4">
-            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">New request</div>
-            <div className="mb-3 flex gap-3">
-              {/* min-w-0: a bare flex-1 won't shrink below a date input's
-                  intrinsic width, which overflows the page at 375px. */}
-              <label className="min-w-0 flex-1 text-xs font-semibold text-ink-faint">
-                From
-                <input
-                  type="date"
-                  value={startDate}
-                  min={today}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="mt-1.5 w-full rounded-[10px] border border-unset-border bg-surface-page px-2.5 py-2 text-sm text-ink outline-none"
-                />
-              </label>
-              {/* min-w-0: a bare flex-1 won't shrink below a date input's
-                  intrinsic width, which overflows the page at 375px. */}
-              <label className="min-w-0 flex-1 text-xs font-semibold text-ink-faint">
-                To
-                <input
-                  type="date"
-                  value={endDate}
-                  min={startDate || today}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="mt-1.5 w-full rounded-[10px] border border-unset-border bg-surface-page px-2.5 py-2 text-sm text-ink outline-none"
-                />
-              </label>
-            </div>
-            <label className="mb-3 block text-xs font-semibold text-ink-faint">
-              Reason (optional)
-              <textarea
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                rows={2}
-                placeholder="e.g. family holiday"
-                className="mt-1.5 w-full resize-none rounded-[10px] border border-unset-border bg-surface-page px-2.5 py-2 text-sm text-ink outline-none placeholder:text-ink-faint"
-              />
-            </label>
-            <button
-              onClick={submitRequest}
-              disabled={submitting || !startDate || !endDate}
-              className="w-full rounded-control bg-accent py-2.5 text-center text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {submitting ? "Sending…" : "Submit request"}
-            </button>
-          </div>
-
-          <div>
-            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">Your requests</div>
-            {requests.length === 0 ? (
-              <div className="rounded-panel border border-hairline bg-surface-subtle p-4 text-center text-sm text-ink-muted">
-                You haven&apos;t requested any time off yet.
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {requests.map((r) => {
-                  const status = STATUS_CONFIG[r.status] ?? STATUS_CONFIG.pending;
-                  return (
-                    <div key={r.id} className="rounded-panel border border-hairline bg-surface-card p-3.5">
-                      <div className="mb-1.5 flex items-center justify-between gap-2">
-                        <span className="text-sm font-bold text-ink">{formatDateRange(r.start_date, r.end_date)}</span>
-                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.bg} ${status.text}`}>
-                          {status.label}
-                        </span>
-                      </div>
-                      {r.reason && <div className="mb-1 text-[13px] text-ink-muted">{r.reason}</div>}
-                      {r.manager_note && (
-                        <div className="mb-1 text-[12px] italic text-ink-faint">Manager note: {r.manager_note}</div>
-                      )}
-                      {canCancel(r) && (
-                        <button
-                          onClick={() => setCancelTarget(r)}
-                          className="mt-1.5 rounded-lg border border-unavail-border bg-surface-card px-3 py-1.5 text-[12px] font-semibold text-unavail-text"
-                        >
-                          Cancel request
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
+      <div className="mb-5 mt-4">
+        <ScreenTitle title="Time off" sub={venueName ? `Request holiday or a day away · ${venueName}` : "Request holiday or a day away"} />
       </div>
+
+      <div className="mb-[22px] flex gap-2.5">
+        <MetricCard
+          label="Days remaining"
+          value={remaining}
+          suffix={`of ${allowance}`}
+          accent
+          onClick={() => {
+            setAllowanceDraft(String(allowance));
+            setEditingAllowance(true);
+          }}
+        />
+        <MetricCard label="Booked" value={booked} suffix={booked === 1 ? "day" : "days"} />
+        <MetricCard label="Pending" value={pendingDays} suffix={pendingDays === 1 ? "day" : "days"} />
+      </div>
+
+      <button
+        onClick={openRequest}
+        className="mb-6 flex w-full items-center justify-center gap-2 rounded-cp-panel bg-accent p-3.5 text-[14px] font-medium tracking-[-0.1px] text-white transition-opacity duration-150 hover:opacity-90"
+      >
+        <Icon name="plus" size={17} />
+        Request time off
+      </button>
+
+      <SectionLabel>Your requests</SectionLabel>
+      {sorted.length === 0 ? (
+        <div className="cp-hairline rounded-cp-card bg-surface-card p-6 text-center">
+          <div className="text-[15px] font-medium text-ink">No time off booked</div>
+          <div className="mt-1.5 text-[13px] leading-[1.45] text-ink-muted">
+            Ask for a day away and your manager will see it here.
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-[9px]">
+          {sorted.map((r) => (
+            <RequestRow key={r.id} request={r} onCancel={canCancel(r) ? () => setCancelTarget(r) : undefined} />
+          ))}
+        </div>
+      )}
+
+      <FootNote>Requests need manager approval before they&apos;re confirmed</FootNote>
+      <FootNote>
+        Allowance counts calendar days in {thisYear} — tap it to change
+      </FootNote>
+
+      <Modal open={requesting} onClose={() => setRequesting(false)} title="Request time off">
+        <div className="mb-4 flex gap-3">
+          {/* min-w-0: a bare flex-1 won't shrink below a date input's
+              intrinsic width, which overflows the card at 375px. */}
+          <label className="block min-w-0 flex-1">
+            <span className="mb-1.5 block text-[12px] text-ink-muted">From</span>
+            <input
+              type="date"
+              value={startDate}
+              min={today}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3 py-2.5 text-[14px] text-ink outline-none focus:border-accent"
+            />
+          </label>
+          <label className="block min-w-0 flex-1">
+            <span className="mb-1.5 block text-[12px] text-ink-muted">To</span>
+            <input
+              type="date"
+              value={endDate}
+              min={startDate || today}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3 py-2.5 text-[14px] text-ink outline-none focus:border-accent"
+            />
+          </label>
+        </div>
+        <label className="mb-2 block">
+          <span className="mb-1.5 block text-[12px] text-ink-muted">Reason (optional)</span>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            placeholder="e.g. family holiday"
+            className="w-full resize-none rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3.5 py-2.5 text-[14px] text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+          />
+        </label>
+        <div className="mb-5 text-[12px] text-ink-muted">
+          {startDate && endDate && endDate >= startDate
+            ? `${leaveDayCount(startDate, endDate)} day${
+                leaveDayCount(startDate, endDate) === 1 ? "" : "s"
+              } off your allowance`
+            : "Pick both dates to see how many days this uses."}
+        </div>
+        <div className="flex items-center justify-end gap-3">
+          <button
+            onClick={() => setRequesting(false)}
+            className="rounded-cp-control px-4 py-2.5 text-[13px] font-medium text-ink-muted"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submitRequest}
+            disabled={submitting || !startDate || !endDate}
+            className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-white disabled:opacity-50"
+          >
+            {submitting ? "Sending…" : "Send request"}
+          </button>
+        </div>
+      </Modal>
 
       <Modal open={cancelTarget !== null} onClose={() => setCancelTarget(null)} title="Cancel this request?">
         {cancelTarget && (
           <>
-            <div className="mb-5 text-sm leading-relaxed text-ink-muted">
-              {formatDateRange(cancelTarget.start_date, cancelTarget.end_date)} will no longer be held as time off.
+            <div className="mb-5 text-[13px] leading-[1.55] text-ink-muted">
+              {formatLeaveDates(cancelTarget.start_date, cancelTarget.end_date)} will no longer be held as
+              time off.
             </div>
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setCancelTarget(null)}
-                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+                className="rounded-cp-control px-4 py-2.5 text-[13px] font-medium text-ink-muted"
               >
                 Keep it
               </button>
               <button
                 onClick={confirmCancel}
                 disabled={cancelling}
-                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                className="rounded-cp-control bg-cp-icon px-5 py-2.5 text-[13px] font-medium text-ink disabled:opacity-60"
               >
                 {cancelling ? "Cancelling…" : "Cancel request"}
               </button>
@@ -248,15 +332,113 @@ export default function LeavePage({ params }: { params: { venue_token: string } 
         )}
       </Modal>
 
+      <Modal
+        open={editingAllowance}
+        onClose={() => setEditingAllowance(false)}
+        title="Your yearly allowance"
+      >
+        <div className="mb-4 text-[13px] leading-[1.55] text-ink-muted">
+          We start everyone at {DEFAULT_ALLOWANCE} days — the UK minimum for a five-day week. Change it here
+          if yours is different. Saved on this device only.
+        </div>
+        <label className="mb-5 block">
+          <span className="mb-1.5 block text-[12px] text-ink-muted">Days per year</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min="1"
+            step="1"
+            value={allowanceDraft}
+            onChange={(e) => setAllowanceDraft(e.target.value)}
+            placeholder={String(DEFAULT_ALLOWANCE)}
+            className="w-full rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-accent"
+          />
+        </label>
+        <div className="flex items-center justify-end gap-3">
+          <button
+            onClick={() => setEditingAllowance(false)}
+            className="rounded-cp-control px-4 py-2.5 text-[13px] font-medium text-ink-muted"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={saveAllowance}
+            className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-white"
+          >
+            Save
+          </button>
+        </div>
+      </Modal>
+
       <Toast message={toast} />
-    </div>
+    </StaffScreen>
+  );
+}
+
+function RequestRow({ request, onCancel }: { request: LeaveRequest; onCancel?: () => void }) {
+  const visual = STATUS_VISUAL[request.status] ?? STATUS_VISUAL.pending;
+  const days = leaveDayCount(request.start_date, request.end_date);
+
+  // The reference uses a beach for a holiday and a calendar tick for a single
+  // day away — the same distinction our data supports, since a one-day request
+  // is almost never a holiday.
+  const icon: IconName = request.status === "approved" && days === 1 ? "calendar-check" : visual.icon;
+  const iconTone =
+    visual.tone === "green"
+      ? "bg-cp-green-soft text-cp-green"
+      : visual.tone === "amber"
+        ? "bg-cp-amber-soft text-cp-amber"
+        : "bg-cp-icon text-ink-muted";
+
+  // Pending requests lead with how long they've been waiting (the reference's
+  // "requested 2 days ago"); settled ones lead with why, when a reason exists.
+  const meta =
+    request.status === "pending"
+      ? `${days} day${days === 1 ? "" : "s"} · requested ${formatRelativeTime(
+          request.created_at,
+        ).toLowerCase()}`
+      : `${days} day${days === 1 ? "" : "s"}${request.reason ? ` · ${request.reason}` : ""}`;
+
+  const body = (
+    <>
+      <div
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-cp-control transition-colors duration-[350ms] ${iconTone}`}
+      >
+        <Icon name={icon} size={18} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[14px] font-medium text-ink">
+          {formatLeaveDates(request.start_date, request.end_date)}
+        </div>
+        <div className="truncate text-[12px] text-ink-muted transition-colors duration-[350ms]">{meta}</div>
+        {/* No slot for this in the reference, but a rejection without its
+            reason is the one thing on this screen worth reading. */}
+        {request.manager_note && (
+          <div className="mt-1 text-[11px] leading-[1.4] text-ink-faint">“{request.manager_note}”</div>
+        )}
+      </div>
+      <StatusBadge tone={visual.tone}>{visual.label}</StatusBadge>
+      {onCancel && <Icon name="chevron-right" size={15} className="-mr-1 text-ink-faint" />}
+    </>
+  );
+
+  const className =
+    "cp-hairline flex w-full items-center gap-3.5 rounded-cp-tile bg-surface-card px-4 py-[15px] text-left transition-all duration-[350ms]";
+
+  if (!onCancel) return <div className={className}>{body}</div>;
+  return (
+    <button onClick={onCancel} className={className}>
+      {body}
+    </button>
   );
 }
 
 function CenteredMessage({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen items-center justify-center px-6 text-center text-sm text-ink-muted">
-      {children}
+    <div className="cp-staff min-h-screen bg-surface-page">
+      <div className="mx-auto flex max-w-[440px] items-center justify-center px-6 py-24 text-center text-[13px] text-ink-muted">
+        {children}
+      </div>
     </div>
   );
 }

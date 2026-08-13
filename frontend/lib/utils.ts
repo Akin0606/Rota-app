@@ -71,6 +71,41 @@ export function formatHoursTotal(hours: number, unmeasured: number, unit = "h"):
   return `${value}${unmeasured > 0 ? "+" : ""}${unit}`;
 }
 
+// Inclusive calendar days across a leave range: Mon–Fri is 5, a single day is
+// 1. Calendar days are the only thing `leave_requests` can support — it stores
+// two plain dates and nothing anywhere records a staff member's contracted
+// working pattern — so a request spanning a weekend counts the weekend too.
+// The allowance total is editable for exactly this reason.
+export function leaveDayCount(startIso: string, endIso: string): number {
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const days = (parseISODate(endIso).getTime() - parseISODate(startIso).getTime()) / msPerDay;
+  return Math.max(1, Math.round(days) + 1);
+}
+
+// "Thu 2 Oct" for one day, "Fri 5 – Sat 6 Sep" within a month, "Sat 28 Feb –
+// Tue 3 Mar" across two. The year is only ever shown when the range falls
+// outside the current one, which keeps the common case short enough for 375px.
+export function formatLeaveDates(startIso: string, endIso: string): string {
+  const start = parseISODate(startIso);
+  const end = parseISODate(endIso);
+  const thisYear = new Date().getFullYear();
+  const weekday = (d: Date) => DAY_LABELS[(d.getUTCDay() + 6) % 7];
+  const month = (d: Date) => d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
+  const year =
+    start.getUTCFullYear() === thisYear && end.getUTCFullYear() === thisYear
+      ? ""
+      : ` ${end.getUTCFullYear()}`;
+
+  if (startIso === endIso) {
+    return `${weekday(start)} ${start.getUTCDate()} ${month(start)}${year}`;
+  }
+  const tail = `${weekday(end)} ${end.getUTCDate()} ${month(end)}${year}`;
+  if (start.getUTCMonth() === end.getUTCMonth() && start.getUTCFullYear() === end.getUTCFullYear()) {
+    return `${weekday(start)} ${start.getUTCDate()} – ${tail}`;
+  }
+  return `${weekday(start)} ${start.getUTCDate()} ${month(start)} – ${tail}`;
+}
+
 function deadlineDate(weekStart: string, closesDay: string): Date {
   const dayIndex = DAY_NAMES.indexOf(closesDay);
   return addDays(parseISODate(weekStart), dayIndex < 0 ? 0 : dayIndex);

@@ -30,6 +30,7 @@ import {
   formatDeadlineDay,
   formatHoursTotal,
   formatWeekOf,
+  leaveDayCount,
   pinStorageKey,
   sumShiftHours,
   weeksFromThisWeek,
@@ -225,8 +226,14 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
     : 0;
 
   const today = todayISO();
-  const leaveBooked = leave?.filter((r) => r.status === "approved" && r.end_date >= today).length ?? 0;
-  const leavePending = leave?.filter((r) => r.status === "pending").length ?? 0;
+  // Counted in days, not requests, so the tile agrees with the Time off screen
+  // it opens — "2 booked" next to that screen's "Booked · 6 days" reads as a
+  // contradiction. Booked is upcoming only here; the screen's strip is the
+  // whole year's usage, which is a different question.
+  const leaveDays = (rs: LeaveRequest[]) =>
+    rs.reduce((sum, r) => sum + leaveDayCount(r.start_date, r.end_date), 0);
+  const leaveBooked = leaveDays(leave?.filter((r) => r.status === "approved" && r.end_date >= today) ?? []);
+  const leavePending = leaveDays(leave?.filter((r) => r.status === "pending") ?? []);
 
   // ---- Availability tile state ----
   const collecting = availPeriod?.status === "collecting";
@@ -368,11 +375,11 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
           title="Time off"
           desc="Request holiday or a day away"
           badge={
-            leave === null
+            leave === null || (leavePending === 0 && leaveBooked === 0)
               ? undefined
               : leavePending > 0
-                ? `${leavePending} pending`
-                : `${leaveBooked} booked`
+                ? `${leavePending} ${leavePending === 1 ? "day" : "days"} pending`
+                : `${leaveBooked} ${leaveBooked === 1 ? "day" : "days"} booked`
           }
           badgeTone={leavePending > 0 ? "amber" : "neutral"}
         />

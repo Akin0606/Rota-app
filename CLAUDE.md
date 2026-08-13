@@ -39,8 +39,11 @@ Design language for Crewplan:
 - Every design decision should feel intentional, not templated
 
 ## Current priority
-Full aesthetic pass — the last item on the roadmap below. Everything else
-on the original B2b roadmap is now done.
+Staff-side UI rebuild against `crewplan-staff-reference.html` — **all six
+batches built and verified** on branch `staff-ui-rebuild`, not yet merged to
+main or pushed. Next decision is the merge, and the "Blocking-ish" issues
+below are the ones worth settling first. The manager app and admin console
+are unaffected by this rebuild (the palette is scoped to `.cp-staff`).
 
 ## Roadmap after B2b
 Staff hub restructure (done) → shift drop + claim (done: auto-approve
@@ -49,7 +52,9 @@ like-for-like, else manager approval queue) → give shift (done: targeted
 worse-case-governs approval) → admin console controls (done: manager
 creation, venue toggle, delete, rota view) → holiday requests (done phase 1:
 request/approve/reject/cancel, solver + manual-add integration, rota grid
-tag — see Learnings) → full aesthetic pass last.
+tag — see Learnings) → full aesthetic pass last (staff side done: six-batch
+rebuild against the reference; manager app + admin console were redesigned
+in earlier sessions).
 
 Future (not scheduled): a real notification system (email/push) for shift
 claims and approvals — right now managers only see these via activity_log
@@ -70,9 +75,13 @@ Running list — nothing here is fixed. Grouped by what it blocks.
   explicitly (status `2` instead of absent). Scheduling is unaffected (solver
   treats 0 and 2 identically) but the manager UI needs a look, or the payload
   needs an "unset" state back.
-- **Four of six staff screens are mid-rebuild.** Leave is still old-styled;
-  `hours/page.tsx` is a placeholder shipped only so the hub's fifth tile
-  doesn't 404. Batches 5 and 6 close these.
+- **Leave allowance counts calendar days, and assumes a Jan–Dec leave year.**
+  Both are guesses the schema can't settle: `leave_requests` stores two plain
+  dates, nothing records a contracted working pattern, and no leave-year start
+  exists anywhere. So a Mon–Sun request deducts 7, not the 5 a five-day worker
+  would expect, and a venue running an Apr–Mar leave year sees the wrong
+  totals. Mitigated (allowance is editable per device, the rule is stated in a
+  foot note on the screen) but not solved — solving it needs real fields.
 
 ### Unverified, not known-broken
 - **Keyboard `:focus-visible` has never been tested with a real Tab press** —
@@ -112,6 +121,12 @@ Running list — nothing here is fixed. Grouped by what it blocks.
   one is correct — audit logs freeze historical fact).
 
 ## Learnings (append after each session — most recent first)
+- Staff-side UI rebuild, batch 6 of 6: **Time off** (`leave/page.tsx`). All six screens are now rebuilt — the branch is feature-complete and ready to merge. Reference-exact in both modes: allowance cards 12px/`0.5px`/`14px 16px` with a 22px/500/`-0.5px` value, request rows 13px radius / `15px 16px` / 14px gap, 40px `11px`-radius status icon, 11px/500 `7px` pill, and only weights 400/500 on the screen.
+- **The allowance strip needs two numbers the schema doesn't have, and both guesses are visible in the UI rather than hidden.** Days are counted as *inclusive calendar days* (`leaveDayCount`) because `leave_requests` holds two plain dates and nothing anywhere records a contracted working pattern — so a Mon–Sun request costs 7, not the 5 a five-day worker would say. And the leave year is assumed Jan–Dec (a request counts toward the year it *starts* in), because no leave-year start exists either. Both are stated on-screen ("Allowance counts calendar days in 2026 — tap it to change") and the 28-day total is editable per venue (`crewplan-allowance:{token}`, same pattern as the theme and the hours rate; resetting to 28 deletes the key rather than storing the default). Verified the year filter with a 2025 request: listed, correctly excluded from booked/remaining, and its year shown in the date label where in-year rows omit it.
+- **A tappable card must *be* the button, not sit inside one.** Wrapping `MetricCard` in a `<button className="flex flex-1">` made that card 81.7px wide against its siblings' 114.7px — a wrapper is a second flex item in the strip and resolves its width differently from a plain-div sibling. Gave `MetricCard` an optional `onClick` that switches its own root element instead; all three then measured 103.7 × 84.5. This is invisible in source review and only shows up in a width measurement, so measure sibling widths whenever one item in a row is interactive and the others aren't.
+- Divergences from the reference, all deliberate: the request form moved into a modal behind the reference's "Request time off" button (it has no inline form), with a live "7 days off your allowance" line so the counting rule is obvious *before* submitting; cancellable rows are tappable and carry a `chevron-right` the reference doesn't have (its rows have no actions at all, but ours must reach cancel); `rejected`/`cancelled` get a neutral tone + `circle-x` since the reference only defines green and amber and a red would be inventing a token; and a rejection's `manager_note` renders as a third line, because a rejection without its reason is the one thing on the screen worth reading.
+- Fixed in passing: the hub's Time off tile counted *requests* while this screen counts *days*, so "2 booked" sat one tap from "Booked · 6 days". The tile now uses the same `leaveDayCount` helper (one definition, same discipline as `sumShiftHours` across hub/hours) and drops the badge entirely when there's nothing to show, instead of rendering "0 booked". Worst-case badge ("12 days pending") measured 122.5px in a 159.5px tile.
+- `toLocaleDateString("en-GB", {month:"short"})` renders September as **"Sept"**, not the reference's hardcoded "Sep". Left as-is — it's the correct CLDR abbreviation and every other date in the app already reads that way; matching the mockup here would make Time off the one screen that disagrees with the rest.
 - Staff-side UI rebuild, batch 5 of 6: **My hours** (`hours/page.tsx`, was a placeholder). Reference-exact hero verified in both modes — 38px/500/`-1.5px` total, 26px/500/`-0.8px` accent pay figure, 6px `--cp-track` progress bar, day-off rows at `opacity 0.5`, and only font-weights 400/500 anywhere on the screen.
 - **The `"close"` trap the hub flagged three batches ago landed exactly as predicted, and the `sumShiftHours` discipline is what caught it.** David's week is one measurable 4h shift plus two Evening shifts ending at the free text `"close"`: the total reads **`4+hrs`** and the pay estimate reads **`£46+`**, not a confident `£46`. A naive `hours * rate` would have under-reported by two entire evening shifts with nothing on screen suggesting anything was missing — the single worst failure mode available on a screen about money. The `+` propagates from `sumShiftHours().unmeasured` into the hours label, the pay label, and an explicit foot note ("2 shifts end at a time we can't measure, so totals show as a minimum"). Per-shift rows show `—` for the unmeasurable ones rather than a fabricated number.
 - Rate and weekly target live in `localStorage` keyed per venue (`crewplan-rate:{token}`, `crewplan-target:{token}`), same pattern as the theme, no migration — they exist nowhere in the schema. Deliberately **no pay figure at all until a rate is set** (the slot reads "Add your rate" instead of showing `£0`), and clearing either field independently removes just that key — verified both directions plus persistence across reload.
