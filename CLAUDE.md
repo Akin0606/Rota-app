@@ -72,11 +72,17 @@ Running list — nothing here is fixed. Grouped by what it blocks.
   `submitted → hub`. Batch 4's finding was one real defect plus two measurement
   artifacts — see Learnings. The real cost behind the symptom (refetch on every
   hop) is fixed; a lint rule now guards the defect that *was* real.
-- **Manager-side availability grid will show explicit "unavailable" cells where
-  it used to show blanks** — consequence of batch 3 submitting every slot
-  explicitly (status `2` instead of absent). Scheduling is unaffected (solver
-  treats 0 and 2 identically) but the manager UI needs a look, or the payload
-  needs an "unset" state back.
+- ~~**Manager-side availability grid will show explicit "unavailable" cells
+  where it used to show blanks**~~ — **premise disproven, real issue fixed.**
+  Explicit `2`s predate the rebuild by a week (the old code sent anything with
+  `status > 0`, and 2 > 0), so the grid always showed them. The real damage was
+  a **colour and vocabulary swap** between the two sides, now corrected — see
+  Learnings. Residual, deliberately accepted: submissions made *before* batch 3
+  were entered under the old wording (`1` = "Available", `3` = "Preferred") and
+  the grid now labels `1` as "If needed", so historical weeks read slightly
+  differently than what that staff member was shown at the time. Unavoidable
+  without storing the wording alongside the weight, and solver behaviour is
+  untouched.
 - **Leave allowance counts calendar days, and assumes a Jan–Dec leave year.**
   Both are guesses the schema can't settle: `leave_requests` stores two plain
   dates, nothing records a contracted working pattern, and no leave-year start
@@ -123,6 +129,11 @@ Running list — nothing here is fixed. Grouped by what it blocks.
   one is correct — audit logs freeze historical fact).
 
 ## Learnings (append after each session — most recent first)
+- **The manager availability grid and the staff screen had their colours swapped, which is a far worse bug than the one that was logged.** Staff tap a **green** "Available" (`3`) and the manager saw a **gold star**; staff tap an **amber** "If needed" (`1`) and the manager saw the **green tick** that means the stronger signal on the other side. Same stored number, opposite colour on each half of the app — so a manager skimming the grid got a systematically wrong impression of who actually wanted the shift. `availability-panel.tsx` now uses the staff palette and wording exactly: `3` green "Available", `1` amber "If needed", `2` muted grey "Can't work". The red `unavail` tokens are simply no longer used here, which also fixes the "unavailable shouts louder than availability" problem for free.
+- **The logged issue ("explicit unavailable cells where it used to show blanks") was false, and the data said so immediately.** The old submit builder pushed anything with `status > 0` — and 2 > 0 — so explicit unavailable rows have always been sent. All nine real submissions predate batch 3 (latest 8 Aug; batch 3 landed 13 Aug), and seven are complete 14-row sets with **zero** `status = 0`. Blanks were already vanishingly rare. Checking `submitted_at` against the commit date is what settled it in about a minute — worth doing *before* designing a fix for a behaviour that may never have existed.
+- Verifying manager-side UI without a manager login: the OTP flow is off-limits, so I rendered `AvailabilityPanel` in a throwaway dev-only route (`app/grid-preview-tmp/`) fed the real week-10-Aug submissions pulled straight from Postgres, screenshotted both modes, then deleted the route. **Next.js ignores folders starting with `_`** — `app/__grid-preview/` 404s as a private folder, which cost a confused minute. Same no-writes discipline as the staff-side source stubs, and the only way to actually *look* at a screen the issue said "needs a look".
+- Two things the grid lacked regardless of the swap, both now fixed: it had **no legend at all** (the staff screen has always had one, so three unexplained symbols were the manager's only guide), and the two badges per cell were distinguishable only by tooltip. Badges now carry the shift's short name and sit in a deterministic `flex-col` — shift one is always the top badge in every cell, so a column reads straight down. Wrapping put them side-by-side or stacked depending on width.
+- The grid now iterates the **venue's shifts** rather than the submitted rows, which is what makes a genuinely unanswered slot renderable: it gets a dashed "–" instead of silently collapsing the cell. So "didn't answer" and "said no" are finally distinguishable on screen — the distinction the original issue worried about losing, recovered from the other direction.
 - **"Staff-to-staff navigation does full document loads" was wrong, and how it got recorded as fact is the lesson.** Every hop is a soft navigation — verified three independent ways per hop (a `window` probe surviving, `performance.timeOrigin` unchanged, navigation-entry count stable), across all ten hub↔spoke hops, twice in dev and again in a real `next build`/`next start`, plus `rota → /drop?assignment=…` and `submitted → hub`. Batch 4's conclusion was **one real defect and two measurement artifacts**: the leave page genuinely still had a plain `<a href={\`/v/${venue_token}/hub\`}>` at commit `4c4f645` (git-confirmed; it was the last one, removed when batch 6 rebuilt that page) — but the "confirmed in both directions" part came from an errored screen rendering a linkless `CenteredMessage`, which a link/sentinel probe reads as "the page reloaded", and from HMR full-reloads during source-stub editing wiping `window` sentinels independently of any click. Batch 4 was doing exactly that kind of stub editing against a 500ing backend. **A probe that can't tell "reloaded" from "rendered an error" isn't measuring navigation.**
 - The symptom behind the bad diagnosis was real, with a different cause: **no shared cache, so every screen refetched from zero on mount.** A full five-screen circuit cost **27 API calls** — `/rota` nine times, `/auth` six — all identical payloads seconds apart, with a blank "Loading…" on every hop. Now **11**, with **zero** blank hops, and every remaining call is a *background* revalidate rather than something the user waits on.
 - The cache (`lib/api.ts`) is module-level, which is exactly the right lifetime — it survives soft navigation between screens and dies with the document — serving the last response immediately while refreshing behind the screen. Covers the four shared reads (`/auth`, `/rota`, `/activity`, `/leave/mine`); `/week` is deliberately excluded because it's the grid the user is actively editing, and the availability screen passes no `onRevalidate` for the same reason — a background refresh landing mid-edit could overwrite the auto-submit toggle the user just flipped.

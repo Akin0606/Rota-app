@@ -5,11 +5,32 @@ import { useState } from "react";
 import type { Shift, SubmissionEntry } from "@/lib/api";
 import { DAY_LABELS } from "@/lib/utils";
 
-const STATUS_STYLE: Record<number, { bg: string; border: string; text: string; icon: string }> = {
-  1: { bg: "bg-avail-bg", border: "border-avail-border", text: "text-avail-text", icon: "✓" },
-  2: { bg: "bg-unavail-bg", border: "border-unavail-border", text: "text-unavail-text", icon: "✕" },
-  3: { bg: "bg-preferred-bg", border: "border-preferred-border", text: "text-preferred-text", icon: "★" },
+// These must stay in lockstep with the staff availability screen's three
+// states, which is what the numbers actually mean to the person who submitted
+// them. They used to disagree on both colour and word — a staff member tapped
+// a green "Available" (3) and the manager saw a gold star, while an amber "If
+// needed" (1) showed up here as the same green tick that means the *stronger*
+// signal on the other side. The colours were, in effect, swapped.
+//
+// The token names below are historical: `preferred` is simply the amber tone
+// and `unset` the muted one. Only the tone matters here, not the name.
+const STATUS_STYLE: Record<number, { bg: string; border: string; text: string; label: string }> = {
+  3: { bg: "bg-avail-bg", border: "border-avail-border", text: "text-avail-text", label: "Available" },
+  1: {
+    bg: "bg-preferred-bg",
+    border: "border-preferred-border",
+    text: "text-preferred-text",
+    label: "If needed",
+  },
+  2: { bg: "bg-unset-bg", border: "border-unset-border", text: "text-unset-text", label: "Can't work" },
 };
+
+// Long shift names have to survive seven columns on one row, so the badge
+// carries a short form and the full name stays in the tooltip.
+function abbreviate(name: string): string {
+  const clean = name.trim();
+  return clean.length <= 4 ? clean : clean.slice(0, 3);
+}
 
 type AvailabilityPanelProps = {
   shifts: Shift[];
@@ -25,8 +46,6 @@ export default function AvailabilityPanel({
   onRequestClear,
 }: AvailabilityPanelProps) {
   const [open, setOpen] = useState(false);
-
-  const shiftsById = new Map(shifts.map((s) => [s.id, s]));
 
   const byStaff = new Map<string, { name: string; entries: SubmissionEntry[] }>();
   for (const sub of submissions) {
@@ -58,7 +77,30 @@ export default function AvailabilityPanel({
           {staffRows.length === 0 ? (
             <div className="text-[13px] text-ink-faint">No availability submitted for this week yet.</div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              {/* The staff screen has always had a legend; this side never did,
+                  so three unexplained symbols were the manager's only guide. */}
+              <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-ink-faint">
+                {[3, 1, 2].map((status) => {
+                  const style = STATUS_STYLE[status];
+                  return (
+                    <span key={status} className="inline-flex items-center gap-1.5">
+                      <span
+                        className={`inline-block h-3 w-3 rounded-[4px] border ${style.bg} ${style.border}`}
+                      />
+                      {style.label}
+                    </span>
+                  );
+                })}
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-[4px] border border-dashed border-hairline" />
+                  No answer
+                </span>
+                <span className="text-ink-faint/70">
+                  One badge per shift ({shifts.map((s) => s.name).join(", ")})
+                </span>
+              </div>
+              <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] border-collapse text-[12px]">
                 <thead>
                   <tr>
@@ -86,22 +128,44 @@ export default function AvailabilityPanel({
                         <td className="whitespace-nowrap px-2 py-2 font-semibold text-ink-label">{name}</td>
                         {DAY_LABELS.map((_, dayIndex) => {
                           const dayEntries = byDay.get(dayIndex) ?? [];
-                          const shiftEntries = dayEntries.filter((e) => e.shift_id && e.status > 0);
                           const note = dayEntries.find((e) => e.note)?.note;
                           return (
                             <td key={dayIndex} className="px-2 py-2 text-center align-top">
-                              <div className="flex flex-wrap items-center justify-center gap-1">
-                                {shiftEntries.map((e) => {
-                                  const shift = shiftsById.get(e.shift_id!);
-                                  const style = STATUS_STYLE[e.status];
-                                  if (!shift || !style) return null;
+                              {/* A deterministic column, not a wrap: shift one
+                                  is always the top badge in every cell of the
+                                  table, so a column can be read straight down.
+                                  Wrapping put them side by side or stacked
+                                  depending on available width. */}
+                              <div className="flex flex-col items-center gap-1">
+                                {/* Iterating the venue's shifts rather than the
+                                    submitted rows keeps every cell in the same
+                                    order and the same width, and gives a slot
+                                    the staff member never answered somewhere to
+                                    show as a dash — which is a different thing
+                                    from an explicit "can't work". */}
+                                {shifts.map((shift) => {
+                                  const entry = dayEntries.find(
+                                    (e) => e.shift_id === shift.id && e.status > 0,
+                                  );
+                                  const style = entry ? STATUS_STYLE[entry.status] : undefined;
+                                  if (!entry || !style) {
+                                    return (
+                                      <span
+                                        key={shift.id}
+                                        title={`${shift.name} — no answer`}
+                                        className="inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] border border-dashed border-hairline px-1 text-[11px] text-ink-faint"
+                                      >
+                                        –
+                                      </span>
+                                    );
+                                  }
                                   return (
                                     <span
-                                      key={e.shift_id}
-                                      title={shift.name}
-                                      className={`inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] border px-1 text-[11px] font-semibold ${style.bg} ${style.border} ${style.text}`}
+                                      key={shift.id}
+                                      title={`${shift.name} — ${style.label.toLowerCase()}`}
+                                      className={`inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] border px-1.5 text-[10px] font-semibold ${style.bg} ${style.border} ${style.text}`}
                                     >
-                                      {style.icon}
+                                      {abbreviate(shift.name)}
                                     </span>
                                   );
                                 })}
@@ -131,7 +195,8 @@ export default function AvailabilityPanel({
                   })}
                 </tbody>
               </table>
-            </div>
+              </div>
+            </>
           )}
         </div>
       )}
