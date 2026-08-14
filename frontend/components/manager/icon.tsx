@@ -25,7 +25,14 @@ export type ManagerIconName =
   | "table"
   | "photo"
   | "chevron-right"
-  | "chevron-down";
+  | "chevron-down"
+  | "minus"
+  | "sparkles"
+  | "shield"
+  | "eye"
+  | "bell"
+  | "calendar-off"
+  | "sliders";
 
 const PATHS: Record<ManagerIconName, string[]> = {
   moon: ["M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"],
@@ -91,6 +98,36 @@ const PATHS: Record<ManagerIconName, string[]> = {
   ],
   "chevron-right": ["M9 6l6 6l-6 6"],
   "chevron-down": ["M6 9l6 6l6 -6"],
+  minus: ["M5 12l14 0"],
+  sparkles: [
+    "M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z",
+    "M16 6a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2z",
+    "M9 18a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z",
+  ],
+  shield: ["M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3"],
+  eye: [
+    "M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0",
+    "M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6",
+  ],
+  bell: [
+    "M10 5a2 2 0 0 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6",
+    "M9 17v1a3 3 0 0 0 6 0v-1",
+  ],
+  "calendar-off": [
+    "M11 4h6a2 2 0 0 1 2 2v6",
+    "M18 18a2 2 0 0 1 -2 2h-9a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2h1",
+    "M15 3v4",
+    "M7 3v1",
+    "M3 3l18 18",
+  ],
+  sliders: [
+    "M4 8h4",
+    "M12 8h8",
+    "M10 6v4",
+    "M16 16h4",
+    "M4 16h8",
+    "M14 14v4",
+  ],
 };
 
 type IconProps = {

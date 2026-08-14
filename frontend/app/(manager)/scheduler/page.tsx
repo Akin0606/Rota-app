@@ -1,18 +1,25 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
+import GenerateOverlay from "@/components/manager/generate-overlay";
+import ManagerIcon, { ManagerIconName } from "@/components/manager/icon";
 import LoadingScreen from "@/components/loading-screen";
 import Toast from "@/components/toast";
 import {
   ApiError,
+  RotaSummary,
   SchedulerConfig,
   SchedulerWeek,
   SchedulingRules,
   Shift,
   clearScheduleOverride,
+  createPeriod,
+  generateRota,
   getRules,
   getScheduler,
+  listPeriods,
   listShifts,
   setScheduleOverride,
   updateRules,
@@ -44,6 +51,7 @@ function noticeHoursBetween(earliestShiftAt: string, closeLocal: string): number
 }
 
 export default function SchedulerPage() {
+  const router = useRouter();
   const [config, setConfig] = useState<SchedulerConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -78,6 +86,12 @@ export default function SchedulerPage() {
   const [staffingForm, setStaffingForm] = useState<Record<string, { min_staff: number; max_staff: number }>>({});
   const [savingStaffing, setSavingStaffing] = useState(false);
 
+  // Generate flow (shared animated overlay).
+  const [genWeek, setGenWeek] = useState<string>("");
+  const [genOverlayOpen, setGenOverlayOpen] = useState(false);
+  const [genResult, setGenResult] = useState<RotaSummary | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -108,11 +122,12 @@ export default function SchedulerPage() {
     setReminderHours(res.reminder_offset_hours);
     setBufferHours(res.notice_buffer_hours);
     setDayOffRequired(res.require_day_off);
-    // Default the override picker to the first upcoming week if unset.
+    // Default the override + generate pickers to the first upcoming week if unset.
     if (res.weeks.length && !overrideWeek) {
       setOverrideWeek(res.weeks[0].week_start);
       setOverrideClose(dtLocal(res.weeks[0].closes_at));
     }
+    if (res.weeks.length && !genWeek) setGenWeek(res.weeks[0].week_start);
   }
 
   function applyRules(res: SchedulingRules) {
@@ -135,8 +150,6 @@ export default function SchedulerPage() {
     [config, overrideWeek],
   );
 
-  // When the manager switches which week they're overriding, prefill the picker
-  // with that week's current close time.
   function handleWeekChange(weekStart: string) {
     setOverrideWeek(weekStart);
     const wk = config?.weeks.find((w) => w.week_start === weekStart);
@@ -149,6 +162,13 @@ export default function SchedulerPage() {
   }, [selectedWeek, overrideClose]);
 
   const legalMin = config?.legal_notice_hours ?? 72;
+
+  // Reference's live "N shifts / week": coverage is per-shift min_staff, applied
+  // to all 7 days (no per-day override in our model), so it's 7 × Σ min_staff.
+  const shiftsPerWeek = useMemo(
+    () => shifts.reduce((sum, sh) => sum + (staffingForm[sh.id]?.min_staff ?? sh.min_staff), 0) * 7,
+    [shifts, staffingForm],
+  );
 
   async function handleSaveOffsets() {
     setSavingOffsets(true);
@@ -205,13 +225,11 @@ export default function SchedulerPage() {
     }
     setSavingStaffing(true);
     try {
-      const updated = await Promise.all(
-        changed.map((sh) => updateShift(sh.id, staffingForm[sh.id])),
-      );
+      const updated = await Promise.all(changed.map((sh) => updateShift(sh.id, staffingForm[sh.id])));
       setShifts((prev) => prev.map((sh) => updated.find((u) => u.id === sh.id) ?? sh));
-      showToast("Staffing saved");
+      showToast("Coverage saved");
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not save staffing");
+      showToast(err instanceof ApiError ? err.message : "Could not save coverage");
     } finally {
       setSavingStaffing(false);
     }
@@ -266,21 +284,36 @@ export default function SchedulerPage() {
   }
 
   function handleToggleDayOff() {
-    const next = !dayOffRequired;
-    // Turning it on is always safe; turning it off goes through the backend's
-    // needs_confirm gate, which opens the risk popup below.
-    submitDayOff(next, false);
+    submitDayOff(!dayOffRequired, false);
+  }
+
+  // Generate for the week chosen on the sticky bar: reuse or open its period,
+  // then run the solver behind the shared animated overlay.
+  async function handleGenerate() {
+    if (!genWeek) return;
+    setGenResult(null);
+    setGenError(null);
+    setGenOverlayOpen(true);
+    try {
+      const periods = await listPeriods();
+      let period = periods.find((p) => p.week_start === genWeek);
+      if (!period) period = await createPeriod(genWeek);
+      const result = await generateRota(period.id);
+      setGenResult(result);
+    } catch (err) {
+      setGenError(err instanceof ApiError ? err.message : "Could not generate rota. Try again.");
+    }
   }
 
   if (loading) return <LoadingScreen base="Loading scheduler…" />;
 
   if (error || !config) {
     return (
-      <div className="flex flex-col items-center gap-3 p-10 text-center text-sm text-ink-muted">
+      <div className="cp-manager flex flex-col items-center gap-3 p-10 text-center text-sm text-ink-muted">
         Something went wrong loading the scheduler.
         <button
           onClick={() => setReloadToken((n) => n + 1)}
-          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-white"
+          className="rounded-cp-control bg-accent px-4 py-2 text-[13px] font-medium text-white"
         >
           Try again
         </button>
@@ -289,284 +322,246 @@ export default function SchedulerPage() {
   }
 
   return (
-    <div className="animate-fadeIn px-5 py-6 pb-24 md:px-10 md:py-8 md:pb-8">
-      <div className="mb-1 text-[26px] font-bold text-ink md:text-[28px]">Scheduler</div>
-      <div className="mb-7 max-w-[640px] text-sm text-ink-muted">
-        Availability closes automatically <span className="font-semibold text-ink">{legalMin}h + a safety
-        buffer</span> before each week&apos;s earliest shift — so staff always get the legal minimum notice.
-        Set the timing once here and it recalculates every week on its own.
-      </div>
-
+    <div className="px-4 pb-28 pt-2">
       {!config.has_shifts && (
-        <div className="mb-6 rounded-panel border border-warn-dot bg-warn-bg p-4 text-sm text-warn-text">
-          Add at least one shift in <span className="font-semibold">Settings</span> so the scheduler can work
-          out each week&apos;s close time.
+        <div className="mb-4 mt-2 rounded-cp-control border-[0.5px] border-cp-amber/30 bg-cp-amber-soft px-3.5 py-3 text-[12px] text-ink">
+          Add at least one shift in <span className="font-medium">Settings</span> so the scheduler can work out
+          coverage and each week&apos;s close time.
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:max-w-[900px]">
-        {/* Timing offsets */}
-        <div className="rounded-panel border border-hairline bg-surface-card p-6">
-          <div className="mb-1 text-base font-bold text-ink">Window timing</div>
-          <div className="mb-4 text-[13px] text-ink-faint">
-            Everything is measured back from the automatic close time.
-          </div>
-          <div className="flex flex-col gap-3.5">
-            <OffsetRow
-              label="Availability opens"
-              suffix="days before close"
-              value={openDays}
-              min={0}
-              onChange={setOpenDays}
-            />
-            <OffsetRow
-              label="Reminder sent"
-              suffix="hours before close"
-              value={reminderHours}
-              min={0}
-              onChange={setReminderHours}
-            />
-            <OffsetRow
-              label="Safety buffer"
-              suffix={`hours (on top of ${legalMin}h)`}
-              value={bufferHours}
-              min={0}
-              onChange={setBufferHours}
-            />
-          </div>
-          <button
-            onClick={handleSaveOffsets}
-            disabled={savingOffsets}
-            className="mt-5 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {savingOffsets ? "Saving…" : "Save timing"}
-          </button>
-          {config.earliest_shift_label && (
-            <div className="mt-3 text-[12px] text-ink-faint">
-              Earliest shift across your week: <span className="font-semibold">{config.earliest_shift_label}</span>.
-              Close = that time minus {legalMin + bufferHours}h.
-            </div>
-          )}
-        </div>
-
-        {/* Week override */}
-        <div className="rounded-panel border border-hairline bg-surface-card p-6">
-          <div className="mb-1 text-base font-bold text-ink">Override one week</div>
-          <div className="mb-4 text-[13px] text-ink-faint">
-            Manually set the close time for a single week. It reverts to automatic the following week.
-          </div>
-          <div className="flex flex-col gap-3.5">
-            <div>
-              <div className="mb-1 text-xs text-ink-faint">Rota week</div>
-              <select
-                value={overrideWeek}
-                onChange={(e) => handleWeekChange(e.target.value)}
-                className="w-full rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2.5 text-sm font-semibold text-ink outline-none"
-              >
-                {config.weeks.map((w) => (
-                  <option key={w.week_start} value={w.week_start}>
-                    {w.week_label}
-                    {w.is_override ? " (manual)" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-ink-faint">Close availability at</div>
-              <input
-                type="datetime-local"
-                value={overrideClose}
-                onChange={(e) => setOverrideClose(e.target.value)}
-                className="w-full rounded-lg border-[1.5px] border-unset-border px-3 py-2.5 text-sm font-semibold text-ink outline-none"
+      {/* ---------- Coverage ---------- */}
+      <SectionLabel title="Coverage — how many you need" hint="Min aimed for · max never exceeded" />
+      {shifts.length === 0 ? (
+        <EmptyNote>No shifts yet. Add shifts in Settings to set coverage.</EmptyNote>
+      ) : (
+        shifts.map((sh) => {
+          const f = staffingForm[sh.id] ?? { min_staff: sh.min_staff, max_staff: sh.max_staff };
+          return (
+            <div key={sh.id} className="mb-2.5 rounded-cp-card border-[0.5px] border-hairline bg-surface-card px-4 py-3.5">
+              <div className="mb-3 flex items-center gap-2.5">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: sh.color }} />
+                <span className="text-sm font-medium text-ink">{sh.name}</span>
+                <span className="ml-auto text-[11px] text-ink-muted">
+                  {sh.start_time} – {sh.end_time}
+                </span>
+              </div>
+              <CoverageRow
+                label="Minimum"
+                sub="target per day"
+                value={f.min_staff}
+                min={0}
+                onChange={(n) => patchStaffingLocal(sh.id, { min_staff: n })}
+              />
+              <CoverageRow
+                label="Maximum"
+                sub="cap per day"
+                value={f.max_staff}
+                min={1}
+                onChange={(n) => patchStaffingLocal(sh.id, { max_staff: n })}
               />
             </div>
-            {!Number.isNaN(liveNotice) && (
-              <div
-                className={`text-[12px] ${
-                  liveNotice < legalMin ? "font-semibold text-unavail-text" : "text-ink-faint"
-                }`}
-              >
-                {liveNotice < legalMin
-                  ? `⚠ Only ${Math.round(liveNotice)}h notice — below the ${legalMin}h legal minimum.`
-                  : `${Math.round(liveNotice)}h notice before the earliest shift.`}
-              </div>
-            )}
-          </div>
-          <div className="mt-5 flex items-center gap-3">
-            <button
-              onClick={() => submitOverride(false)}
-              disabled={savingOverride || !overrideWeek}
-              className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              {savingOverride ? "Saving…" : "Save close time"}
-            </button>
-            {selectedWeek?.is_override && (
-              <button
-                onClick={() => handleReset(overrideWeek)}
-                className="rounded-xl px-3 py-2.5 text-sm font-semibold text-accent"
-              >
-                Reset to automatic
-              </button>
-            )}
-          </div>
-        </div>
+          );
+        })
+      )}
+      {shifts.length > 0 && (
+        <SaveButton onClick={handleSaveStaffing} busy={savingStaffing} label="Save coverage" />
+      )}
 
-        {/* Scheduling rules */}
-        <div className="rounded-panel border border-hairline bg-surface-card p-6">
-          <div className="mb-1 text-base font-bold text-ink">Scheduling Rules</div>
-          <div className="mb-4 text-[13px] text-ink-faint">
-            Venue preferences the solver enforces when building the rota.
-          </div>
-          <div className="flex flex-col gap-3.5">
-            <OffsetRow label="Max hours / week" suffix="hrs" value={maxHoursPerWeek} min={1} onChange={setMaxHoursPerWeek} />
-            <OffsetRow
-              label="Min rest between shifts"
-              suffix="hrs"
-              value={minRestHours}
-              min={0}
-              onChange={setMinRestHours}
-            />
-          </div>
-          <button
-            onClick={handleSaveRules}
-            disabled={savingRules}
-            className="mt-5 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {savingRules ? "Saving…" : "Save rules"}
-          </button>
-        </div>
-
-        {/* Shift staffing */}
-        <div className="rounded-panel border border-hairline bg-surface-card p-6">
-          <div className="mb-1 text-base font-bold text-ink">Shift Staffing</div>
-          <div className="mb-4 text-[13px] text-ink-faint">
-            How many people the solver aims for (min) and never exceeds (max) on each shift. Add or rename
-            shifts in <span className="font-semibold">Settings</span>.
-          </div>
-          <div className="flex flex-col gap-2">
-            {shifts.map((sh) => {
-              const f = staffingForm[sh.id] ?? { min_staff: sh.min_staff, max_staff: sh.max_staff };
-              return (
-                <div key={sh.id} className="flex items-center gap-2.5 rounded-[10px] bg-surface-subtle px-3.5 py-2.5">
-                  <div className="h-6 w-1 shrink-0 rounded-sm" style={{ background: sh.color }} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-semibold text-ink">{sh.name}</div>
-                    <div className="truncate text-[11px] text-ink-faint">
-                      {sh.start_time} – {sh.end_time}
-                    </div>
-                  </div>
-                  <label className="flex items-center gap-1.5 text-[12px] text-ink-muted">
-                    Min
-                    <input
-                      type="number"
-                      min={0}
-                      value={f.min_staff}
-                      onChange={(e) => patchStaffingLocal(sh.id, { min_staff: e.target.value === "" ? 0 : Number(e.target.value) })}
-                      className="w-[50px] rounded-lg border-[1.5px] border-unset-border bg-surface px-2 py-1.5 text-center text-sm font-semibold text-ink outline-none"
-                    />
-                  </label>
-                  <label className="flex items-center gap-1.5 text-[12px] text-ink-muted">
-                    Max
-                    <input
-                      type="number"
-                      min={1}
-                      value={f.max_staff}
-                      onChange={(e) => patchStaffingLocal(sh.id, { max_staff: e.target.value === "" ? 0 : Number(e.target.value) })}
-                      className="w-[50px] rounded-lg border-[1.5px] border-unset-border bg-surface px-2 py-1.5 text-center text-sm font-semibold text-ink outline-none"
-                    />
-                  </label>
-                </div>
-              );
-            })}
-          </div>
-          <button
-            onClick={handleSaveStaffing}
-            disabled={savingStaffing || !shifts.length}
-            className="mt-5 rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {savingStaffing ? "Saving…" : "Save staffing"}
-          </button>
-        </div>
-      </div>
-
-      {/* 1-day-off-in-7 rule */}
-      <div className="mt-6 rounded-panel border border-hairline bg-surface-card p-6 md:max-w-[900px]">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-base font-bold text-ink">Require one day off in seven</div>
-            <div className="max-w-[520px] text-[13px] text-ink-faint">
-              The solver will never schedule a staff member on all 7 days of a rota week. Switching this off
-              may risk a breach of UK Working Time Regulations.
-            </div>
+      {/* ---------- Shift rules ---------- */}
+      <SectionLabel title="Shift rules" />
+      <div className="grid grid-cols-2 gap-2.5">
+        <RuleCell icon="moon" label="Rest gap">
+          <Stepper value={minRestHours} min={0} suffix="hrs" onChange={setMinRestHours} />
+        </RuleCell>
+        <RuleCell icon="clock" label="Max / week">
+          <Stepper value={maxHoursPerWeek} min={1} suffix="hrs" onChange={setMaxHoursPerWeek} />
+        </RuleCell>
+        <div className="col-span-2 flex items-center justify-between rounded-cp-panel border-[0.5px] border-hairline bg-surface-card px-3.5 py-3">
+          <div className="flex items-center gap-2 text-[12px] text-ink-muted">
+            <ManagerIcon name="calendar-off" size={14} /> One day off in 7
           </div>
           <button
             role="switch"
             aria-checked={dayOffRequired}
             onClick={handleToggleDayOff}
             disabled={savingDayOff}
-            className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-60 ${
-              dayOffRequired ? "bg-accent" : "bg-surface-subtle border border-unset-border"
+            className={`relative h-[26px] w-[46px] shrink-0 rounded-full transition-colors disabled:opacity-60 ${
+              dayOffRequired ? "bg-accent" : "cp-hairline bg-cp-icon"
             }`}
           >
             <span
-              className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
-                dayOffRequired ? "translate-x-[22px]" : "translate-x-0.5"
+              className={`absolute top-[3px] h-5 w-5 rounded-full bg-white transition-transform ${
+                dayOffRequired ? "translate-x-[23px]" : "translate-x-[3px]"
               }`}
             />
           </button>
         </div>
+        <div className="col-span-2 flex items-center justify-between rounded-cp-panel border-[0.5px] border-accent/15 bg-accent-light/60 px-3.5 py-3">
+          <div className="flex items-center gap-2 text-[12px] text-ink-muted">
+            <ManagerIcon name="shield" size={14} className="text-accent" /> Under-18 rules · 5 hard constraints
+          </div>
+          <span className="rounded-cp-badge bg-accent-light px-2 py-1 text-[9px] font-semibold tracking-[0.05em] text-accent">
+            ALWAYS ON
+          </span>
+        </div>
       </div>
+      <SaveButton onClick={handleSaveRules} busy={savingRules} label="Save rules" />
 
-      {/* Upcoming weeks preview */}
-      <div className="mt-6 rounded-panel border border-hairline bg-surface-card p-6 md:max-w-[900px]">
-        <div className="mb-4 text-base font-bold text-ink">Upcoming weeks</div>
-        <div className="flex flex-col divide-y divide-surface-page">
-          {config.weeks.map((w) => (
-            <div key={w.week_start} className="flex flex-wrap items-center gap-x-6 gap-y-1 py-3">
-              <div className="min-w-[130px] text-sm font-semibold text-ink">
+      {/* ---------- Availability window ---------- */}
+      <SectionLabel
+        title="Availability window"
+        hint={`Closes ${legalMin}h + buffer before the earliest shift`}
+      />
+      <div className="rounded-cp-card border-[0.5px] border-hairline bg-surface-card px-4 py-3.5">
+        <WindowRow label="Availability opens" sub="days before close">
+          <Stepper value={openDays} min={0} suffix="days" onChange={setOpenDays} />
+        </WindowRow>
+        <WindowRow label="Reminder sent" sub="hours before close">
+          <Stepper value={reminderHours} min={0} suffix="hrs" onChange={setReminderHours} />
+        </WindowRow>
+        <WindowRow label="Safety buffer" sub={`on top of ${legalMin}h legal`} last>
+          <Stepper value={bufferHours} min={0} suffix="hrs" onChange={setBufferHours} />
+        </WindowRow>
+      </div>
+      {config.earliest_shift_label && (
+        <div className="mt-2 px-1 text-[11px] text-ink-faint">
+          Earliest shift across your week:{" "}
+          <span className="font-medium text-ink-muted">{config.earliest_shift_label}</span>. Close = that time
+          minus {legalMin + bufferHours}h.
+        </div>
+      )}
+      <SaveButton onClick={handleSaveOffsets} busy={savingOffsets} label="Save timing" />
+
+      {/* ---------- Override one week ---------- */}
+      <SectionLabel title="Override one week" hint="Reverts to automatic the next week" />
+      <div className="rounded-cp-card border-[0.5px] border-hairline bg-surface-card px-4 py-3.5">
+        <div className="mb-3">
+          <div className="mb-1.5 text-[11px] text-ink-muted">Rota week</div>
+          <select
+            value={overrideWeek}
+            onChange={(e) => handleWeekChange(e.target.value)}
+            className="w-full rounded-cp-control border-[0.5px] border-hairline bg-surface-card px-3 py-2.5 text-[13px] font-medium text-ink outline-none"
+          >
+            {config.weeks.map((w) => (
+              <option key={w.week_start} value={w.week_start}>
                 {w.week_label}
-                {w.is_override && (
-                  <span className="ml-2 rounded-full bg-accent-light px-2 py-0.5 text-[10px] font-bold text-accent">
-                    Manual
-                  </span>
-                )}
-              </div>
-              <WindowCell label="Opens" value={fmtDateTime(w.opens_at)} />
-              <WindowCell label="Reminder" value={fmtDateTime(w.reminder_at)} />
-              <WindowCell label="Closes" value={fmtDateTime(w.closes_at)} />
-              <div className="text-[12px] text-ink-faint">
-                {Math.round(w.notice_hours)}h notice
-              </div>
-            </div>
-          ))}
+                {w.is_override ? " (manual)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <div className="mb-1.5 text-[11px] text-ink-muted">Close availability at</div>
+          <input
+            type="datetime-local"
+            value={overrideClose}
+            onChange={(e) => setOverrideClose(e.target.value)}
+            className="w-full rounded-cp-control border-[0.5px] border-hairline bg-surface-card px-3 py-2.5 text-[13px] font-medium text-ink outline-none"
+          />
+        </div>
+        {!Number.isNaN(liveNotice) && (
+          <div className={`mt-2.5 text-[11px] ${liveNotice < legalMin ? "font-medium text-cp-red" : "text-ink-faint"}`}>
+            {liveNotice < legalMin
+              ? `Only ${Math.round(liveNotice)}h notice — below the ${legalMin}h legal minimum.`
+              : `${Math.round(liveNotice)}h notice before the earliest shift.`}
+          </div>
+        )}
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={() => submitOverride(false)}
+            disabled={savingOverride || !overrideWeek}
+            className="rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
+          >
+            {savingOverride ? "Saving…" : "Save close time"}
+          </button>
+          {selectedWeek?.is_override && (
+            <button onClick={() => handleReset(overrideWeek)} className="text-[13px] font-medium text-accent">
+              Reset to automatic
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Risk popup */}
+      {/* ---------- Upcoming weeks ---------- */}
+      <SectionLabel title="Upcoming weeks" />
+      <div className="rounded-cp-card border-[0.5px] border-hairline bg-surface-card px-4 py-1">
+        {config.weeks.map((w, i) => (
+          <div
+            key={w.week_start}
+            className={`flex flex-wrap items-center gap-x-5 gap-y-1 py-3 ${
+              i < config.weeks.length - 1 ? "border-b border-hairline" : ""
+            }`}
+          >
+            <div className="min-w-[120px] text-[13px] font-medium text-ink">
+              {w.week_label}
+              {w.is_override && (
+                <span className="ml-2 rounded-cp-badge bg-accent-light px-2 py-0.5 text-[9px] font-semibold text-accent">
+                  Manual
+                </span>
+              )}
+            </div>
+            <WindowCell label="Opens" value={fmtDateTime(w.opens_at)} />
+            <WindowCell label="Closes" value={fmtDateTime(w.closes_at)} />
+            <div className="text-[11px] text-ink-faint">{Math.round(w.notice_hours)}h notice</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ---------- Sticky generate bar ---------- */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t-[0.5px] border-hairline bg-surface-card">
+        <div className="mx-auto flex w-full max-w-[460px] items-center gap-3 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <select
+              value={genWeek}
+              onChange={(e) => setGenWeek(e.target.value)}
+              className="max-w-full truncate bg-transparent text-[15px] font-medium text-ink outline-none"
+            >
+              {config.weeks.map((w) => (
+                <option key={w.week_start} value={w.week_start}>
+                  {w.week_label}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => router.push("/settings")}
+              className="block text-[11px] text-accent"
+            >
+              {shiftsPerWeek} shifts / week · + add pay rates →
+            </button>
+          </div>
+          <button
+            onClick={handleGenerate}
+            disabled={!config.has_shifts || !genWeek}
+            className="flex shrink-0 items-center gap-1.5 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-50"
+          >
+            <ManagerIcon name="sparkles" size={15} /> Generate
+          </button>
+        </div>
+      </div>
+
+      {/* ---------- Risk popup: below legal notice ---------- */}
       {riskOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
-          <div className="w-full max-w-[440px] rounded-card border border-warn-dot bg-surface-card p-6">
-            <div className="mb-2 text-lg font-bold text-ink">Below the legal minimum notice</div>
-            <div className="mb-4 text-sm text-ink-muted">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-6">
+          <div className="w-full max-w-[400px] rounded-cp-card border-[0.5px] border-cp-amber/40 bg-surface-card p-6">
+            <div className="mb-2 text-[17px] font-medium text-ink">Below the legal minimum notice</div>
+            <div className="mb-5 text-[13px] leading-[1.5] text-ink-muted">
               This close time gives staff only{" "}
-              <span className="font-semibold text-unavail-text">
+              <span className="font-medium text-cp-red">
                 {riskHours != null ? Math.round(riskHours) : "under " + legalMin}h
               </span>{" "}
               of notice before the earliest shift. UK staff are generally entitled to at least{" "}
-              <span className="font-semibold">{legalMin} hours&apos;</span> notice of a shift. Save anyway only
-              if you&apos;re sure.
+              <span className="font-medium text-ink">{legalMin} hours&apos;</span> notice. Save anyway only if
+              you&apos;re sure.
             </div>
             <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={() => setRiskOpen(false)}
-                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
-              >
+              <button onClick={() => setRiskOpen(false)} className="text-[13px] font-medium text-ink-muted">
                 Cancel
               </button>
               <button
                 onClick={() => submitOverride(true)}
                 disabled={savingOverride}
-                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                className="rounded-cp-control bg-cp-red px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
               >
                 {savingOverride ? "Saving…" : "Save anyway"}
               </button>
@@ -575,27 +570,24 @@ export default function SchedulerPage() {
         </div>
       )}
 
-      {/* Risk popup: turning off the day-off-in-7 rule */}
+      {/* ---------- Risk popup: turning off day-off ---------- */}
       {dayOffRiskOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
-          <div className="w-full max-w-[440px] rounded-card border border-warn-dot bg-surface-card p-6">
-            <div className="mb-2 text-lg font-bold text-ink">Turning off the day-off rule</div>
-            <div className="mb-4 text-sm text-ink-muted">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-6">
+          <div className="w-full max-w-[400px] rounded-cp-card border-[0.5px] border-cp-amber/40 bg-surface-card p-6">
+            <div className="mb-2 text-[17px] font-medium text-ink">Turning off the day-off rule</div>
+            <div className="mb-5 text-[13px] leading-[1.5] text-ink-muted">
               With this off, the solver may schedule staff on all 7 days of a rota week. This may breach{" "}
-              <span className="font-semibold">UK Working Time Regulations</span>, which generally entitle
+              <span className="font-medium text-ink">UK Working Time Regulations</span>, which generally entitle
               workers to a rest day each week. Turn off anyway only if you&apos;re sure.
             </div>
             <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={() => setDayOffRiskOpen(false)}
-                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
-              >
+              <button onClick={() => setDayOffRiskOpen(false)} className="text-[13px] font-medium text-ink-muted">
                 Cancel
               </button>
               <button
                 onClick={() => submitDayOff(false, true)}
                 disabled={savingDayOff}
-                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                className="rounded-cp-control bg-cp-red px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
               >
                 {savingDayOff ? "Saving…" : "Turn off anyway"}
               </button>
@@ -604,37 +596,136 @@ export default function SchedulerPage() {
         </div>
       )}
 
+      <GenerateOverlay
+        open={genOverlayOpen}
+        result={genResult}
+        error={genError}
+        shifts={shifts}
+        onAdjustRules={() => setGenOverlayOpen(false)}
+        onReviewRota={() => router.push("/rota")}
+        onClose={() => setGenOverlayOpen(false)}
+      />
+
       <Toast message={toast} />
     </div>
   );
 }
 
-function OffsetRow({
-  label,
+// ---------- small presentational pieces ----------
+
+function SectionLabel({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div className="mb-3 mt-6 flex items-center justify-between px-1">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-faint">{title}</span>
+      {hint && <span className="text-[11px] text-ink-faint">{hint}</span>}
+    </div>
+  );
+}
+
+function EmptyNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-cp-card border-[0.5px] border-hairline bg-surface-card px-4 py-5 text-center text-[13px] text-ink-muted">
+      {children}
+    </div>
+  );
+}
+
+function MiniBtn({ icon, onClick }: { icon: ManagerIconName; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex h-8 w-8 items-center justify-center rounded-lg border-[0.5px] border-hairline bg-surface-card text-ink-muted transition-colors hover:!text-accent"
+    >
+      <ManagerIcon name={icon} size={15} />
+    </button>
+  );
+}
+
+function Stepper({
+  value,
+  min = 0,
   suffix,
+  onChange,
+}: {
+  value: number;
+  min?: number;
+  suffix?: string;
+  onChange: (n: number) => void;
+}) {
+  const set = (n: number) => onChange(Math.max(min, n));
+  return (
+    <div className="flex items-center gap-2">
+      <MiniBtn icon="minus" onClick={() => set(value - 1)} />
+      <span className="min-w-[44px] text-center text-sm font-medium text-ink">
+        {value}
+        {suffix && <span className="ml-0.5 text-[11px] font-normal text-ink-faint">{suffix}</span>}
+      </span>
+      <MiniBtn icon="plus" onClick={() => set(value + 1)} />
+    </div>
+  );
+}
+
+function CoverageRow({
+  label,
+  sub,
   value,
   min,
   onChange,
 }: {
   label: string;
-  suffix: string;
+  sub: string;
   value: number;
   min: number;
   onChange: (n: number) => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-surface-page pb-3.5 last:border-0 last:pb-0">
-      <div className="text-[13px] text-ink-label">{label}</div>
-      <div className="flex items-center gap-2">
-        <input
-          type="number"
-          min={min}
-          value={value}
-          onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value))}
-          className="w-[70px] rounded-lg border-[1.5px] border-unset-border px-3 py-2 text-center text-sm font-semibold text-ink outline-none"
-        />
-        <span className="text-[12px] text-ink-faint">{suffix}</span>
+    <div className="flex items-center justify-between border-t border-hairline py-2.5 first:border-t-0 first:pt-0">
+      <div>
+        <div className="text-[13px] font-medium text-ink">{label}</div>
+        <div className="text-[11px] text-ink-faint">{sub}</div>
       </div>
+      <Stepper value={value} min={min} onChange={onChange} />
+    </div>
+  );
+}
+
+function RuleCell({
+  icon,
+  label,
+  children,
+}: {
+  icon: ManagerIconName;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-cp-panel border-[0.5px] border-hairline bg-surface-card px-3.5 py-3">
+      <div className="mb-2.5 flex items-center gap-1.5 text-[12px] text-ink-muted">
+        <ManagerIcon name={icon} size={13} /> {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function WindowRow({
+  label,
+  sub,
+  last,
+  children,
+}: {
+  label: string;
+  sub: string;
+  last?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`flex items-center justify-between py-2.5 ${last ? "" : "border-b border-hairline"}`}>
+      <div>
+        <div className="text-[13px] text-ink">{label}</div>
+        <div className="text-[11px] text-ink-faint">{sub}</div>
+      </div>
+      {children}
     </div>
   );
 }
@@ -642,8 +733,20 @@ function OffsetRow({
 function WindowCell({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wide text-ink-faint">{label}</div>
-      <div className="text-[13px] font-medium text-ink">{value}</div>
+      <div className="text-[9px] uppercase tracking-wide text-ink-faint">{label}</div>
+      <div className="text-[12px] font-medium text-ink">{value}</div>
     </div>
+  );
+}
+
+function SaveButton({ onClick, busy, label }: { onClick: () => void; busy: boolean; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={busy}
+      className="mt-3.5 rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
+    >
+      {busy ? "Saving…" : label}
+    </button>
   );
 }

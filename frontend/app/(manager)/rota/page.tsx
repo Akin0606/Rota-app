@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import AvailabilityPanel from "@/components/availability-panel";
 import ClaimsPanel from "@/components/claims-panel";
 import LoadingScreen from "@/components/loading-screen";
+import GenerateOverlay from "@/components/manager/generate-overlay";
 import ManagerIcon from "@/components/manager/icon";
 import ManagerRotaMatrix from "@/components/manager/rota-matrix";
 import ManagerRotaReview from "@/components/manager/rota-review";
@@ -93,6 +95,9 @@ export default function RotaPage() {
   const [rotaLoading, setRotaLoading] = useState(false);
   const [error, setError] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [genOverlayOpen, setGenOverlayOpen] = useState(false);
+  const [genResult, setGenResult] = useState<RotaSummary | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
   const [copying, setCopying] = useState(false);
   const [postingKey, setPostingKey] = useState<string | null>(null);
   const [postingRole, setPostingRole] = useState("");
@@ -329,18 +334,26 @@ export default function RotaPage() {
   async function handleGenerate() {
     const p = await ensurePeriod();
     if (!p) return;
+    // Open the animated overlay first, then run the solver. The overlay shows a
+    // stepped solving animation while `genResult`/`genError` are null, then the
+    // honest result (filled / gaps / gap reasons) when the request resolves.
+    setGenResult(null);
+    setGenError(null);
+    setGenOverlayOpen(true);
     setGenerating(true);
     try {
       const result = await generateRota(p.id);
       setSummary(result);
       setPeriods((prev) => prev.map((x) => (x.id === p.id ? { ...x, status: result.status } : x)));
-      showToast(result.warnings.length ? result.warnings[0] : "Rota generated");
+      setGenResult(result);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not generate rota");
+      setGenError(err instanceof ApiError ? err.message : "Could not generate rota. Try again.");
     } finally {
       setGenerating(false);
     }
   }
+
+  const router = useRouter();
 
   async function handleCopyPrevious() {
     const p = await ensurePeriod();
@@ -1151,6 +1164,16 @@ export default function RotaPage() {
           )}
         </div>
       )}
+
+      <GenerateOverlay
+        open={genOverlayOpen}
+        result={genResult}
+        error={genError}
+        shifts={shifts}
+        onAdjustRules={() => router.push("/scheduler")}
+        onReviewRota={() => setGenOverlayOpen(false)}
+        onClose={() => setGenOverlayOpen(false)}
+      />
 
       <Toast message={toast} />
     </div>
