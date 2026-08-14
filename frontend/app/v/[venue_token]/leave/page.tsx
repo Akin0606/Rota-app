@@ -13,6 +13,7 @@ import StaffScreen, { FootNote, ScreenTitle, SectionLabel, StaffTopBar } from "@
 import StatusBadge, { StatusTone } from "@/components/staff/status-badge";
 import {
   ApiError,
+  LeaveAllowance,
   LeaveRequest,
   authenticatePin,
   cancelLeaveRequest,
@@ -20,18 +21,18 @@ import {
   requestLeave,
 } from "@/lib/api";
 import {
+  formatDays,
   formatLeaveDates,
+  formatLeaveYear,
   formatRelativeTime,
-  leaveDayCount,
-  parseISODate,
+  leaveDaysForRange,
   pinStorageKey,
 } from "@/lib/utils";
 
-// 28 days is the UK statutory minimum for a 5-day worker, and nothing in the
-// schema records a real per-staff entitlement — so it's a default with a local
-// override, keyed per venue like the theme and the hours screen's rate.
-const DEFAULT_ALLOWANCE = 28;
-const allowanceKey = (token: string) => `crewplan-allowance:${token}`;
+// Entitlement, the leave year and what a range costs all come from the backend
+// now (migration 021). They used to be guessed here — 28 days, a Jan-Dec year,
+// and inclusive calendar days — with a per-device localStorage override
+// standing in for a real figure.
 
 const STATUS_VISUAL: Record<
   LeaveRequest["status"],
@@ -61,9 +62,7 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const [allowance, setAllowance] = useState(DEFAULT_ALLOWANCE);
-  const [allowanceDraft, setAllowanceDraft] = useState("");
-  const [editingAllowance, setEditingAllowance] = useState(false);
+  const [allowance, setAllowance] = useState<LeaveAllowance | null>(null);
 
   const [requesting, setRequesting] = useState(false);
   const [startDate, setStartDate] = useState("");
@@ -82,23 +81,22 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
     }
     setPin(storedPin);
 
-    try {
-      const stored = Number(localStorage.getItem(allowanceKey(venue_token)));
-      if (Number.isFinite(stored) && stored > 0) setAllowance(stored);
-    } catch {
-      // Private-mode storage failures just leave the statutory default.
-    }
-
     Promise.all([
       authenticatePin(venue_token, storedPin),
       // Safe to refresh in the background: every mutation on this screen
       // already writes its own result into `requests`, and any staff write
       // drops the cached copy, so a revalidate can only ever bring newer data.
-      myLeaveRequests(venue_token, storedPin, { onRevalidate: (res) => setRequests(res.requests) }),
+      myLeaveRequests(venue_token, storedPin, {
+        onRevalidate: (res) => {
+          setRequests(res.requests);
+          setAllowance(res.allowance);
+        },
+      }),
     ])
       .then(([auth, mine]) => {
         setVenueName(auth.venue_name);
         setRequests(mine.requests);
+        setAllowance(mine.allowance);
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) {
@@ -130,6 +128,11 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
     try {
       const created = await requestLeave(venue_token, pin, startDate, endDate, reason.trim() || null);
       setRequests((prev) => [created, ...prev]);
+      // The write invalidated the cached copy, so this re-reads rather than
+      // doing allowance arithmetic a second time on the client.
+      myLeaveRequests(venue_token, pin)
+        .then((res) => setAllowance(res.allowance))
+        .catch(() => {});
       setRequesting(false);
       showToast("Leave requested — your manager will review it");
     } catch (err) {
@@ -145,6 +148,9 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
     try {
       const updated = await cancelLeaveRequest(venue_token, pin, cancelTarget.id);
       setRequests((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      myLeaveRequests(venue_token, pin)
+        .then((res) => setAllowance(res.allowance))
+        .catch(() => {});
       setCancelTarget(null);
       showToast("Request cancelled");
     } catch (err) {
@@ -154,37 +160,16 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
     }
   }
 
-  function saveAllowance() {
-    const n = Number(allowanceDraft);
-    const next = allowanceDraft.trim() && Number.isFinite(n) && n > 0 ? n : DEFAULT_ALLOWANCE;
-    try {
-      if (next === DEFAULT_ALLOWANCE) localStorage.removeItem(allowanceKey(venue_token));
-      else localStorage.setItem(allowanceKey(venue_token), String(next));
-    } catch {
-      // As above — keep the in-session value even if storage is unavailable.
-    }
-    setAllowance(next);
-    setEditingAllowance(false);
-  }
-
   if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
   if (error) return <CenteredMessage>{error}</CenteredMessage>;
 
   const today = todayISO();
-  const thisYear = new Date().getFullYear();
 
-  // The allowance is a per-year figure, so only this year's requests count
-  // against it — otherwise last year's holiday would keep eating into it. A
-  // request is attributed to the year it starts in.
-  const countsThisYear = (r: LeaveRequest) => parseISODate(r.start_date).getUTCFullYear() === thisYear;
-  const daysIn = (status: LeaveRequest["status"]) =>
-    requests
-      .filter((r) => r.status === status && countsThisYear(r))
-      .reduce((sum, r) => sum + leaveDayCount(r.start_date, r.end_date), 0);
-
-  const booked = daysIn("approved");
-  const pendingDays = daysIn("pending");
-  const remaining = allowance - booked - pendingDays;
+  // What a range costs this person depends on how many days a week they work,
+  // which only the backend knows — so the estimate in the request modal asks
+  // for the same arithmetic rather than reimplementing it.
+  const perWeek = allowance?.working_days_per_week ?? 5;
+  const estimateDays = (start: string, end: string) => leaveDaysForRange(start, end, perWeek);
 
   const canCancel = (r: LeaveRequest) =>
     r.status === "pending" || (r.status === "approved" && r.start_date >= today);
@@ -212,16 +197,20 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
       <div className="mb-[22px] flex gap-2.5">
         <MetricCard
           label="Days remaining"
-          value={remaining}
-          suffix={`of ${allowance}`}
+          value={allowance ? formatDays(allowance.remaining_days) : "—"}
+          suffix={allowance ? `of ${formatDays(allowance.entitlement_days)}` : undefined}
           accent
-          onClick={() => {
-            setAllowanceDraft(String(allowance));
-            setEditingAllowance(true);
-          }}
         />
-        <MetricCard label="Booked" value={booked} suffix={booked === 1 ? "day" : "days"} />
-        <MetricCard label="Pending" value={pendingDays} suffix={pendingDays === 1 ? "day" : "days"} />
+        <MetricCard
+          label="Booked"
+          value={allowance ? formatDays(allowance.booked_days) : "—"}
+          suffix="days"
+        />
+        <MetricCard
+          label="Pending"
+          value={allowance ? formatDays(allowance.pending_days) : "—"}
+          suffix="days"
+        />
       </div>
 
       <button
@@ -249,9 +238,12 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
       )}
 
       <FootNote>Requests need manager approval before they&apos;re confirmed</FootNote>
-      <FootNote>
-        Allowance counts calendar days in {thisYear} — tap it to change
-      </FootNote>
+      {allowance && (
+        <FootNote>
+          {formatLeaveYear(allowance.leave_year_start, allowance.leave_year_end)} · a week off costs{" "}
+          {formatDays(allowance.working_days_per_week)} days. Ask your manager if that&apos;s wrong
+        </FootNote>
+      )}
 
       <Modal open={requesting} onClose={() => setRequesting(false)} title="Request time off">
         <div className="mb-4 flex gap-3">
@@ -290,9 +282,9 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
         </label>
         <div className="mb-5 text-[12px] text-ink-muted">
           {startDate && endDate && endDate >= startDate
-            ? `${leaveDayCount(startDate, endDate)} day${
-                leaveDayCount(startDate, endDate) === 1 ? "" : "s"
-              } off your allowance`
+            ? `${formatDays(estimateDays(startDate, endDate))} day${
+                estimateDays(startDate, endDate) === 1 ? "" : "s"
+              } off your allowance — you work ${formatDays(perWeek)} days a week`
             : "Pick both dates to see how many days this uses."}
         </div>
         <div className="flex items-center justify-end gap-3">
@@ -338,44 +330,6 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
         )}
       </Modal>
 
-      <Modal
-        open={editingAllowance}
-        onClose={() => setEditingAllowance(false)}
-        title="Your yearly allowance"
-      >
-        <div className="mb-4 text-[13px] leading-[1.55] text-ink-muted">
-          We start everyone at {DEFAULT_ALLOWANCE} days — the UK minimum for a five-day week. Change it here
-          if yours is different. Saved on this device only.
-        </div>
-        <label className="mb-5 block">
-          <span className="mb-1.5 block text-[12px] text-ink-muted">Days per year</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min="1"
-            step="1"
-            value={allowanceDraft}
-            onChange={(e) => setAllowanceDraft(e.target.value)}
-            placeholder={String(DEFAULT_ALLOWANCE)}
-            className="w-full rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-accent"
-          />
-        </label>
-        <div className="flex items-center justify-end gap-3">
-          <button
-            onClick={() => setEditingAllowance(false)}
-            className="rounded-cp-control px-4 py-2.5 text-[13px] font-medium text-ink-muted"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={saveAllowance}
-            className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-white"
-          >
-            Save
-          </button>
-        </div>
-      </Modal>
-
       <Toast message={toast} />
     </StaffScreen>
   );
@@ -383,7 +337,7 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
 
 function RequestRow({ request, onCancel }: { request: LeaveRequest; onCancel?: () => void }) {
   const visual = STATUS_VISUAL[request.status] ?? STATUS_VISUAL.pending;
-  const days = leaveDayCount(request.start_date, request.end_date);
+  const days = request.days;
 
   // The reference uses a beach for a holiday and a calendar tick for a single
   // day away — the same distinction our data supports, since a one-day request

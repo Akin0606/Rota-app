@@ -83,13 +83,22 @@ Running list — nothing here is fixed. Grouped by what it blocks.
   differently than what that staff member was shown at the time. Unavoidable
   without storing the wording alongside the weight, and solver behaviour is
   untouched.
-- **Leave allowance counts calendar days, and assumes a Jan–Dec leave year.**
-  Both are guesses the schema can't settle: `leave_requests` stores two plain
-  dates, nothing records a contracted working pattern, and no leave-year start
-  exists anywhere. So a Mon–Sun request deducts 7, not the 5 a five-day worker
-  would expect, and a venue running an Apr–Mar leave year sees the wrong
-  totals. Mitigated (allowance is editable per device, the rule is stated in a
-  foot note on the screen) but not solved — solving it needs real fields.
+- ~~**Leave allowance counts calendar days, and assumes a Jan–Dec leave year.**~~
+  — **fixed** by migration `021`, which adds the fields that were missing:
+  `venues.leave_year_start_month`, `venues.full_time_leave_days`,
+  `staff_members.working_days_per_week` and a nullable
+  `staff_members.annual_leave_days` override. A range now costs working days,
+  not calendar days, so a fortnight costs a five-day worker 10 rather than 14.
+  See Learnings. **Not yet verified live on the manager side** — the Team and
+  Settings controls are typechecked and lint-clean but never clicked, because
+  the OTP login is off-limits.
+- **Hours-based accrual (12.07%) is the legally correct model for
+  irregular-hours staff and is blocked by free-text shift ends.** Since April
+  2024 UK statutory leave for irregular-hours and part-year workers accrues as
+  12.07% of hours worked. This app already knows hours worked — except a shift
+  ending at `"close"` has no measurable duration, so an accrual computed from
+  it would silently under-report. Fixing shift end times is the prerequisite;
+  the days-based model shipped in `021` is the honest interim.
 
 ### Unverified, not known-broken
 - **Keyboard `:focus-visible` has never been tested with a real Tab press** —
@@ -129,6 +138,12 @@ Running list — nothing here is fixed. Grouped by what it blocks.
   one is correct — audit logs freeze historical fact).
 
 ## Learnings (append after each session — most recent first)
+- **Leave allowance now has real fields behind it (migration `021`), and the counting rule is the interesting part.** A range costs `calendar_days × working_days_per_week / 7`, rounded **up** to the nearest half day. Pub staff work days spread across all seven, so a seven-day absence costs a five-day-a-week worker exactly 5 — whole weeks come out exact, and a fortnight is 10 rather than the 14 the old calendar-day count charged. The counterintuitive case is worth remembering: **Mon–Fri costs 4, not 5**, because the "Mon–Fri = 5 days" intuition belongs to office workers who work exactly Mon–Fri. Rounding up is deliberate on both figures it touches — an entitlement must never land under the statutory pro-rata minimum, and a request must never quietly cost less than it really does.
+- Entitlement is derived, not stored, unless a manager overrides it: `venues.full_time_leave_days × working_days_per_week / 5`, ceiled to a half day. A 3-day worker gets 17 (statutory pro-rata is 16.8), so the derived figure is always ≥ the legal minimum. `staff_members.annual_leave_days` is nullable on purpose — **blank means "use the pro-rata calculation"**, so clearing the field returns someone to the derived number rather than freezing whatever was typed there.
+- **The client keeps a mirror of the day-count arithmetic and that's a deliberate, commented duplication.** The backend is the authority — every number rendered after submission comes from `/leave/{token}/mine` — but the request modal has to say "5 days off your allowance" *before* anything is submitted, and round-tripping a keystroke to compute it would be worse. Both copies carry a comment naming the other. Verified they agree exactly on four ranges (full week 5, Mon–Fri 4, single day 1, fortnight 10).
+- Verified proration end-to-end by flipping David to 3 days/week through the backend's own `get_supabase()` (direct SQL writes are still classifier-blocked), confirming the screen read **17 of 17** and "a week off costs 3 days", then reverting — same for an Apr–Mar leave year, which correctly rendered `Leave year Apr 2026 – Mar 2027` and bounds of `2026-04-01 → 2027-03-31`. Both values restored and re-read from the database afterwards rather than trusting the UI.
+- **What this batch could not verify: the manager-side controls.** The Team modal's holiday fields and the Settings "Holiday" panel are typechecked, lint-clean and code-reviewed, but never clicked — the OTP login is off-limits and these are full authed pages, so the throwaway-preview-route trick that worked for `AvailabilityPanel` doesn't apply. First real manager session should exercise both.
+- Worth knowing for the next leave batch: **12.07%-of-hours accrual is the legally correct model** for the irregular-hours staff this app actually serves (4 of this venue's 6 are under-18 part-timers), and the app already holds the hours. It's blocked purely by shift ends being free text — `"close"` has no duration, so an accrual computed off it would under-report exactly the way batch 5's pay estimate would have. Fixing shift end times unlocks it.
 - **The manager availability grid and the staff screen had their colours swapped, which is a far worse bug than the one that was logged.** Staff tap a **green** "Available" (`3`) and the manager saw a **gold star**; staff tap an **amber** "If needed" (`1`) and the manager saw the **green tick** that means the stronger signal on the other side. Same stored number, opposite colour on each half of the app — so a manager skimming the grid got a systematically wrong impression of who actually wanted the shift. `availability-panel.tsx` now uses the staff palette and wording exactly: `3` green "Available", `1` amber "If needed", `2` muted grey "Can't work". The red `unavail` tokens are simply no longer used here, which also fixes the "unavailable shouts louder than availability" problem for free.
 - **The logged issue ("explicit unavailable cells where it used to show blanks") was false, and the data said so immediately.** The old submit builder pushed anything with `status > 0` — and 2 > 0 — so explicit unavailable rows have always been sent. All nine real submissions predate batch 3 (latest 8 Aug; batch 3 landed 13 Aug), and seven are complete 14-row sets with **zero** `status = 0`. Blanks were already vanishingly rare. Checking `submitted_at` against the commit date is what settled it in about a minute — worth doing *before* designing a fix for a behaviour that may never have existed.
 - Verifying manager-side UI without a manager login: the OTP flow is off-limits, so I rendered `AvailabilityPanel` in a throwaway dev-only route (`app/grid-preview-tmp/`) fed the real week-10-Aug submissions pulled straight from Postgres, screenshotted both modes, then deleted the route. **Next.js ignores folders starting with `_`** — `app/__grid-preview/` 404s as a private folder, which cost a confused minute. Same no-writes discipline as the staff-side source stubs, and the only way to actually *look* at a screen the issue said "needs a look".

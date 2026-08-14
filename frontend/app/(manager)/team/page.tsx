@@ -10,8 +10,10 @@ import {
   Period,
   StaffManager,
   Venue,
+  VenueLeaveSettings,
   createStaff,
   getVenue,
+  getVenueLeaveSettings,
   listPeriods,
   listStaff,
   remindStaff,
@@ -32,9 +34,29 @@ type FormState = {
   phone: string;
   role: string;
   isUnder18: boolean;
+  // Leave fields are edit-only: a new starter gets the venue defaults, and
+  // asking for a holiday entitlement while adding someone to a rota is noise.
+  workingDays: string;
+  leaveDays: string;
 };
 
-const EMPTY_FORM: FormState = { name: "", email: "", phone: "", role: "Server", isUnder18: false };
+// Mirrors services/leave.entitlement_days so the placeholder shows what will
+// actually be used if the field is left blank.
+function proRataPlaceholder(workingDays: string, fullTime: number | undefined): string {
+  const w = Number(workingDays);
+  if (!Number.isFinite(w) || w <= 0) return "28";
+  return String(Math.ceil(((fullTime ?? 28) * w) / 5 / 0.5) * 0.5);
+}
+
+const EMPTY_FORM: FormState = {
+  name: "",
+  email: "",
+  phone: "",
+  role: "Server",
+  isUnder18: false,
+  workingDays: "5",
+  leaveDays: "",
+};
 
 export default function TeamPage() {
   const [venue, setVenue] = useState<Venue | null>(null);
@@ -51,6 +73,13 @@ export default function TeamPage() {
   const [saving, setSaving] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pendingOnly, setPendingOnly] = useState(false);
+  // Only needed for the pro-rata placeholder in the edit modal, so a failure
+  // here just falls back to the statutory 28.
+  const [leaveSettings, setLeaveSettings] = useState<VenueLeaveSettings | null>(null);
+
+  useEffect(() => {
+    getVenueLeaveSettings().then(setLeaveSettings).catch(() => {});
+  }, []);
 
   // Honour ?filter=pending from the dashboard Availability card.
   useEffect(() => {
@@ -109,6 +138,9 @@ export default function TeamPage() {
       phone: member.phone ?? "",
       role: member.role,
       isUnder18: member.is_under_18,
+      workingDays: String(member.working_days_per_week ?? 5),
+      // Blank means "use the pro-rata figure" rather than a stored zero.
+      leaveDays: member.annual_leave_days === null ? "" : String(member.annual_leave_days),
     });
     setModalMode("edit");
   }
@@ -136,12 +168,18 @@ export default function TeamPage() {
         setStaff((prev) => [...prev, created]);
         showToast(`${created.name.split(" ")[0]} added — PIN ${created.pin}`);
       } else if (modalMode === "edit" && editingId) {
+        const workingDays = Number(form.workingDays);
         const updated = await updateStaff(editingId, {
           name: form.name.trim(),
           email: form.email.trim() || null,
           phone: form.phone.trim() || null,
           role: form.role,
           is_under_18: form.isUnder18,
+          working_days_per_week:
+            Number.isFinite(workingDays) && workingDays > 0 && workingDays <= 7 ? workingDays : 5,
+          // Explicitly null when blank, which returns them to the pro-rata
+          // calculation instead of freezing whatever was there.
+          annual_leave_days: form.leaveDays.trim() === "" ? null : Number(form.leaveDays),
         });
         setStaff((prev) => prev.map((m) => (m.id === editingId ? { ...m, ...updated } : m)));
         showToast(`${updated.name.split(" ")[0]} updated`);
@@ -410,6 +448,47 @@ export default function TeamPage() {
           />
           This staff member is under 18
         </label>
+
+        {/* Edit only: a new starter takes the venue defaults, and asking about
+            holiday entitlement mid-way through adding someone to a rota is
+            noise. Both drive the Time off screen this person sees. */}
+        {modalMode === "edit" && (
+          <div className="mb-5 rounded-panel border border-hairline bg-surface-subtle p-3.5">
+            <div className="mb-2.5 text-xs font-semibold text-ink-label">Holiday</div>
+            <div className="flex gap-3">
+              <label className="min-w-0 flex-1 text-xs font-semibold text-ink-faint">
+                Days worked per week
+                <input
+                  type="number"
+                  min="0.5"
+                  max="7"
+                  step="0.5"
+                  value={form.workingDays}
+                  onChange={(e) => setForm((f) => ({ ...f, workingDays: e.target.value }))}
+                  className="mt-1.5 w-full rounded-[10px] border-[1.5px] border-unset-border bg-surface-card px-3 py-2 text-sm text-ink outline-none"
+                />
+              </label>
+              <label className="min-w-0 flex-1 text-xs font-semibold text-ink-faint">
+                Days per year
+                <input
+                  type="number"
+                  min="0"
+                  max="366"
+                  step="0.5"
+                  value={form.leaveDays}
+                  onChange={(e) => setForm((f) => ({ ...f, leaveDays: e.target.value }))}
+                  placeholder={proRataPlaceholder(form.workingDays, leaveSettings?.full_time_leave_days)}
+                  className="mt-1.5 w-full rounded-[10px] border-[1.5px] border-unset-border bg-surface-card px-3 py-2 text-sm text-ink outline-none"
+                />
+              </label>
+            </div>
+            <div className="mt-2 text-[11px] leading-[1.45] text-ink-faint">
+              Days per week is what a holiday costs them — a week off costs {form.workingDays || "5"} days,
+              not 7. Leave the yearly figure blank to use the pro-rata amount.
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2.5">
           <button
             onClick={closeModal}

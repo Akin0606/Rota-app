@@ -9,6 +9,7 @@ from models.schemas import (
     LeaveRequestCreateRequest,
     LeaveRequestOut,
     LeaveRequestPinRequest,
+    LeaveAllowanceOut,
     LeaveRequestsOut,
 )
 from routers.availability import _get_staff_by_pin, _get_venue_or_404
@@ -18,7 +19,12 @@ from services.auth_service import get_current_manager, get_manager_venue
 router = APIRouter(prefix="/api/leave", tags=["leave"])
 
 
-def _to_out(row: dict, staff_name: str, conflicting_assignments: int = 0) -> LeaveRequestOut:
+def _to_out(
+    row: dict,
+    staff_name: str,
+    conflicting_assignments: int = 0,
+    working_days_per_week: float = leave.DEFAULT_WORKING_DAYS_PER_WEEK,
+) -> LeaveRequestOut:
     return LeaveRequestOut(
         id=row["id"],
         staff_id=row["staff_id"],
@@ -31,6 +37,9 @@ def _to_out(row: dict, staff_name: str, conflicting_assignments: int = 0) -> Lea
         created_at=str(row["created_at"]),
         decided_at=str(row["decided_at"]) if row.get("decided_at") else None,
         conflicting_assignments=conflicting_assignments,
+        days=leave.leave_days_for_range(
+            str(row["start_date"]), str(row["end_date"]), working_days_per_week
+        ),
     )
 
 
@@ -102,7 +111,11 @@ def request_leave(venue_token: str, payload: LeaveRequestCreateRequest):
         }
     ).execute()
 
-    return _to_out(row, staff["name"])
+    return _to_out(
+        row,
+        staff["name"],
+        working_days_per_week=staff.get("working_days_per_week") or leave.DEFAULT_WORKING_DAYS_PER_WEEK,
+    )
 
 
 @router.post("/{venue_token}/mine", response_model=LeaveRequestsOut)
@@ -119,7 +132,11 @@ def my_leave_requests(venue_token: str, payload: LeaveRequestPinRequest):
         .execute()
         .data
     )
-    return LeaveRequestsOut(requests=[_to_out(r, staff["name"]) for r in rows])
+    w = staff.get("working_days_per_week") or leave.DEFAULT_WORKING_DAYS_PER_WEEK
+    return LeaveRequestsOut(
+        requests=[_to_out(r, staff["name"], working_days_per_week=w) for r in rows],
+        allowance=LeaveAllowanceOut(**leave.allowance_for_staff(supabase, venue, staff)),
+    )
 
 
 @router.post("/{venue_token}/cancel", response_model=LeaveRequestOut)
@@ -162,7 +179,11 @@ def cancel_leave(venue_token: str, payload: LeaveRequestCancelRequest):
         }
     ).execute()
 
-    return _to_out(updated, staff["name"])
+    return _to_out(
+        updated,
+        staff["name"],
+        working_days_per_week=staff.get("working_days_per_week") or leave.DEFAULT_WORKING_DAYS_PER_WEEK,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -185,11 +206,20 @@ def list_leave_requests(
 
     staff_ids = list({r["staff_id"] for r in rows})
     names_by_id: dict[str, str] = {}
+    days_by_id: dict[str, float] = {}
     if staff_ids:
         staff_rows = (
-            supabase.table("staff_members").select("id, name").in_("id", staff_ids).execute().data
+            supabase.table("staff_members")
+            .select("id, name, working_days_per_week")
+            .in_("id", staff_ids)
+            .execute()
+            .data
         )
         names_by_id = {s["id"]: s["name"] for s in staff_rows}
+        days_by_id = {
+            s["id"]: float(s.get("working_days_per_week") or leave.DEFAULT_WORKING_DAYS_PER_WEEK)
+            for s in staff_rows
+        }
 
     out = []
     for r in rows:
@@ -198,7 +228,16 @@ def list_leave_requests(
             conflicts = leave.conflicting_assignment_count(
                 supabase, venue["id"], r["staff_id"], str(r["start_date"]), str(r["end_date"])
             )
-        out.append(_to_out(r, names_by_id.get(r["staff_id"], "Staff member"), conflicts))
+        out.append(
+            _to_out(
+                r,
+                names_by_id.get(r["staff_id"], "Staff member"),
+                conflicts,
+                working_days_per_week=days_by_id.get(
+                    r["staff_id"], leave.DEFAULT_WORKING_DAYS_PER_WEEK
+                ),
+            )
+        )
 
     return LeaveRequestsOut(requests=out)
 
@@ -238,9 +277,18 @@ def _decide(request_id: str, manager: dict, payload: LeaveDecisionRequest, new_s
     )
 
     staff_res = (
-        supabase.table("staff_members").select("name").eq("id", row["staff_id"]).limit(1).execute()
+        supabase.table("staff_members")
+        .select("name, working_days_per_week")
+        .eq("id", row["staff_id"])
+        .limit(1)
+        .execute()
     )
     staff_name = staff_res.data[0]["name"] if staff_res.data else "Staff member"
+    staff_days = (
+        float(staff_res.data[0].get("working_days_per_week") or leave.DEFAULT_WORKING_DAYS_PER_WEEK)
+        if staff_res.data
+        else leave.DEFAULT_WORKING_DAYS_PER_WEEK
+    )
 
     verb = "approved" if new_status == "approved" else "rejected"
     supabase.table("activity_log").insert(
@@ -258,7 +306,7 @@ def _decide(request_id: str, manager: dict, payload: LeaveDecisionRequest, new_s
             supabase, venue["id"], row["staff_id"], str(row["start_date"]), str(row["end_date"])
         )
 
-    return _to_out(updated, staff_name, conflicts)
+    return _to_out(updated, staff_name, conflicts, working_days_per_week=staff_days)
 
 
 @router.post("/{request_id}/approve", response_model=LeaveRequestOut)

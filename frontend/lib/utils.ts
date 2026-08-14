@@ -71,15 +71,41 @@ export function formatHoursTotal(hours: number, unmeasured: number, unit = "h"):
   return `${value}${unmeasured > 0 ? "+" : ""}${unit}`;
 }
 
-// Inclusive calendar days across a leave range: Mon–Fri is 5, a single day is
-// 1. Calendar days are the only thing `leave_requests` can support — it stores
-// two plain dates and nothing anywhere records a staff member's contracted
-// working pattern — so a request spanning a weekend counts the weekend too.
-// The allowance total is editable for exactly this reason.
-export function leaveDayCount(startIso: string, endIso: string): number {
+// Mirror of services/leave.leave_days_for_range on the backend, which is the
+// authority — this exists only so the request modal can show what a range will
+// cost *before* it is submitted. Any change must be made in both places; the
+// numbers appearing on screen after submission always come from the server.
+//
+// Pub staff work days spread across all seven, so a seven-day absence costs a
+// five-day-a-week worker five days, not seven. Rounding is up, to the nearest
+// half day, so a range can never quietly cost less than it really does.
+export function leaveDaysForRange(
+  startIso: string,
+  endIso: string,
+  workingDaysPerWeek: number,
+): number {
   const msPerDay = 24 * 60 * 60 * 1000;
-  const days = (parseISODate(endIso).getTime() - parseISODate(startIso).getTime()) / msPerDay;
-  return Math.max(1, Math.round(days) + 1);
+  const calendarDays =
+    Math.round((parseISODate(endIso).getTime() - parseISODate(startIso).getTime()) / msPerDay) + 1;
+  if (calendarDays < 1) return 0;
+  const w = workingDaysPerWeek > 0 ? workingDaysPerWeek : 5;
+  return Math.ceil(Number(((calendarDays * w) / 7).toFixed(6)) * 2) / 2;
+}
+
+// Half days are real, whole days shouldn't render as "5.0".
+export function formatDays(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+// "Leave year: Jan–Dec 2026", or "Apr 2026 – Mar 2027" when it straddles.
+export function formatLeaveYear(startIso: string, endIso: string): string {
+  const start = parseISODate(startIso);
+  const end = parseISODate(endIso);
+  const month = (d: Date) => d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
+  if (start.getUTCFullYear() === end.getUTCFullYear()) {
+    return `Leave year ${month(start)}–${month(end)} ${start.getUTCFullYear()}`;
+  }
+  return `Leave year ${month(start)} ${start.getUTCFullYear()} – ${month(end)} ${end.getUTCFullYear()}`;
 }
 
 // "Thu 2 Oct" for one day, "Fri 5 – Sat 6 Sep" within a month, "Sat 28 Feb –

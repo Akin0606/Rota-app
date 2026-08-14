@@ -13,24 +13,46 @@ import {
   SchedulingRules,
   Shift,
   Venue,
+  VenueLeaveSettings,
   createShift,
   deleteShift,
   getRules,
   getVenue,
+  getVenueLeaveSettings,
   listPeriods,
   listShifts,
   unpublishRota,
   updateRules,
   updateShift,
   updateVenue,
+  updateVenueLeaveSettings,
 } from "@/lib/api";
 import { END_TIMES, SHIFT_COLORS, START_TIMES } from "@/lib/constants";
 import { DAY_NAMES, formatWeekRange } from "@/lib/utils";
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 export default function SettingsPage() {
   const [venue, setVenue] = useState<Venue | null>(null);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [rules, setRules] = useState<SchedulingRules | null>(null);
+  const [leaveSettings, setLeaveSettings] = useState<VenueLeaveSettings | null>(null);
+
+  useEffect(() => {
+    getVenueLeaveSettings().then(setLeaveSettings).catch(() => {});
+  }, []);
+
+  async function saveLeaveSettings(patch: Partial<VenueLeaveSettings>) {
+    try {
+      setLeaveSettings(await updateVenueLeaveSettings(patch));
+      showToast("Holiday settings saved");
+    } catch {
+      showToast("Could not save holiday settings");
+    }
+  }
   const [periods, setPeriods] = useState<Period[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -328,6 +350,47 @@ export default function SettingsPage() {
                 ))}
               </select>
             </RuleRow>
+          </div>
+        </div>
+
+        {/* Holiday */}
+        <div className="rounded-panel border border-hairline bg-surface-card p-6">
+          <div className="mb-1 text-base font-bold text-ink">Holiday</div>
+          <div className="mb-4 text-[13px] text-ink-faint">
+            Sets what every staff member sees on their Time off screen. Each person&apos;s own
+            entitlement is worked out pro-rata from the days a week they work — set that per person in{" "}
+            <a href="/team" className="font-semibold text-accent">
+              Team
+            </a>
+            .
+          </div>
+          <div className="flex flex-col gap-3.5">
+            <RuleRow label="Leave year starts">
+              <select
+                value={leaveSettings?.leave_year_start_month ?? 1}
+                onChange={(e) => saveLeaveSettings({ leave_year_start_month: Number(e.target.value) })}
+                className="rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-semibold text-ink outline-none"
+              >
+                {MONTH_NAMES.map((m, i) => (
+                  <option key={m} value={i + 1}>{m}</option>
+                ))}
+              </select>
+            </RuleRow>
+            <RuleRow label="Full-time allowance (days)">
+              <input
+                type="number"
+                min="0"
+                max="366"
+                step="0.5"
+                defaultValue={leaveSettings?.full_time_leave_days ?? 28}
+                onBlur={(e) => saveLeaveSettings({ full_time_leave_days: Number(e.target.value) })}
+                className="w-24 rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-semibold text-ink outline-none"
+              />
+            </RuleRow>
+          </div>
+          <div className="mt-3 text-[11px] leading-[1.45] text-ink-faint">
+            28 days is the UK statutory minimum for someone working five days a week. Anyone working
+            fewer gets that figure pro-rata.
           </div>
         </div>
 

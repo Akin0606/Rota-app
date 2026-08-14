@@ -3,7 +3,13 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 
 from database import get_supabase
-from models.schemas import VenueCreateRequest, VenueOut, VenueUpdateRequest
+from models.schemas import (
+    VenueCreateRequest,
+    VenueLeaveSettingsOut,
+    VenueLeaveSettingsRequest,
+    VenueOut,
+    VenueUpdateRequest,
+)
 from services import cron_scheduler, schedule_windows
 from services.auth_service import get_current_manager, get_manager_venue
 from services.pin_service import generate_venue_token
@@ -90,4 +96,29 @@ def update_venue(payload: VenueUpdateRequest, manager: dict = Depends(get_curren
         .eq("id", venue["id"])
         .execute()
         .data[0]
+    )
+
+
+@router.get("/leave-settings", response_model=VenueLeaveSettingsOut)
+def get_leave_settings(manager: dict = Depends(get_current_manager)):
+    venue = get_manager_venue(manager["id"])
+    return VenueLeaveSettingsOut(
+        leave_year_start_month=int(venue.get("leave_year_start_month") or 1),
+        full_time_leave_days=float(venue.get("full_time_leave_days") or 28),
+    )
+
+
+@router.put("/leave-settings", response_model=VenueLeaveSettingsOut)
+def update_leave_settings(
+    payload: VenueLeaveSettingsRequest,
+    manager: dict = Depends(get_current_manager),
+):
+    venue = get_manager_venue(manager["id"])
+    updates = payload.model_dump(exclude_unset=True)
+    if updates:
+        get_supabase().table("venues").update(updates).eq("id", venue["id"]).execute()
+        venue = {**venue, **updates}
+    return VenueLeaveSettingsOut(
+        leave_year_start_month=int(venue.get("leave_year_start_month") or 1),
+        full_time_leave_days=float(venue.get("full_time_leave_days") or 28),
     )

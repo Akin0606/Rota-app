@@ -493,6 +493,9 @@ export type StaffManager = {
   is_active: boolean;
   is_under_18: boolean;
   submitted: boolean | null;
+  working_days_per_week: number;
+  // null means "prorate the venue's full-time figure by working_days_per_week".
+  annual_leave_days: number | null;
 };
 
 export type Activity = {
@@ -695,6 +698,8 @@ export function updateStaff(
     role: string;
     is_active: boolean;
     is_under_18: boolean;
+    working_days_per_week: number;
+    annual_leave_days: number | null;
   }>,
 ): Promise<StaffManager> {
   return authedRequest(`/api/staff/${id}`, {
@@ -969,6 +974,19 @@ export type LeaveRequest = {
   decided_at: string | null;
   // Manager view only: existing rota assignments that fall inside the range.
   conflicting_assignments: number;
+  // What this range costs the requester in working days, computed server-side
+  // so both sides of the app quote the same number.
+  days: number;
+};
+
+export type LeaveAllowance = {
+  entitlement_days: number;
+  booked_days: number;
+  pending_days: number;
+  remaining_days: number;
+  working_days_per_week: number;
+  leave_year_start: string;
+  leave_year_end: string;
 };
 
 export function requestLeave(
@@ -984,20 +1002,40 @@ export function requestLeave(
   });
 }
 
+export type MyLeaveResponse = { requests: LeaveRequest[]; allowance: LeaveAllowance | null };
+
 export function myLeaveRequests(
   venueToken: string,
   pin: string,
-  opts?: CacheOpts<{ requests: LeaveRequest[] }>,
-): Promise<{ requests: LeaveRequest[] }> {
+  opts?: CacheOpts<MyLeaveResponse>,
+): Promise<MyLeaveResponse> {
   return cached(
     `leave-mine|${venueToken}|${pin}`,
     () =>
-      request<{ requests: LeaveRequest[] }>(`/api/leave/${venueToken}/mine`, {
+      request<MyLeaveResponse>(`/api/leave/${venueToken}/mine`, {
         method: "POST",
         body: JSON.stringify({ pin }),
       }),
     opts?.onRevalidate,
   );
+}
+
+export type VenueLeaveSettings = {
+  leave_year_start_month: number;
+  full_time_leave_days: number;
+};
+
+export function getVenueLeaveSettings(): Promise<VenueLeaveSettings> {
+  return authedRequest(`/api/venue/leave-settings`);
+}
+
+export function updateVenueLeaveSettings(
+  payload: Partial<VenueLeaveSettings>,
+): Promise<VenueLeaveSettings> {
+  return authedRequest(`/api/venue/leave-settings`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function cancelLeaveRequest(venueToken: string, pin: string, requestId: string): Promise<LeaveRequest> {

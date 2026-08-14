@@ -170,6 +170,16 @@ class VenueUpdateRequest(BaseModel):
     name: str = Field(min_length=1)
 
 
+class VenueLeaveSettingsRequest(BaseModel):
+    leave_year_start_month: Optional[int] = Field(default=None, ge=1, le=12)
+    full_time_leave_days: Optional[float] = Field(default=None, ge=0, le=366)
+
+
+class VenueLeaveSettingsOut(BaseModel):
+    leave_year_start_month: int = 1
+    full_time_leave_days: float = 28
+
+
 class ShiftCreateRequest(BaseModel):
     name: str = Field(min_length=1)
     start_time: str
@@ -198,6 +208,9 @@ class StaffManagerOut(BaseModel):
     is_active: bool
     is_under_18: bool = False
     submitted: Optional[bool] = None
+    working_days_per_week: float = 5
+    # None means "prorate the venue's full-time figure by working_days_per_week".
+    annual_leave_days: Optional[float] = None
 
 
 class ActivityOut(BaseModel):
@@ -216,6 +229,10 @@ class StaffUpdateRequest(BaseModel):
     role: Optional[str] = Field(default=None, min_length=1)
     is_active: Optional[bool] = None
     is_under_18: Optional[bool] = None
+    working_days_per_week: Optional[float] = Field(default=None, gt=0, le=7)
+    # Explicitly nullable: clearing it returns this person to the pro-rata
+    # calculation rather than pinning whatever number was there before.
+    annual_leave_days: Optional[float] = Field(default=None, ge=0, le=366)
 
 
 class RemindRequest(BaseModel):
@@ -666,7 +683,23 @@ class LeaveRequestOut(BaseModel):
     # Manager view only: how many of this staff member's existing rota
     # assignments fall inside the requested range — 0 on the staff-facing view.
     conflicting_assignments: int = 0
+    # What this range costs the requester, in working days. Computed server-side
+    # so the staff screen and the manager's queue can never disagree.
+    days: float = 0
+
+
+class LeaveAllowanceOut(BaseModel):
+    entitlement_days: float
+    booked_days: float
+    pending_days: float
+    remaining_days: float
+    working_days_per_week: float
+    leave_year_start: str
+    leave_year_end: str
 
 
 class LeaveRequestsOut(BaseModel):
     requests: list[LeaveRequestOut] = []
+    # Staff-facing only: null on the manager's cross-venue queue, which spans
+    # several people and so has no single allowance to report.
+    allowance: Optional[LeaveAllowanceOut] = None
