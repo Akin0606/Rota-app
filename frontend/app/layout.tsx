@@ -21,13 +21,17 @@ export default function RootLayout({
         {/* Apply the saved theme before first paint to avoid a flash. Dark is
             the default; only "light" needs the attribute.
 
-            Staff screens (/v/{venue_token}/…) have no accounts, so their
-            choice is keyed to the venue link rather than shared with the
-            manager app — same reason the PIN is. */}
+            Three keys, chosen by pathname:
+            • Staff screens (/v/{venue_token}/…) have no accounts, so their
+              choice is keyed to the venue link — same reason the PIN is.
+            • The manager surface (login, onboarding and the manager app) is
+              keyed to `crewplan-theme:manager`, scoped to the manager account.
+            • Everything else (admin console, marketing) keeps the shared
+              `crewplan_theme` key. */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{var m=location.pathname.match(/^\\/v\\/([^/]+)/);var k=m?'crewplan-theme:'+m[1]:'crewplan_theme';if(localStorage.getItem(k)==='light')document.documentElement.setAttribute('data-theme','light')}catch(e){}",
+              "try{var p=location.pathname;var m=p.match(/^\\/v\\/([^/]+)/);var mgr=/^\\/(login|onboarding|dashboard|rota|scheduler|team|leave|settings)(\\/|$)/.test(p);var k=m?'crewplan-theme:'+m[1]:(mgr?'crewplan-theme:manager':'crewplan_theme');if(localStorage.getItem(k)==='light')document.documentElement.setAttribute('data-theme','light')}catch(e){}",
           }}
         />
       </head>

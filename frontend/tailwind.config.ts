@@ -64,6 +64,10 @@ const config: Config = {
           "green-soft": "var(--cp-green-soft)",
           amber: "var(--cp-amber)",
           "amber-soft": "var(--cp-amber-soft)",
+          // red only exists inside the manager palette (.cp-manager) — the
+          // staff surface never defines it.
+          red: "var(--cp-red)",
+          "red-soft": "var(--cp-red-soft)",
           icon: "var(--cp-icon-bg)",
           track: "var(--cp-track)",
         },

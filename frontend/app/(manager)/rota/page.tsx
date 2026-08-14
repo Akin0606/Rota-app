@@ -5,11 +5,13 @@ import { useEffect, useState } from "react";
 import AvailabilityPanel from "@/components/availability-panel";
 import ClaimsPanel from "@/components/claims-panel";
 import LoadingScreen from "@/components/loading-screen";
+import ManagerIcon from "@/components/manager/icon";
+import ManagerRotaMatrix from "@/components/manager/rota-matrix";
+import ManagerRotaReview from "@/components/manager/rota-review";
 import PublishPanel from "@/components/publish-panel";
-import RotaDayView from "@/components/rota-day-view";
-import RotaGrid, { RotaOrientation } from "@/components/rota-grid";
+import { RotaOrientation } from "@/components/rota-grid";
 import RotaImageView from "@/components/rota-image-view";
-import StatusBanner from "@/components/status-banner";
+import StatusBanner, { STATUS_CONFIG } from "@/components/status-banner";
 import SwapsPanel from "@/components/swaps-panel";
 import Toast from "@/components/toast";
 import {
@@ -30,6 +32,7 @@ import {
   createPeriod,
   editAssignment,
   copyPreviousRota,
+  fetchRotaExport,
   generateRota,
   getClaims,
   getPeriodSubmissions,
@@ -81,6 +84,11 @@ export default function RotaPage() {
   const [swapRiskReason, setSwapRiskReason] = useState<string | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<string>(WEEK_OPTIONS[0].weekStart);
   const [orientation, setOrientation] = useState<RotaOrientation>("staff-rows");
+  const [view, setView] = useState<"review" | "matrix">("review");
+  const [reviewDay, setReviewDay] = useState(0);
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exportingFmt, setExportingFmt] = useState<"pdf" | "xlsx" | null>(null);
   const [loading, setLoading] = useState(true);
   const [rotaLoading, setRotaLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -456,6 +464,25 @@ export default function RotaPage() {
     }
   }
 
+  async function handleExport(fmt: "pdf" | "xlsx") {
+    if (!period) return;
+    setExportingFmt(fmt);
+    try {
+      const { blob, filename } = await fetchRotaExport(period.id, fmt, orientation);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setExportMenuOpen(false);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not export the rota");
+    } finally {
+      setExportingFmt(null);
+    }
+  }
+
   if (loading) {
     return <LoadingScreen base="Loading the rota…" />;
   }
@@ -503,6 +530,22 @@ export default function RotaPage() {
       openPostsByKey.set(`${a.shift_id}:${a.day_index}`, a);
     }
   }
+
+  // Total unfilled slots across the week = Σ max(0, min_staff − assigned) per
+  // shift per day. Drives the fill-state banner and the publish gate. Only
+  // staffed assignments count (open posts have no staff_id).
+  const weekAssignments = summary?.assignments ?? [];
+  let gapsTotal = 0;
+  for (let d = 0; d < 7; d++) {
+    for (const sh of shifts) {
+      const assigned = weekAssignments.filter(
+        (a) => a.day_index === d && a.shift_id === sh.id && a.staff_id,
+      ).length;
+      gapsTotal += Math.max(0, sh.min_staff - assigned);
+    }
+  }
+  const isLive = period?.status === "published" || period?.status === "confirmed";
+  const statusLabel = period ? (STATUS_CONFIG[period.status]?.label ?? period.status) : "Not started";
 
   function renderOpenSlotControl(shiftId: string, dayIndex: number) {
     const key = `${shiftId}:${dayIndex}`;
@@ -560,15 +603,15 @@ export default function RotaPage() {
   }
 
   return (
-    <div className="animate-fadeIn px-5 py-6 pb-24 md:px-10 md:py-8 md:pb-8">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="text-[26px] font-bold text-ink md:text-[28px]">Rota Builder</div>
-        <div className="flex flex-wrap items-center gap-2.5">
+    <div className="animate-fadeIn px-4 pb-28 pt-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-[23px] font-medium tracking-[-0.5px] text-ink">Rota</div>
+        <div className="flex items-center gap-2">
           {(summary?.assignments.length ?? 0) === 0 && (
             <button
               onClick={handleCopyPrevious}
               disabled={copying}
-              className="rounded-[10px] border border-hairline bg-surface-card px-4 py-2.5 text-[13px] font-medium text-ink-muted disabled:opacity-60"
+              className="cp-hairline rounded-[9px] bg-surface-card px-3 py-2 text-[12px] font-medium text-ink-muted disabled:opacity-60"
             >
               {copying ? "Copying…" : "Copy last week"}
             </button>
@@ -576,66 +619,67 @@ export default function RotaPage() {
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="rounded-[10px] border border-hairline bg-surface-card px-4 py-2.5 text-[13px] font-medium text-ink-muted disabled:opacity-60"
+            className="cp-hairline rounded-[9px] bg-surface-card px-3 py-2 text-[12px] font-medium text-ink-muted disabled:opacity-60"
           >
             {generating ? "Generating…" : "Auto-fill"}
           </button>
-          {period?.status === "published" || period?.status === "confirmed" ? (
-            <button
-              onClick={() => setPanelOpen(true)}
-              className="rounded-[10px] bg-accent px-4 py-2.5 text-[13px] font-semibold text-white"
-            >
-              Share / Export
-            </button>
-          ) : (
-            <button
-              onClick={handlePublish}
-              disabled={publishing || !period}
-              className="rounded-[10px] bg-accent px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-50"
-            >
-              {publishing ? "Publishing…" : "Publish Rota"}
-            </button>
-          )}
         </div>
       </div>
 
       {/* Week switcher — plan up to 2 weeks ahead */}
-      <div className="mb-5 inline-flex rounded-[12px] border border-hairline bg-surface-card p-1">
+      <div className="scrollbar-none mb-4 flex gap-1">
         {WEEK_OPTIONS.map((opt) => {
           const active = opt.weekStart === selectedWeek;
           return (
             <button
               key={opt.weekStart}
               onClick={() => setSelectedWeek(opt.weekStart)}
-              className={`rounded-[9px] px-3.5 py-2 text-[13px] font-semibold transition ${
-                active ? "bg-accent text-white" : "text-ink-muted hover:text-ink"
+              className={`whitespace-nowrap rounded-[9px] px-3 py-1.5 text-[12px] font-medium transition ${
+                active ? "bg-accent text-white" : "cp-hairline bg-surface-card text-ink-muted"
               }`}
             >
               {opt.label}
-              <span className={`ml-1.5 hidden font-normal sm:inline ${active ? "text-white/70" : "text-ink-faint"}`}>
-                {formatWeekRange(opt.weekStart)}
-              </span>
             </button>
           );
         })}
       </div>
 
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div className="text-sm font-semibold text-ink-label">{formatWeekRange(selectedWeek)}</div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="text-[13px] font-medium text-ink-label">
+          {venueName ? `${venueName} · ` : ""}
+          {formatWeekRange(selectedWeek)}
+        </div>
         {period ? (
           <StatusBanner status={period.status} />
         ) : (
-          <span className="inline-flex items-center gap-2 rounded-full bg-unset-bg px-3.5 py-1.5 text-xs font-semibold text-ink-muted">
+          <span className="inline-flex items-center gap-2 rounded-full bg-surface-subtle px-3 py-1 text-[11px] font-medium text-ink-muted">
             Not started
           </span>
         )}
         {summary && summary.conflicts > 0 && (
-          <div className="inline-flex items-center gap-2 rounded-full bg-unavail-bg px-3.5 py-1.5 text-xs font-semibold text-unavail-text">
-            <span className="h-1.5 w-1.5 rounded-full bg-unavail-border" />
-            {summary.conflicts} coverage conflict{summary.conflicts === 1 ? "" : "s"}
+          <div className="inline-flex items-center gap-2 rounded-full bg-cp-red-soft px-3 py-1 text-[11px] font-medium text-cp-red">
+            <span className="h-1.5 w-1.5 rounded-full bg-cp-red" />
+            {summary.conflicts} conflict{summary.conflicts === 1 ? "" : "s"}
           </div>
         )}
       </div>
+
+      {/* Fill-state banner — the reference's amber "N shifts unfilled" signal */}
+      {period && gapsTotal > 0 && (
+        <div className="mb-4 flex items-center gap-[11px] rounded-xl border-[0.5px] border-[rgba(255,193,7,0.3)] bg-cp-amber-soft px-[15px] py-[13px]">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(255,193,7,0.2)] text-cp-amber">
+            <ManagerIcon name="alert-triangle" size={16} />
+          </div>
+          <div className="flex-1">
+            <div className="text-[13px] font-medium text-ink">
+              {gapsTotal} shift{gapsTotal === 1 ? "" : "s"} unfilled
+            </div>
+            <div className="mt-px text-[11px] text-ink-muted">
+              Not enough available staff to cover every slot — review the gaps below.
+            </div>
+          </div>
+        </div>
+      )}
 
       {publishResult && (
         <div
@@ -776,51 +820,122 @@ export default function RotaPage() {
         />
       )}
 
-      {/* Axis toggle — desktop grid only (mobile uses the day view) */}
-      <div className="mb-3 hidden items-center gap-2 md:flex">
-        <span className="text-[12px] font-medium text-ink-faint">Layout</span>
-        <div className="inline-flex rounded-[10px] border border-hairline bg-surface-card p-0.5">
+      {/* View toggle: Review (day-focused) ↔ Matrix (whole week) */}
+      <div className="mb-3 flex items-center gap-2">
+        <div className="cp-hairline inline-flex rounded-[10px] bg-surface-card p-0.5">
           {(
             [
-              { value: "staff-rows", label: "Staff × Days" },
-              { value: "day-rows", label: "Days × Staff" },
+              { value: "review", label: "Review" },
+              { value: "matrix", label: "Matrix" },
             ] as const
           ).map((opt) => (
             <button
               key={opt.value}
-              onClick={() => setOrientation(opt.value)}
-              className={`rounded-[8px] px-3 py-1.5 text-[12px] font-semibold transition ${
-                orientation === opt.value ? "bg-accent text-white" : "text-ink-muted hover:text-ink"
+              onClick={() => setView(opt.value)}
+              className={`rounded-[8px] px-3.5 py-1.5 text-[12px] font-medium transition ${
+                view === opt.value ? "bg-accent text-white" : "text-ink-muted hover:!text-ink"
               }`}
             >
               {opt.label}
             </button>
           ))}
         </div>
+
+        {view === "matrix" && (
+          <>
+            <button
+              onClick={() => setOrientation((o) => (o === "staff-rows" ? "day-rows" : "staff-rows"))}
+              title="Swap rows and columns"
+              className="cp-hairline rounded-[9px] bg-surface-card px-2.5 py-1.5 text-[12px] font-medium text-ink-muted"
+            >
+              {orientation === "staff-rows" ? "Staff × Days" : "Days × Staff"}
+            </button>
+            <div className="relative ml-auto">
+              <button
+                onClick={() => setExportMenuOpen((o) => !o)}
+                disabled={!period}
+                className="flex items-center gap-1.5 rounded-[9px] bg-accent px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-50"
+              >
+                <ManagerIcon name="download" size={14} /> Export
+              </button>
+              {exportMenuOpen && (
+                <>
+                  <button
+                    aria-label="Close export menu"
+                    onClick={() => setExportMenuOpen(false)}
+                    className="fixed inset-0 z-10 cursor-default"
+                  />
+                  <div className="absolute right-0 top-[38px] z-20 min-w-[190px] cp-hairline rounded-xl bg-surface-card p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
+                    {(
+                      [
+                        { key: "pdf", icon: "file-text", label: "PDF", sub: "Print-ready, branded" },
+                        { key: "xlsx", icon: "table", label: "Excel", sub: "Editable spreadsheet" },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() => handleExport(opt.key)}
+                        disabled={exportingFmt !== null}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-ink hover:bg-surface-subtle disabled:opacity-60"
+                      >
+                        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-cp-icon text-accent">
+                          <ManagerIcon name={opt.icon} size={15} />
+                        </span>
+                        <span>
+                          {exportingFmt === opt.key ? "Preparing…" : opt.label}
+                          <span className="block text-[11px] font-normal text-ink-faint">{opt.sub}</span>
+                        </span>
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => {
+                        setImageViewOpen(true);
+                        setExportMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-ink hover:bg-surface-subtle"
+                    >
+                      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-cp-icon text-accent">
+                        <ManagerIcon name="photo" size={15} />
+                      </span>
+                      <span>
+                        Image
+                        <span className="block text-[11px] font-normal text-ink-faint">PNG for WhatsApp</span>
+                      </span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <div className={rotaLoading ? "opacity-50 transition-opacity" : "transition-opacity"}>
-        <div className="hidden md:block">
-          <RotaGrid
+        {view === "review" ? (
+          <ManagerRotaReview
             weekStart={selectedWeek}
             shifts={shifts}
             staff={staff}
             assignments={summary?.assignments ?? []}
-            orientation={orientation}
             leave={summary?.leave ?? {}}
+            selectedDay={reviewDay}
+            onSelectDay={setReviewDay}
             onAdd={handleAdd}
             onRemove={handleRemove}
+            onGap={openPostPicker}
           />
-        </div>
-        <div className="md:hidden">
-          <RotaDayView
+        ) : (
+          <ManagerRotaMatrix
+            weekStart={selectedWeek}
             shifts={shifts}
             staff={staff}
             assignments={summary?.assignments ?? []}
+            leave={summary?.leave ?? {}}
+            orientation={orientation}
             onAdd={handleAdd}
             onRemove={handleRemove}
           />
-        </div>
+        )}
       </div>
 
       <PublishPanel
@@ -964,6 +1079,76 @@ export default function RotaPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Publish confirm: never silently publish an incomplete rota */}
+      {publishConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
+          <div className="w-full max-w-[440px] cp-hairline rounded-card bg-surface-card p-6">
+            <div className="mb-2 text-lg font-medium text-ink">
+              Publish with {gapsTotal} gap{gapsTotal === 1 ? "" : "s"}?
+            </div>
+            <div className="mb-4 text-sm text-ink-muted">
+              {gapsTotal} shift{gapsTotal === 1 ? " is" : "s are"} still unfilled. You can publish now and
+              fill {gapsTotal === 1 ? "it" : "them"} later, but staff will see an incomplete rota.
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setPublishConfirmOpen(false)}
+                className="rounded-xl px-4 py-2.5 text-sm font-medium text-ink-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setPublishConfirmOpen(false);
+                  handlePublish();
+                }}
+                disabled={publishing}
+                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {publishing ? "Publishing…" : "Publish anyway"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sticky publish bar */}
+      {period && (
+        <div className="sticky bottom-0 z-20 -mx-4 mt-6 flex items-center justify-between gap-3 border-t border-hairline bg-surface-card px-4 py-3.5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-[12px] font-medium text-ink">
+              {gapsTotal === 0 ? (
+                <>
+                  <ManagerIcon name="circle-check" size={14} className="text-cp-green" /> All shifts covered
+                </>
+              ) : (
+                <>
+                  <ManagerIcon name="alert-triangle" size={14} className="text-cp-amber" /> {gapsTotal} gap
+                  {gapsTotal === 1 ? "" : "s"} to fill
+                </>
+              )}
+            </div>
+            <div className="mt-px truncate text-[11px] text-ink-muted">{statusLabel}</div>
+          </div>
+          {isLive ? (
+            <button
+              onClick={() => setPanelOpen(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-[11px] bg-accent px-4 py-2.5 text-[13px] font-medium text-white"
+            >
+              <ManagerIcon name="send" size={15} /> Share / Export
+            </button>
+          ) : (
+            <button
+              onClick={() => (gapsTotal > 0 ? setPublishConfirmOpen(true) : handlePublish())}
+              disabled={publishing}
+              className="flex shrink-0 items-center gap-1.5 rounded-[11px] bg-accent px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-50"
+            >
+              <ManagerIcon name="send" size={15} /> {publishing ? "Publishing…" : "Publish"}
+            </button>
+          )}
         </div>
       )}
 

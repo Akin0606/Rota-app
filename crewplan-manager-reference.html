@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crewplan — Manager UI Reference</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.1.0/dist/tabler-icons.min.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #050505; padding: 32px 16px; display: flex; flex-direction: column; align-items: center; gap: 44px; }
+  .part-divider { width: 100%; max-width: 660px; text-align: center; margin: 20px 0 0; }
+  .part-divider h2 { color: #FF4D00; font-size: 13px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  .part-divider p { color: #666; font-size: 12px; margin-top: 6px; line-height: 1.5; }
+  .screen-wrap { width: 100%; max-width: 460px; }
+  .screen-name { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #555; margin-bottom: 10px; padding-left: 4px; }
+
+  /* ===== SHARED TOKENS — identical across every screen ===== */
+  .cp { --bg:#0D0D0D; --card:#141414; --card-hover:#1A1A1A; --border:rgba(255,255,255,0.07); --text:#F0EFE9; --text-dim:#7A7A75; --text-faint:#4A4A47; --accent:#FF4D00; --accent-soft:rgba(255,77,0,0.12); --icon-bg:#1E1E1E; --green:#2ECC71; --green-soft:rgba(46,204,113,0.14); --amber:#E5A800; --amber-soft:rgba(255,193,7,0.14); --red:#E5484D; --red-soft:rgba(229,72,77,0.12); --track:#1E1E1E; background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; border-radius:18px; overflow:hidden; transition:background 0.35s ease,color 0.35s ease; position:relative; }
+  .cp.light { --bg:#FAF9F5; --card:#FFFFFF; --card-hover:#FDFCF8; --border:rgba(0,0,0,0.08); --text:#1A1815; --text-dim:#78766F; --text-faint:#A8A69E; --accent-soft:rgba(255,77,0,0.08); --icon-bg:#F2F0EA; --green-soft:rgba(46,204,113,0.12); --amber-soft:rgba(255,193,7,0.16); --red-soft:rgba(229,72,77,0.1); --track:#ECEAE2; }
+
+  /* Shared components */
+  .cp-toggle { width:46px; height:25px; border-radius:13px; background:var(--icon-bg); border:0.5px solid var(--border); cursor:pointer; position:relative; transition:all 0.35s; flex-shrink:0; }
+  .cp-knob { position:absolute; width:19px; height:19px; border-radius:50%; background:var(--accent); top:2.5px; left:2.5px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:10px; transition:transform 0.35s cubic-bezier(0.4,0,0.2,1); }
+  .cp.light .cp-knob { transform:translateX(21px); }
+  .cp-nav { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 12px; border-bottom:0.5px solid var(--border); transition:all 0.35s; }
+  .cp-wordmark { font-size:17px; font-weight:600; letter-spacing:-0.5px; } .cp-wordmark span { color:var(--accent); }
+  .cp-tabs { display:flex; gap:2px; padding:12px 16px 8px; overflow-x:auto; }
+  .cp-tab { font-size:13px; font-weight:500; padding:8px 14px; border-radius:8px; cursor:pointer; color:var(--text-dim); border:none; background:transparent; white-space:nowrap; transition:all 0.15s; }
+  .cp-tab.active { background:var(--accent); color:#fff; }
+  .cp-slabel { font-size:10px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-faint); margin:22px 2px 12px; transition:color 0.35s; }
+  .cp-title { font-size:23px; font-weight:500; letter-spacing:-0.5px; margin-bottom:4px; }
+  .cp-sub { font-size:13px; color:var(--text-dim); transition:color 0.35s; } .cp-sub strong { color:var(--accent); font-weight:500; }
+  .cp-switch { width:38px; height:22px; border-radius:11px; background:var(--track); border:none; cursor:pointer; position:relative; transition:background 0.2s; flex-shrink:0; }
+  .cp-switch.on { background:var(--accent); }
+  .cp-switch::after { content:''; position:absolute; width:16px; height:16px; border-radius:50%; background:#fff; top:3px; left:3px; transition:transform 0.2s; }
+  .cp-switch.on::after { transform:translateX(16px); }
+  .cp-mini-btn { width:28px; height:28px; border-radius:7px; background:var(--icon-bg); border:0.5px solid var(--border); color:var(--text-dim); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.15s; line-height:1; }
+  .cp-mini-btn:hover { background:var(--accent-soft); color:var(--accent); }
+  .cp-primary { padding:13px 20px; border-radius:11px; background:var(--accent); border:none; color:#fff; font-size:14px; font-weight:500; cursor:pointer; transition:opacity 0.15s; display:flex; align-items:center; justify-content:center; gap:7px; }
+  .cp-primary:hover { opacity:0.9; }
+  .cp-grab { display:flex; justify-content:center; padding:12px 0 4px; } .cp-grab span { width:36px; height:4px; border-radius:2px; background:var(--border); }
+  .cp-foot { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-faint); justify-content:center; margin-top:18px; transition:color 0.35s; }
+</style>
+</head>
+<body>
+
+<div class="part-divider">
+  <h2>Part 1 · Ready to build</h2>
+  <p>Login · Rota review · Rota matrix · Scheduler · Generate · Settings · Add role · Add member · Edit member · Export</p>
+</div>
+
+<!-- ========================= LOGIN ========================= -->
+<div class="screen-wrap"><div class="screen-name">1 · Manager login (OTP)</div>
+<div class="cp" id="s_login" style="min-height:640px; display:flex; flex-direction:column;">
+  <style>
+    #s_login .lg-body { flex:1; display:flex; flex-direction:column; justify-content:center; padding:20px 28px 40px; }
+    #s_login .lg-brand { text-align:center; margin-bottom:40px; }
+    #s_login .lg-logo { width:56px; height:56px; border-radius:16px; background:var(--accent); display:flex; align-items:center; justify-content:center; margin:0 auto 18px; color:#fff; font-size:27px; }
+    #s_login .lg-word { font-size:26px; font-weight:600; letter-spacing:-0.7px; } #s_login .lg-word span { color:var(--accent); }
+    #s_login .lg-tag { font-size:13px; color:var(--text-dim); margin-top:6px; }
+    #s_login .lg-step.hide { display:none; }
+    #s_login .lg-label { font-size:12px; font-weight:500; color:var(--text-dim); margin-bottom:9px; }
+    #s_login .lg-iw { position:relative; display:flex; align-items:center; margin-bottom:16px; }
+    #s_login .lg-ic { position:absolute; left:15px; color:var(--text-faint); font-size:17px; }
+    #s_login .lg-input { width:100%; padding:15px 15px 15px 44px; border-radius:12px; background:var(--card); border:0.5px solid var(--border); color:var(--text); font-size:15px; font-weight:500; outline:none; font-family:inherit; }
+    #s_login .lg-input:focus { border-color:var(--accent); }
+    #s_login .lg-btn { width:100%; padding:15px; border-radius:12px; background:var(--accent); border:none; color:#fff; font-size:15px; font-weight:500; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; }
+    #s_login .lg-hint { font-size:12px; color:var(--text-faint); text-align:center; margin-top:16px; line-height:1.5; }
+    #s_login .lg-staff { font-size:12px; color:var(--text-dim); text-align:center; margin-top:8px; } #s_login .lg-staff button { color:var(--accent); background:none; border:none; cursor:pointer; font-weight:500; font-size:12px; }
+    #s_login .lg-sent { display:flex; align-items:center; gap:11px; padding:13px 15px; background:var(--green-soft); border:0.5px solid rgba(46,204,113,0.25); border-radius:12px; margin-bottom:24px; }
+    #s_login .lg-sent-ic { width:32px; height:32px; border-radius:8px; background:rgba(46,204,113,0.2); display:flex; align-items:center; justify-content:center; color:var(--green); font-size:15px; }
+    #s_login .lg-boxes { display:flex; gap:8px; justify-content:center; margin-bottom:20px; }
+    #s_login .lg-box { width:46px; height:56px; border-radius:12px; background:var(--card); border:0.5px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:500; }
+    #s_login .lg-box.filled { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); }
+    #s_login .lg-box.active { border-color:var(--accent); }
+    #s_login .lg-resend { text-align:center; margin-top:18px; font-size:12px; color:var(--text-dim); } #s_login .lg-resend button { font-size:12px; font-weight:500; color:var(--accent); background:none; border:none; cursor:pointer; }
+    #s_login .lg-backl { display:flex; align-items:center; justify-content:center; gap:6px; font-size:13px; color:var(--text-dim); background:none; border:none; cursor:pointer; margin-top:20px; width:100%; }
+    #s_login .lg-footer { text-align:center; font-size:11px; color:var(--text-faint); padding:0 28px 24px; }
+  </style>
+  <div style="display:flex; justify-content:flex-end; padding:18px 20px 0;"><button class="cp-toggle" onclick="cpT(this)"><span class="cp-knob"><i class="ti ti-moon"></i></span></button></div>
+  <div class="lg-body">
+    <div class="lg-brand"><div class="lg-logo"><i class="ti ti-calendar-bolt"></i></div><div class="lg-word">crewplan<span>.</span></div><div class="lg-tag">Manager sign in</div></div>
+    <div class="lg-step" id="lg1">
+      <div class="lg-label">Work email</div>
+      <div class="lg-iw"><i class="ti ti-mail lg-ic"></i><input class="lg-input" type="email" placeholder="you@venue.com" value="manager@theanchor.com"></div>
+      <button class="lg-btn" onclick="document.getElementById('lg1').classList.add('hide');document.getElementById('lg2').classList.remove('hide');"><i class="ti ti-arrow-right"></i> Send login code</button>
+      <div class="lg-hint">We'll email you a 6-digit code — no password to remember.</div>
+      <div class="lg-staff">Staff member? <button>Use your venue link</button></div>
+    </div>
+    <div class="lg-step hide" id="lg2">
+      <div class="lg-sent"><div class="lg-sent-ic"><i class="ti ti-mail-check"></i></div><div style="font-size:12px; line-height:1.4;"><strong>Code sent</strong><br><span style="color:var(--text-dim);">Check manager@theanchor.com</span></div></div>
+      <div class="lg-label" style="text-align:center;">Enter your 6-digit code</div>
+      <div class="lg-boxes"><div class="lg-box filled">4</div><div class="lg-box filled">1</div><div class="lg-box filled">9</div><div class="lg-box active">|</div><div class="lg-box"></div><div class="lg-box"></div></div>
+      <button class="lg-btn"><i class="ti ti-lock-open"></i> Verify &amp; sign in</button>
+      <div class="lg-resend">Didn't get it? <button>Resend code</button> · in 0:28</div>
+      <button class="lg-backl" onclick="document.getElementById('lg2').classList.add('hide');document.getElementById('lg1').classList.remove('hide');"><i class="ti ti-arrow-left"></i> Use a different email</button>
+    </div>
+  </div>
+  <div class="lg-footer">By signing in you agree to our Terms and Privacy Policy</div>
+</div></div>
+
+<!-- ========================= ROTA REVIEW ========================= -->
+<div class="screen-wrap"><div class="screen-name">2 · Rota review (day view + publish)</div>
+<div class="cp" id="s_rota" style="min-height:700px; padding-bottom:80px;">
+  <style>
+    #s_rota .rt-status { margin:4px 16px 0; padding:13px 15px; border-radius:12px; display:flex; align-items:center; gap:11px; background:var(--amber-soft); border:0.5px solid rgba(255,193,7,0.3); }
+    #s_rota .rt-sic { width:32px; height:32px; border-radius:8px; background:rgba(255,193,7,0.2); display:flex; align-items:center; justify-content:center; color:var(--amber); font-size:16px; flex-shrink:0; }
+    #s_rota .rt-week { display:flex; gap:6px; padding:16px 16px 0; overflow-x:auto; }
+    #s_rota .rt-wd { min-width:46px; flex:1; padding:9px 4px; border-radius:10px; border:0.5px solid var(--border); background:var(--card); cursor:pointer; text-align:center; }
+    #s_rota .rt-wd.active { background:var(--accent-soft); border-color:var(--accent); }
+    #s_rota .rt-wd-dow { font-size:11px; color:var(--text-dim); text-transform:uppercase; } #s_rota .rt-wd.active .rt-wd-dow { color:var(--accent); }
+    #s_rota .rt-wd-n { font-size:15px; font-weight:500; margin:2px 0 5px; }
+    #s_rota .rt-dot { width:6px; height:6px; border-radius:50%; margin:0 auto; }
+    #s_rota .d-full { background:var(--green); } #s_rota .d-gap { background:var(--amber); }
+    #s_rota .rt-body { padding:18px 16px 0; }
+    #s_rota .rt-role { margin-bottom:18px; }
+    #s_rota .rt-rh { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+    #s_rota .rt-ri { width:26px; height:26px; border-radius:7px; background:var(--icon-bg); display:flex; align-items:center; justify-content:center; font-size:13px; color:var(--accent); }
+    #s_rota .rt-rc { font-size:11px; color:var(--text-faint); margin-left:auto; }
+    #s_rota .rt-dp { background:var(--card); border:0.5px solid var(--border); border-radius:11px; padding:12px 14px; margin-bottom:8px; }
+    #s_rota .rt-dph { display:flex; justify-content:space-between; margin-bottom:10px; font-size:12px; } #s_rota .rt-dph .n { font-weight:500; color:var(--text-dim); } #s_rota .rt-dph .t { color:var(--text-faint); }
+    #s_rota .rt-chips { display:flex; flex-wrap:wrap; gap:7px; }
+    #s_rota .rt-chip { display:flex; align-items:center; gap:7px; padding:6px 11px 6px 6px; border-radius:8px; background:var(--icon-bg); font-size:12px; font-weight:500; }
+    #s_rota .rt-av { width:20px; height:20px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:500; }
+    #s_rota .rt-u18 { font-size:8px; font-weight:600; color:var(--accent); background:var(--accent-soft); padding:2px 5px; border-radius:4px; }
+    #s_rota .rt-chip.leave { background:transparent; border:0.5px dashed var(--border); color:var(--text-faint); } #s_rota .rt-chip.leave .rt-av { background:var(--icon-bg); color:var(--text-faint); }
+    #s_rota .rt-gap { display:flex; align-items:center; gap:7px; padding:7px 11px; border-radius:8px; background:var(--amber-soft); border:0.5px dashed rgba(255,193,7,0.4); font-size:12px; font-weight:500; color:var(--amber); cursor:pointer; }
+    #s_rota .rt-pub { position:absolute; bottom:0; left:0; right:0; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; background:var(--card); border-top:0.5px solid var(--border); }
+    #s_rota .rt-pn { font-size:12px; font-weight:500; display:flex; align-items:center; gap:5px; } #s_rota .rt-pn i { color:var(--green); font-size:14px; }
+    #s_rota .rt-ps { font-size:11px; color:var(--text-dim); margin-top:1px; }
+  </style>
+  <div class="cp-nav"><div class="cp-wordmark">crewplan<span>.</span></div><button class="cp-toggle" onclick="cpT(this)"><span class="cp-knob"><i class="ti ti-moon"></i></span></button></div>
+  <div class="cp-tabs"><button class="cp-tab active">Rota</button><button class="cp-tab">Scheduler</button><button class="cp-tab">Staff</button><button class="cp-tab">Settings</button></div>
+  <div class="rt-status"><div class="rt-sic"><i class="ti ti-alert-triangle"></i></div><div style="flex:1;"><div style="font-size:13px; font-weight:500;">Draft · 2 shifts unfilled</div><div style="font-size:11px; color:var(--text-dim); margin-top:1px;">Solver couldn't cover Sat evening — no eligible staff free</div></div></div>
+  <div class="rt-week">
+    <div class="rt-wd"><div class="rt-wd-dow">Mon</div><div class="rt-wd-n">18</div><div class="rt-dot d-full"></div></div>
+    <div class="rt-wd"><div class="rt-wd-dow">Tue</div><div class="rt-wd-n">19</div><div class="rt-dot d-full"></div></div>
+    <div class="rt-wd"><div class="rt-wd-dow">Wed</div><div class="rt-wd-n">20</div><div class="rt-dot d-full"></div></div>
+    <div class="rt-wd"><div class="rt-wd-dow">Thu</div><div class="rt-wd-n">21</div><div class="rt-dot d-full"></div></div>
+    <div class="rt-wd"><div class="rt-wd-dow">Fri</div><div class="rt-wd-n">22</div><div class="rt-dot d-full"></div></div>
+    <div class="rt-wd active"><div class="rt-wd-dow">Sat</div><div class="rt-wd-n">23</div><div class="rt-dot d-gap"></div></div>
+    <div class="rt-wd"><div class="rt-wd-dow">Sun</div><div class="rt-wd-n">24</div><div class="rt-dot d-full"></div></div>
+  </div>
+  <div class="rt-body">
+    <div style="font-size:15px; font-weight:500; margin-bottom:2px;">Saturday 23 August</div>
+    <div style="font-size:12px; color:var(--text-dim); margin-bottom:16px;">14 assigned · 1 gap · 1 on leave</div>
+    <div class="rt-role"><div class="rt-rh"><div class="rt-ri"><i class="ti ti-glass-full"></i></div><span style="font-size:13px; font-weight:500;">Bar</span><span class="rt-rc">3 needed</span></div>
+      <div class="rt-dp"><div class="rt-dph"><span class="n">Evening</span><span class="t">6pm–close</span></div><div class="rt-chips"><div class="rt-chip"><span class="rt-av">P</span> Priya</div><div class="rt-chip"><span class="rt-av">J</span> Jess <span class="rt-u18">U18</span></div><div class="rt-gap"><i class="ti ti-plus" style="font-size:13px;"></i> Needs 1 more</div></div></div></div>
+    <div class="rt-role"><div class="rt-rh"><div class="rt-ri"><i class="ti ti-users"></i></div><span style="font-size:13px; font-weight:500;">Floor</span><span class="rt-rc">2 needed</span></div>
+      <div class="rt-dp"><div class="rt-dph"><span class="n">Evening</span><span class="t">6pm–close</span></div><div class="rt-chips"><div class="rt-chip"><span class="rt-av">T</span> Tom</div><div class="rt-chip"><span class="rt-av">L</span> Leah</div><div class="rt-chip leave"><span class="rt-av">M</span> Marcus · on leave</div></div></div></div>
+    <div class="rt-role"><div class="rt-rh"><div class="rt-ri"><i class="ti ti-chef-hat"></i></div><span style="font-size:13px; font-weight:500;">Kitchen</span><span class="rt-rc">3 needed</span></div>
+      <div class="rt-dp"><div class="rt-dph"><span class="n">Evening</span><span class="t">6pm–close</span></div><div class="rt-chips"><div class="rt-chip"><span class="rt-av">S</span> Sam</div><div class="rt-chip"><span class="rt-av">A</span> Aday</div><div class="rt-chip"><span class="rt-av">K</span> Kim</div></div></div></div>
+  </div>
+  <div class="rt-pub"><div><div class="rt-pn"><i class="ti ti-circle-check"></i> 3 days notice ✓</div><div class="rt-ps">Fill 1 gap to publish · £2,840/wk</div></div><button class="cp-primary"><i class="ti ti-send" style="font-size:15px;"></i> Publish</button></div>
+</div></div>
+
+<!-- ========================= ROTA MATRIX ========================= -->
+<div class="screen-wrap"><div class="screen-name">3 · Rota matrix (whole week, one grid)</div>
+<div class="cp" id="s_matrix" style="min-height:560px; padding-bottom:20px;">
+  <style>
+    #s_matrix .mx-head { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 14px; border-bottom:0.5px solid var(--border); }
+    #s_matrix .mx-hr { display:flex; align-items:center; gap:10px; position:relative; }
+    #s_matrix .mx-exp { display:flex; align-items:center; gap:7px; padding:8px 14px; border-radius:9px; background:var(--accent); border:none; color:#fff; font-size:13px; font-weight:500; cursor:pointer; }
+    #s_matrix .mx-menu { position:absolute; top:44px; right:0; background:var(--card); border:0.5px solid var(--border); border-radius:12px; padding:6px; min-width:180px; z-index:20; box-shadow:0 10px 30px rgba(0,0,0,0.4); display:none; }
+    #s_matrix .mx-menu.show { display:block; }
+    #s_matrix .mx-mi { display:flex; align-items:center; gap:11px; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:13px; font-weight:500; }
+    #s_matrix .mx-mi:hover { background:var(--card-hover); }
+    #s_matrix .mx-mic { width:30px; height:30px; border-radius:7px; background:var(--icon-bg); display:flex; align-items:center; justify-content:center; font-size:15px; color:var(--accent); }
+    #s_matrix .mx-ms { font-size:11px; color:var(--text-faint); font-weight:400; margin-top:1px; }
+    #s_matrix .mx-scroll { overflow-x:auto; padding:8px 16px 0; }
+    #s_matrix table { border-collapse:separate; border-spacing:0; width:100%; min-width:560px; }
+    #s_matrix th,#s_matrix td { text-align:center; padding:0; }
+    #s_matrix .mx-corner { position:sticky; left:0; z-index:3; background:var(--bg); text-align:left!important; padding:10px 12px!important; font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-faint); }
+    #s_matrix .mx-dh { padding:10px 8px!important; } #s_matrix .mx-dh .dow { font-size:11px; color:var(--text-dim); text-transform:uppercase; } #s_matrix .mx-dh .num { font-size:14px; font-weight:500; margin-top:1px; }
+    #s_matrix .mx-dh.wknd .dow,#s_matrix .mx-dh.wknd .num { color:var(--accent); }
+    #s_matrix .mx-rr td { padding:12px 12px 6px!important; text-align:left; }
+    #s_matrix .mx-rl { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:600; color:var(--text-dim); } #s_matrix .mx-rl i { color:var(--accent); font-size:14px; }
+    #s_matrix .mx-nc { position:sticky; left:0; z-index:2; background:var(--bg); text-align:left!important; padding:8px 12px!important; }
+    #s_matrix .mx-nm { display:flex; align-items:center; gap:9px; } #s_matrix .mx-nm .av { width:26px; height:26px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:500; } #s_matrix .mx-nm .tx { font-size:13px; font-weight:500; white-space:nowrap; }
+    #s_matrix .mx-c { padding:6px 5px!important; border-top:0.5px solid var(--border); }
+    #s_matrix .mx-sh { background:var(--accent-soft); border-radius:7px; padding:6px 4px; font-size:11px; font-weight:500; color:var(--accent); white-space:nowrap; }
+    #s_matrix .mx-off { color:var(--text-faint); font-size:13px; }
+    #s_matrix .mx-lv { background:transparent; border:0.5px dashed var(--border); border-radius:7px; padding:6px 4px; font-size:10px; color:var(--text-faint); }
+  </style>
+  <div class="mx-head"><div><div style="font-size:16px; font-weight:500;">The Anchor · Week of 18 Aug</div><div style="font-size:12px; color:var(--text-dim); margin-top:2px;">Published · 8 staff · 62 shifts</div></div>
+    <div class="mx-hr"><button class="cp-toggle" onclick="cpT(this)"><span class="cp-knob"><i class="ti ti-moon"></i></span></button>
+      <button class="mx-exp" onclick="this.parentNode.querySelector('.mx-menu').classList.toggle('show')"><i class="ti ti-download" style="font-size:14px;"></i> Export</button>
+      <div class="mx-menu"><div class="mx-mi"><div class="mx-mic"><i class="ti ti-file-type-pdf"></i></div><div>PDF<div class="mx-ms">Print-ready, branded</div></div></div><div class="mx-mi"><div class="mx-mic"><i class="ti ti-file-type-xls"></i></div><div>Excel<div class="mx-ms">Editable spreadsheet</div></div></div><div class="mx-mi"><div class="mx-mic"><i class="ti ti-photo"></i></div><div>Image<div class="mx-ms">PNG for WhatsApp</div></div></div></div>
+    </div>
+  </div>
+  <div class="mx-scroll"><table>
+    <thead><tr><th class="mx-corner">Staff</th>
+      <th class="mx-dh"><div class="dow">Mon</div><div class="num">18</div></th><th class="mx-dh"><div class="dow">Tue</div><div class="num">19</div></th><th class="mx-dh"><div class="dow">Wed</div><div class="num">20</div></th><th class="mx-dh"><div class="dow">Thu</div><div class="num">21</div></th>
+      <th class="mx-dh wknd"><div class="dow">Fri</div><div class="num">22</div></th><th class="mx-dh wknd"><div class="dow">Sat</div><div class="num">23</div></th><th class="mx-dh wknd"><div class="dow">Sun</div><div class="num">24</div></th></tr></thead>
+    <tbody>
+      <tr class="mx-rr"><td colspan="8"><div class="mx-rl"><i class="ti ti-glass-full"></i> Bar</div></td></tr>
+      <tr><td class="mx-nc"><div class="mx-nm"><span class="av">P</span><span class="tx">Priya</span></div></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><div class="mx-sh">18–23</div></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><div class="mx-sh">14–22</div></td><td class="mx-c"><div class="mx-sh">12–20</div></td><td class="mx-c"><div class="mx-sh">17–00</div></td></tr>
+      <tr><td class="mx-nc"><div class="mx-nm"><span class="av">J</span><span class="tx">Jess</span></div></td><td class="mx-c"><div class="mx-sh">12–18</div></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><div class="mx-sh">12–18</div></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><div class="mx-sh">18–00</div></td><td class="mx-c"><span class="mx-off">·</span></td></tr>
+      <tr class="mx-rr"><td colspan="8"><div class="mx-rl"><i class="ti ti-users"></i> Floor</div></td></tr>
+      <tr><td class="mx-nc"><div class="mx-nm"><span class="av">T</span><span class="tx">Tom</span></div></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><div class="mx-sh">14–22</div></td><td class="mx-c"><div class="mx-sh">14–22</div></td><td class="mx-c"><div class="mx-sh">14–22</div></td><td class="mx-c"><div class="mx-sh">18–00</div></td><td class="mx-c"><span class="mx-off">·</span></td></tr>
+      <tr><td class="mx-nc"><div class="mx-nm"><span class="av">L</span><span class="tx">Leah</span></div></td><td class="mx-c"><div class="mx-sh">11–17</div></td><td class="mx-c"><div class="mx-sh">11–17</div></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><div class="mx-sh">17–00</div></td><td class="mx-c"><div class="mx-sh">17–00</div></td><td class="mx-c"><div class="mx-sh">12–18</div></td></tr>
+      <tr><td class="mx-nc"><div class="mx-nm"><span class="av">M</span><span class="tx">Marcus</span></div></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><div class="mx-lv">Leave</div></td><td class="mx-c"><div class="mx-lv">Leave</div></td><td class="mx-c"><div class="mx-lv">Leave</div></td><td class="mx-c"><span class="mx-off">·</span></td></tr>
+      <tr class="mx-rr"><td colspan="8"><div class="mx-rl"><i class="ti ti-chef-hat"></i> Kitchen</div></td></tr>
+      <tr><td class="mx-nc"><div class="mx-nm"><span class="av">S</span><span class="tx">Sam</span></div></td><td class="mx-c"><div class="mx-sh">10–16</div></td><td class="mx-c"><div class="mx-sh">10–16</div></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><div class="mx-sh">12–20</div></td><td class="mx-c"><div class="mx-sh">12–20</div></td><td class="mx-c"><div class="mx-sh">12–20</div></td><td class="mx-c"><span class="mx-off">·</span></td></tr>
+      <tr><td class="mx-nc"><div class="mx-nm"><span class="av">A</span><span class="tx">Aday</span></div></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><div class="mx-sh">12–20</div></td><td class="mx-c"><div class="mx-sh">12–20</div></td><td class="mx-c"><span class="mx-off">·</span></td><td class="mx-c"><div class="mx-sh">17–00</div></td><td class="mx-c"><div class="mx-sh">17–00</div></td><td class="mx-c"><div class="mx-sh">12–20</div></td></tr>
+    </tbody>
+  </table></div>
+</div></div>
+
+<!-- ========================= SCHEDULER ========================= -->
+<div class="screen-wrap"><div class="screen-name">4 · Scheduler (coverage + solver rules)</div>
+<div class="cp" id="s_sched" style="min-height:700px; padding-bottom:84px;">
+  <style>
+    #s_sched .sc-body { padding:8px 16px 0; }
+    #s_sched .sc-sl { font-size:10px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-faint); margin:22px 2px 12px; display:flex; align-items:center; justify-content:space-between; } #s_sched .sc-sl .h { font-size:11px; color:var(--text-faint); text-transform:none; letter-spacing:0; font-weight:400; }
+    #s_sched .sc-dt { display:flex; gap:6px; margin-bottom:14px; overflow-x:auto; padding-bottom:2px; }
+    #s_sched .sc-d { min-width:44px; padding:8px 6px; border-radius:9px; border:0.5px solid var(--border); background:var(--card); cursor:pointer; text-align:center; position:relative; flex-shrink:0; }
+    #s_sched .sc-d.active { background:var(--accent-soft); border-color:var(--accent); }
+    #s_sched .sc-d .dow { font-size:12px; font-weight:500; } #s_sched .sc-d.active .dow { color:var(--accent); } #s_sched .sc-d .tag { font-size:9px; color:var(--text-faint); margin-top:1px; }
+    #s_sched .sc-ov { position:absolute; top:4px; right:4px; width:5px; height:5px; border-radius:50%; background:var(--amber); }
+    #s_sched .sc-rc { background:var(--card); border:0.5px solid var(--border); border-radius:13px; padding:14px 16px; margin-bottom:10px; }
+    #s_sched .sc-rh { display:flex; align-items:center; gap:9px; margin-bottom:14px; } #s_sched .sc-ri { width:30px; height:30px; border-radius:8px; background:var(--icon-bg); display:flex; align-items:center; justify-content:center; font-size:15px; color:var(--accent); } #s_sched .sc-rt { font-size:11px; color:var(--text-dim); margin-left:auto; }
+    #s_sched .sc-pr { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-top:0.5px solid var(--border); }
+    #s_sched .sc-pn { font-size:13px; font-weight:500; } #s_sched .sc-pt { font-size:11px; color:var(--text-faint); }
+    #s_sched .sc-st { display:flex; align-items:center; gap:10px; } #s_sched .sc-sv { font-size:15px; font-weight:500; min-width:20px; text-align:center; }
+    #s_sched .sc-cp { display:flex; gap:8px; margin:4px 0; }
+    #s_sched .sc-cb { flex:1; padding:10px; border-radius:10px; background:var(--card); border:0.5px solid var(--border); color:var(--text-dim); font-size:12px; font-weight:500; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; }
+    #s_sched .sc-rg { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    #s_sched .sc-r { background:var(--card); border:0.5px solid var(--border); border-radius:12px; padding:13px 14px; }
+    #s_sched .sc-r.wide { grid-column:span 2; display:flex; align-items:center; justify-content:space-between; }
+    #s_sched .sc-r.lock { background:rgba(255,77,0,0.06); border-color:rgba(255,77,0,0.15); }
+    #s_sched .sc-rl { font-size:12px; color:var(--text-dim); margin-bottom:10px; display:flex; align-items:center; gap:6px; } #s_sched .sc-r.wide .sc-rl { margin-bottom:0; }
+    #s_sched .sc-rs { display:flex; align-items:center; gap:8px; } #s_sched .sc-mv { font-size:14px; font-weight:500; min-width:40px; text-align:center; } #s_sched .sc-mv span { font-size:11px; color:var(--text-faint); font-weight:400; }
+    #s_sched .sc-lk { font-size:9px; font-weight:600; letter-spacing:0.05em; color:var(--accent); background:var(--accent-soft); padding:3px 8px; border-radius:5px; }
+    #s_sched .sc-fc { background:var(--card); border:0.5px solid var(--border); border-radius:13px; padding:16px; }
+    #s_sched .sc-fh { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; } #s_sched .sc-fv { font-size:14px; font-weight:500; color:var(--accent); }
+    #s_sched .sc-fd { font-size:12px; color:var(--text-dim); margin-bottom:14px; }
+    #s_sched .sc-ft { height:4px; background:var(--track); border-radius:2px; position:relative; } #s_sched .sc-ff { height:100%; background:var(--accent); border-radius:2px; width:55%; } #s_sched .sc-fth { width:16px; height:16px; border-radius:50%; background:var(--accent); border:3px solid var(--bg); position:absolute; top:-6px; left:55%; transform:translateX(-50%); }
+    #s_sched .sc-fe { display:flex; justify-content:space-between; margin-top:8px; font-size:10px; color:var(--text-faint); }
+    #s_sched .sc-gb { position:absolute; bottom:0; left:0; right:0; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; background:var(--card); border-top:0.5px solid var(--border); }
+    #s_sched .sc-gs { font-size:15px; font-weight:500; } #s_sched .sc-gsub { font-size:11px; color:var(--text-dim); } #s_sched .sc-gsub .cl { color:var(--accent); cursor:pointer; }
+  </style>
+  <div class="cp-nav"><div class="cp-wordmark">crewplan<span>.</span></div><button class="cp-toggle" onclick="cpT(this)"><span class="cp-knob"><i class="ti ti-moon"></i></span></button></div>
+  <div class="cp-tabs"><button class="cp-tab">Rota</button><button class="cp-tab active">Scheduler</button><button class="cp-tab">Staff</button><button class="cp-tab">Settings</button></div>
+  <div class="sc-body">
+    <div class="sc-sl">Coverage — how many you need<span class="h">Set Default, override any day</span></div>
+    <div class="sc-dt"><div class="sc-d active"><div class="dow">All</div><div class="tag">default</div></div><div class="sc-d"><div class="dow">Mon</div><div class="tag">18</div></div><div class="sc-d"><div class="dow">Tue</div><div class="tag">19</div></div><div class="sc-d"><div class="dow">Wed</div><div class="tag">20</div></div><div class="sc-d"><div class="dow">Thu</div><div class="tag">21</div></div><div class="sc-d"><div class="dow">Fri</div><div class="tag">22</div><span class="sc-ov"></span></div><div class="sc-d"><div class="dow">Sat</div><div class="tag">23</div><span class="sc-ov"></span></div><div class="sc-d"><div class="dow">Sun</div><div class="tag">24</div></div></div>
+    <div class="sc-rc"><div class="sc-rh"><div class="sc-ri"><i class="ti ti-glass-full"></i></div><span style="font-size:14px; font-weight:500;">Bar</span><span class="sc-rt">6 per day</span></div>
+      <div class="sc-pr"><div><div class="sc-pn">Morning</div><div class="sc-pt">8am–2pm</div></div><div class="sc-st"><button class="cp-mini-btn">−</button><span class="sc-sv">1</span><button class="cp-mini-btn">+</button></div></div>
+      <div class="sc-pr"><div><div class="sc-pn">Afternoon</div><div class="sc-pt">2pm–6pm</div></div><div class="sc-st"><button class="cp-mini-btn">−</button><span class="sc-sv">2</span><button class="cp-mini-btn">+</button></div></div>
+      <div class="sc-pr"><div><div class="sc-pn">Evening</div><div class="sc-pt">6pm–close</div></div><div class="sc-st"><button class="cp-mini-btn">−</button><span class="sc-sv">3</span><button class="cp-mini-btn">+</button></div></div></div>
+    <div class="sc-rc"><div class="sc-rh"><div class="sc-ri"><i class="ti ti-users"></i></div><span style="font-size:14px; font-weight:500;">Floor</span><span class="sc-rt">5 per day</span></div>
+      <div class="sc-pr"><div><div class="sc-pn">Evening</div><div class="sc-pt">6pm–close</div></div><div class="sc-st"><button class="cp-mini-btn">−</button><span class="sc-sv">2</span><button class="cp-mini-btn">+</button></div></div></div>
+    <div class="sc-cp"><button class="sc-cb"><i class="ti ti-copy" style="font-size:13px;"></i> Copy to weekdays</button><button class="sc-cb"><i class="ti ti-copy" style="font-size:13px;"></i> Copy to weekend</button></div>
+    <div class="sc-sl">Shift rules</div>
+    <div class="sc-rg">
+      <div class="sc-r"><div class="sc-rl"><i class="ti ti-clock" style="font-size:13px;"></i> Min shift</div><div class="sc-rs"><button class="cp-mini-btn">−</button><span class="sc-mv">3 <span>hrs</span></span><button class="cp-mini-btn">+</button></div></div>
+      <div class="sc-r"><div class="sc-rl"><i class="ti ti-clock-hour-8" style="font-size:13px;"></i> Max shift</div><div class="sc-rs"><button class="cp-mini-btn">−</button><span class="sc-mv">10 <span>hrs</span></span><button class="cp-mini-btn">+</button></div></div>
+      <div class="sc-r"><div class="sc-rl"><i class="ti ti-moon" style="font-size:13px;"></i> Rest gap</div><div class="sc-rs"><button class="cp-mini-btn">−</button><span class="sc-mv">11 <span>hrs</span></span><button class="cp-mini-btn">+</button></div></div>
+      <div class="sc-r"><div class="sc-rl"><i class="ti ti-bell" style="font-size:13px;"></i> Notice</div><div class="sc-rs"><button class="cp-mini-btn">−</button><span class="sc-mv">72 <span>hrs</span></span><button class="cp-mini-btn">+</button></div></div>
+      <div class="sc-r wide"><div class="sc-rl"><i class="ti ti-calendar-off" style="font-size:13px;"></i> One day off in 7</div><button class="cp-switch on" onclick="this.classList.toggle('on')"></button></div>
+      <div class="sc-r wide lock"><div class="sc-rl"><i class="ti ti-shield" style="font-size:13px; color:var(--accent);"></i> Under-18 rules · 5 hard constraints</div><span class="sc-lk">ALWAYS ON</span></div>
+    </div>
+    <div class="sc-sl">Fairness weighting</div>
+    <div class="sc-fc"><div class="sc-fh"><span style="font-size:13px; font-weight:500;">Equalise hours across staff</span><span class="sc-fv">Balanced</span></div><div class="sc-fd">Higher = spread hours evenly. Lower = let the solver optimise coverage first.</div><div class="sc-ft"><div class="sc-ff"></div><div class="sc-fth"></div></div><div class="sc-fe"><span>Coverage first</span><span>Strictly equal</span></div></div>
+  </div>
+  <div class="sc-gb"><div><div class="sc-gs">62 shifts / week</div><div class="sc-gsub"><span class="cl">+ Add pay rates for live cost →</span></div></div><button class="cp-primary"><i class="ti ti-sparkles" style="font-size:15px;"></i> Generate</button></div>
+</div></div>
+
+<!-- ========================= GENERATE STATE ========================= -->
+<div class="screen-wrap"><div class="screen-name">5 · Generate (solver running → result)</div>
+<div class="cp" id="s_gen" style="min-height:520px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 24px;">
+  <style>
+    #s_gen .gn-res-ic { width:64px; height:64px; border-radius:18px; background:var(--green-soft); display:flex; align-items:center; justify-content:center; color:var(--green); font-size:30px; margin-bottom:18px; }
+    #s_gen .gn-stats { display:flex; gap:10px; width:100%; margin-bottom:14px; }
+    #s_gen .gn-stat { flex:1; background:var(--card); border:0.5px solid var(--border); border-radius:12px; padding:14px; text-align:center; }
+    #s_gen .gn-sv { font-size:22px; font-weight:500; } #s_gen .gn-sv.amber { color:var(--amber); } #s_gen .gn-sv.green { color:var(--green); }
+    #s_gen .gn-sl { font-size:11px; color:var(--text-dim); margin-top:3px; }
+    #s_gen .gn-flag { width:100%; display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--amber-soft); border:0.5px solid rgba(255,193,7,0.3); border-radius:11px; margin-bottom:22px; } #s_gen .gn-flag i { color:var(--amber); font-size:16px; flex-shrink:0; } #s_gen .gn-ft { font-size:12px; line-height:1.4; }
+    #s_gen .gn-act { display:flex; gap:10px; width:100%; }
+    #s_gen .gn-sec { flex:1; padding:13px; border-radius:11px; background:var(--card); border:0.5px solid var(--border); color:var(--text); font-size:13px; font-weight:500; cursor:pointer; }
+  </style>
+  <div style="position:absolute; top:20px; right:20px;"><button class="cp-toggle" onclick="cpT(this)"><span class="cp-knob"><i class="ti ti-moon"></i></span></button></div>
+  <div style="display:flex; flex-direction:column; align-items:center; width:100%;">
+    <div class="gn-res-ic"><i class="ti ti-check"></i></div>
+    <div style="font-size:21px; font-weight:500; letter-spacing:-0.4px; margin-bottom:6px;">Rota generated</div>
+    <div style="font-size:13px; color:var(--text-dim); margin-bottom:24px; text-align:center;">60 of 62 shifts filled · all compliance rules met</div>
+    <div class="gn-stats"><div class="gn-stat"><div class="gn-sv green">60</div><div class="gn-sl">shifts filled</div></div><div class="gn-stat"><div class="gn-sv amber">2</div><div class="gn-sl">gaps</div></div><div class="gn-stat"><div class="gn-sv">£2,840</div><div class="gn-sl">wage bill</div></div></div>
+    <div class="gn-flag"><i class="ti ti-alert-triangle"></i><div class="gn-ft"><strong>2 shifts couldn't be filled</strong> — Sat evening bar needs 1 more, no eligible staff free. Review on the rota.</div></div>
+    <div class="gn-act"><button class="gn-sec">Adjust rules</button><button class="cp-primary" style="flex:1;"><i class="ti ti-eye" style="font-size:14px;"></i> Review rota</button></div>
+  </div>
+  <div style="font-size:11px; color:var(--text-faint); margin-top:22px; text-align:center;">Note: in-app this shows a stepped solving animation (availability → coverage → compliance → fairness) before the result.</div>
+</div></div>
+
+<!-- ========================= SETTINGS ========================= -->
+<div class="screen-wrap"><div class="screen-name">6 · Settings (venue / roles / team / pay / account)</div>
+<div class="cp" id="s_set" style="min-height:700px; padding-bottom:26px;">
+  <style>
+    #s_set .st-body { padding:8px 16px 0; }
+    #s_set .st-card { background:var(--card); border:0.5px solid var(--border); border-radius:13px; overflow:hidden; }
+    #s_set .st-f { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; border-bottom:0.5px solid var(--border); cursor:pointer; } #s_set .st-f:last-child { border-bottom:none; }
+    #s_set .st-fl { display:flex; align-items:center; gap:12px; min-width:0; } #s_set .st-fi { width:34px; height:34px; border-radius:9px; background:var(--icon-bg); display:flex; align-items:center; justify-content:center; font-size:16px; color:var(--accent); flex-shrink:0; }
+    #s_set .st-fname { font-size:14px; font-weight:500; } #s_set .st-fsub { font-size:12px; color:var(--text-dim); margin-top:1px; }
+    #s_set .st-fv { font-size:13px; color:var(--text-dim); display:flex; align-items:center; gap:6px; flex-shrink:0; } #s_set .st-chev { color:var(--text-faint); font-size:15px; }
+    #s_set .st-roles { display:flex; flex-wrap:wrap; gap:8px; padding:14px 16px; }
+    #s_set .st-chip { display:flex; align-items:center; gap:7px; padding:8px 12px; border-radius:9px; background:var(--icon-bg); border:0.5px solid var(--border); font-size:13px; font-weight:500; } #s_set .st-chip i { color:var(--accent); font-size:14px; }
+    #s_set .st-add { display:flex; align-items:center; gap:6px; padding:8px 12px; border-radius:9px; background:transparent; border:0.5px dashed var(--border); font-size:13px; color:var(--text-dim); cursor:pointer; }
+    #s_set .st-staff { display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:0.5px solid var(--border); cursor:pointer; } #s_set .st-staff:last-child { border-bottom:none; }
+    #s_set .st-av { width:36px; height:36px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:500; flex-shrink:0; }
+    #s_set .st-sn { font-size:14px; font-weight:500; } #s_set .st-sm { font-size:12px; color:var(--text-dim); margin-top:1px; }
+    #s_set .st-tag { font-size:10px; font-weight:600; letter-spacing:0.04em; padding:3px 8px; border-radius:5px; text-transform:uppercase; } #s_set .t-u18 { background:var(--accent-soft); color:var(--accent); } #s_set .t-key { background:var(--green-soft); color:var(--green); }
+    #s_set .st-addb { width:100%; padding:13px; margin-top:10px; border-radius:11px; background:transparent; border:0.5px dashed var(--border); color:var(--text-dim); font-size:13px; font-weight:500; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px; }
+    #s_set .st-pay { background:var(--card); border:0.5px solid var(--border); border-radius:13px; padding:16px; }
+    #s_set .st-ph { display:flex; align-items:flex-start; gap:12px; } #s_set .st-pi { width:38px; height:38px; border-radius:10px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--accent); flex-shrink:0; }
+    #s_set .st-pt { font-size:14px; font-weight:500; margin-bottom:3px; } #s_set .st-pd { font-size:12px; color:var(--text-dim); line-height:1.5; }
+    #s_set .st-pr { margin-top:16px; padding-top:16px; border-top:0.5px solid var(--border); display:none; } #s_set .st-pr.show { display:block; }
+    #s_set .st-pm { display:flex; gap:8px; margin-bottom:14px; } #s_set .st-po { flex:1; padding:11px; border-radius:10px; background:var(--icon-bg); border:0.5px solid var(--border); font-size:12px; font-weight:500; text-align:center; cursor:pointer; color:var(--text-dim); } #s_set .st-po.active { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+    #s_set .st-pin { display:flex; align-items:center; gap:8px; padding:11px 14px; border-radius:10px; background:var(--bg); border:0.5px solid var(--border); } #s_set .st-pin input { background:transparent; border:none; outline:none; color:var(--text); font-size:15px; font-weight:500; width:100%; font-family:inherit; }
+    #s_set .st-pnote { font-size:11px; color:var(--green); margin-top:12px; display:flex; align-items:center; gap:6px; }
+  </style>
+  <div class="cp-nav"><div class="cp-wordmark">crewplan<span>.</span></div><button class="cp-toggle" onclick="cpT(this)"><span class="cp-knob"><i class="ti ti-moon"></i></span></button></div>
+  <div class="cp-tabs"><button class="cp-tab">Rota</button><button class="cp-tab">Scheduler</button><button class="cp-tab">Staff</button><button class="cp-tab active">Settings</button></div>
+  <div class="st-body">
+    <div class="cp-slabel">Venue</div>
+    <div class="st-card">
+      <div class="st-f"><div class="st-fl"><div class="st-fi"><i class="ti ti-building-store"></i></div><div><div class="st-fname">The Anchor</div><div class="st-fsub">Southampton · SO14</div></div></div><span class="st-fv"><i class="ti ti-chevron-right st-chev"></i></span></div>
+      <div class="st-f"><div class="st-fl"><div class="st-fi"><i class="ti ti-clock"></i></div><div><div class="st-fname">Opening hours</div><div class="st-fsub">Mon–Sun · varies</div></div></div><span class="st-fv">11am–11pm <i class="ti ti-chevron-right st-chev"></i></span></div>
+      <div class="st-f"><div class="st-fl"><div class="st-fi"><i class="ti ti-layout-rows"></i></div><div><div class="st-fname">Shift dayparts</div><div class="st-fsub">Morning · Afternoon · Evening</div></div></div><span class="st-fv">3 <i class="ti ti-chevron-right st-chev"></i></span></div>
+    </div>
+    <div class="cp-slabel">Roles &amp; stations</div>
+    <div class="st-card"><div class="st-roles"><div class="st-chip"><i class="ti ti-glass-full"></i> Bar</div><div class="st-chip"><i class="ti ti-users"></i> Floor</div><div class="st-chip"><i class="ti ti-chef-hat"></i> Kitchen</div><button class="st-add"><i class="ti ti-plus" style="font-size:13px;"></i> Add role</button></div></div>
+    <div class="cp-slabel">Team · 8 staff</div>
+    <div class="st-card">
+      <div class="st-staff"><div class="st-av">P</div><div style="flex:1;"><div class="st-sn">Priya Sharma</div><div class="st-sm">Bar, Floor · max 40h/wk</div></div><span class="st-tag t-key">Key</span></div>
+      <div class="st-staff"><div class="st-av">T</div><div style="flex:1;"><div class="st-sn">Tom Reilly</div><div class="st-sm">Floor · max 30h/wk</div></div></div>
+      <div class="st-staff"><div class="st-av">J</div><div style="flex:1;"><div class="st-sn">Jess Okafor</div><div class="st-sm">Bar, Kitchen · max 25h/wk</div></div><span class="st-tag t-u18">U18</span></div>
+    </div>
+    <button class="st-addb"><i class="ti ti-user-plus" style="font-size:14px;"></i> Add team member</button>
+    <div class="cp-slabel">Pay &amp; labour cost <span style="color:var(--text-faint); font-weight:400; text-transform:none; letter-spacing:0;">· optional</span></div>
+    <div class="st-pay">
+      <div class="st-ph"><div class="st-pi"><i class="ti ti-coins"></i></div><div style="flex:1;"><div class="st-pt">Show live labour cost</div><div class="st-pd">Add pay rates to see running cost while you build the rota. Leave off if you don't need it — nothing else changes.</div></div><button class="cp-switch" onclick="this.classList.toggle('on'); this.closest('.st-pay').querySelector('.st-pr').classList.toggle('show', this.classList.contains('on'));"></button></div>
+      <div class="st-pr">
+        <div class="st-pm"><div class="st-po active" onclick="this.parentNode.querySelectorAll('.st-po').forEach(o=>o.classList.remove('active'));this.classList.add('active');">One venue rate</div><div class="st-po" onclick="this.parentNode.querySelectorAll('.st-po').forEach(o=>o.classList.remove('active'));this.classList.add('active');">Per-staff rates</div></div>
+        <div class="st-pin"><span style="color:var(--text-dim); font-size:15px;">£</span><input type="text" value="11.44"><span style="font-size:13px; color:var(--text-dim);">/ hr</span></div>
+        <div class="st-pnote"><i class="ti ti-check" style="font-size:13px;"></i>Live cost will now show on the Scheduler and rota</div>
+      </div>
+    </div>
+    <div class="cp-slabel">Account</div>
+    <div class="st-card">
+      <div class="st-f"><div class="st-fl"><div class="st-fi"><i class="ti ti-star"></i></div><div><div class="st-fname">Plan</div><div class="st-fsub">Crewplan Pro</div></div></div><span class="st-fv"><i class="ti ti-chevron-right st-chev"></i></span></div>
+      <div class="st-f"><div class="st-fl"><div class="st-fi"><i class="ti ti-plug"></i></div><div><div class="st-fname">Integrations</div><div class="st-fsub">Square, Xero · coming soon</div></div></div><span class="st-fv"><i class="ti ti-chevron-right st-chev"></i></span></div>
+    </div>
+    <div style="font-size:11px; color:var(--text-faint); text-align:center; margin-top:24px;">Crewplan · The Anchor, Southampton</div>
+  </div>
+</div></div>
+
+<!-- ========================= ADD ROLE SHEET ========================= -->
+<div class="screen-wrap"><div class="screen-name">7 · Add role (bottom sheet)</div>
+<div class="cp" id="s_role" style="min-height:600px; display:flex; flex-direction:column;">
+  <style>
+    #s_role .sh-head { display:flex; align-items:center; justify-content:space-between; padding:8px 20px 16px; border-bottom:0.5px solid var(--border); }
+    #s_role .sh-close { width:30px; height:30px; border-radius:8px; background:var(--icon-bg); border:none; color:var(--text-dim); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    #s_role .sh-body { flex:1; overflow-y:auto; padding:20px; }
+    #s_role .sh-lb { font-size:12px; font-weight:500; color:var(--text-dim); margin-bottom:9px; display:flex; align-items:center; justify-content:space-between; } #s_role .sh-opt { font-size:11px; color:var(--text-faint); font-weight:400; }
+    #s_role .sh-fld { margin-bottom:22px; }
+    #s_role .sh-in { width:100%; padding:13px 15px; border-radius:11px; background:var(--card); border:0.5px solid var(--border); color:var(--text); font-size:15px; font-weight:500; outline:none; font-family:inherit; }
+    #s_role .sh-ics { display:flex; gap:8px; } #s_role .sh-ic { width:46px; height:46px; border-radius:11px; background:var(--card); border:0.5px solid var(--border); color:var(--text-dim); font-size:19px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; } #s_role .sh-ic.active { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+    #s_role .sh-chips { display:flex; flex-wrap:wrap; gap:8px; }
+    #s_role .sh-chip { display:flex; align-items:center; gap:8px; padding:8px 13px 8px 8px; border-radius:10px; background:var(--card); border:0.5px solid var(--border); cursor:pointer; } #s_role .sh-chip.active { background:var(--accent-soft); border-color:var(--accent); }
+    #s_role .sh-cav { width:24px; height:24px; border-radius:50%; background:var(--icon-bg); color:var(--text-dim); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:500; } #s_role .sh-chip.active .sh-cav { background:var(--accent); color:#fff; }
+    #s_role .sh-cn { font-size:13px; font-weight:500; }
+    #s_role .sh-adv { margin-top:4px; border-top:0.5px solid var(--border); padding-top:18px; }
+    #s_role .sh-at { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:500; color:var(--text-dim); cursor:pointer; background:none; border:none; padding:0; margin-bottom:4px; }
+    #s_role .sh-ab { max-height:0; overflow:hidden; transition:max-height 0.3s ease; } #s_role .sh-ab.open { max-height:300px; }
+    #s_role .sh-rule { display:flex; align-items:center; gap:12px; padding:14px 0; border-bottom:0.5px solid var(--border); } #s_role .sh-rule:last-child { border-bottom:none; }
+    #s_role .sh-rgi { width:34px; height:34px; border-radius:9px; background:var(--icon-bg); display:flex; align-items:center; justify-content:center; font-size:15px; color:var(--accent); flex-shrink:0; }
+    #s_role .sh-rt { font-size:13px; font-weight:500; } #s_role .sh-rd { font-size:11px; color:var(--text-dim); margin-top:1px; line-height:1.4; }
+    #s_role .sh-foot { padding:16px 20px; border-top:0.5px solid var(--border); display:flex; gap:10px; }
+    #s_role .sh-sec { padding:14px 20px; border-radius:11px; background:var(--card); border:0.5px solid var(--border); color:var(--text-dim); font-size:14px; font-weight:500; cursor:pointer; }
+  </style>
+  <div class="cp-grab"><span></span></div>
+  <div class="sh-head"><div style="font-size:18px; font-weight:500;">Add a role</div><div style="display:flex; gap:10px;"><button class="cp-toggle" onclick="cpT(this)"><span class="cp-knob"><i class="ti ti-moon"></i></span></button><button class="sh-close"><i class="ti ti-x"></i></button></div></div>
+  <div class="sh-body">
+    <div class="sh-fld"><div class="sh-lb">Role name</div><input class="sh-in" value="Host"></div>
+    <div class="sh-fld"><div class="sh-lb">Icon</div><div class="sh-ics"><button class="sh-ic active"><i class="ti ti-user-heart"></i></button><button class="sh-ic"><i class="ti ti-glass-full"></i></button><button class="sh-ic"><i class="ti ti-chef-hat"></i></button><button class="sh-ic"><i class="ti ti-users"></i></button><button class="sh-ic"><i class="ti ti-barrel"></i></button><button class="sh-ic"><i class="ti ti-broom"></i></button></div></div>
+    <div class="sh-fld"><div class="sh-lb">Who can work this role?</div><div class="sh-chips"><div class="sh-chip active"><span class="sh-cav">P</span><span class="sh-cn">Priya</span></div><div class="sh-chip"><span class="sh-cav">T</span><span class="sh-cn">Tom</span></div><div class="sh-chip active"><span class="sh-cav">J</span><span class="sh-cn">Jess</span></div><div class="sh-chip"><span class="sh-cav">M</span><span class="sh-cn">Marcus</span></div><div class="sh-chip active"><span class="sh-cav">L</span><span class="sh-cn">Leah</span></div></div></div>
+    <div class="sh-adv"><button class="sh-at" onclick="var b=this.parentNode.querySelector('.sh-ab');b.classList.toggle('open');this.querySelector('i').style.transform=b.classList.contains('open')?'rotate(90deg)':'';"><i class="ti ti-chevron-right" style="transition:transform 0.2s;"></i> Advanced · solver rules</button>
+      <div class="sh-ab"><div class="sh-rule"><div class="sh-rgi"><i class="ti ti-key"></i></div><div style="flex:1;"><div class="sh-rt">Require a Key staff member</div><div class="sh-rd">Solver puts at least one keyholder on every shift of this role</div></div><button class="cp-switch" onclick="this.classList.toggle('on')"></button></div>
+        <div class="sh-rule"><div class="sh-rgi"><i class="ti ti-shield"></i></div><div style="flex:1;"><div class="sh-rt">Allow under-18s</div><div class="sh-rd">If off, the 5 under-18 constraints exclude this role entirely</div></div><button class="cp-switch on" onclick="this.classList.toggle('on')"></button></div></div></div>
+  </div>
+  <div class="sh-foot"><button class="sh-sec">Cancel</button><button class="cp-primary" style="flex:1;"><i class="ti ti-check" style="font-size:15px;"></i> Add role</button></div>
+</div></div>
+
+<!-- ========================= ADD MEMBER SHEET ========================= -->
+<div class="screen-wrap"><div class="screen-name">8 · Add team member (bottom sheet)</div>
+<div class="cp" id="s_add" style="min-height:660px; display:flex; flex-direction:column;">
+  <style>
+    #s_add .sh-head { display:flex; align-items:center; justify-content:space-between; padding:8px 20px 16px; border-bottom:0.5px solid var(--border); }
+    #s_add .sh-close { width:30px; height:30px; border-radius:8px; background:var(--icon-bg); border:none; color:var(--text-dim); font-size:15px; cursor:pointer; }
+    #s_add .sh-body { flex:1; overflow-y:auto; padding:20px; }
+    #s_add .sh-lb { font-size:12px; font-weight:500; color:var(--text-dim); margin-bottom:9px; display:flex; align-items:center; justify-content:space-between; } #s_add .sh-opt { font-size:11px; color:var(--text-faint); font-weight:400; }
+    #s_add .sh-fld { margin-bottom:22px; }
+    #s_add .sh-in { width:100%; padding:13px 15px; border-radius:11px; background:var(--card); border:0.5px solid var(--border); color:var(--text); font-size:15px; font-weight:500; outline:none; font-family:inherit; }
+    #s_add .sh-hint { font-size:11px; color:var(--text-faint); margin-top:7px; display:flex; align-items:center; gap:5px; line-height:1.4; }
+    #s_add .sh-chips { display:flex; flex-wrap:wrap; gap:8px; }
+    #s_add .sh-chip { display:flex; align-items:center; gap:7px; padding:9px 14px; border-radius:10px; background:var(--card); border:0.5px solid var(--border); cursor:pointer; font-size:13px; font-weight:500; color:var(--text-dim); } #s_add .sh-chip i { font-size:14px; } #s_add .sh-chip.active { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); } #s_add .sh-chip.active i { color:var(--accent); }
+    #s_add .sh-hrs { display:flex; gap:10px; }
+    #s_add .sh-hc { flex:1; background:var(--card); border:0.5px solid var(--border); border-radius:11px; padding:12px 14px; } #s_add .sh-hl { font-size:11px; color:var(--text-dim); margin-bottom:8px; } #s_add .sh-hst { display:flex; align-items:center; justify-content:space-between; } #s_add .sh-hv { font-size:16px; font-weight:500; } #s_add .sh-hv span { font-size:11px; color:var(--text-faint); font-weight:400; }
+    #s_add .sh-rule { display:flex; align-items:center; gap:12px; padding:15px 16px; background:var(--card); border:0.5px solid var(--border); border-radius:11px; margin-bottom:10px; }
+    #s_add .sh-rgi { width:34px; height:34px; border-radius:9px; background:var(--icon-bg); display:flex; align-items:center; justify-content:center; font-size:15px; color:var(--accent); flex-shrink:0; }
+    #s_add .sh-rt { font-size:13px; font-weight:500; } #s_add .sh-rd { font-size:11px; color:var(--text-dim); margin-top:1px; line-height:1.4; }
+    #s_add .sh-dob { max-height:0; overflow:hidden; transition:max-height 0.3s ease; } #s_add .sh-dob.show { max-height:120px; }
+    #s_add .sh-pay { display:flex; align-items:center; gap:8px; padding:12px 14px; border-radius:11px; background:var(--card); border:0.5px solid var(--border); } #s_add .sh-pay input { background:transparent; border:none; outline:none; color:var(--text); font-size:15px; font-weight:500; width:100%; font-family:inherit; }
+    #s_add .sh-foot { padding:16px 20px; border-top:0.5px solid var(--border); display:flex; gap:10px; }
+    #s_add .sh-sec { padding:14px 20px; border-radius:11px; background:var(--card); border:0.5px solid var(--border); color:var(--text-dim); font-size:14px; font-weight:500; cursor:pointer; }
+  </style>
+  <div class="cp-grab"><span></span></div>
+  <div class="sh-head"><div style="font-size:18px; font-weight:500;">Add team member</div><div style="display:flex; gap:10px;"><button class="cp-toggle" onclick="cpT(this)"><span class="cp-knob"><i class="ti ti-moon"></i></span></button><button class="sh-close"><i class="ti ti-x"></i></button></div></div>
+  <div class="sh-body">
+    <div class="sh-fld"><div class="sh-lb">Name</div><input class="sh-in" value="Marcus Bell"></div>
+    <div class="sh-fld"><div class="sh-lb">Contact <span class="sh-opt">for their access link</span></div><input class="sh-in" value="marcus@email.com"><div class="sh-hint"><i class="ti ti-info-circle" style="font-size:12px;"></i>We'll send a PIN-secured venue link — no account needed</div></div>
+    <div class="sh-fld"><div class="sh-lb">Roles they can work</div><div class="sh-chips"><div class="sh-chip active"><i class="ti ti-glass-full"></i> Bar</div><div class="sh-chip"><i class="ti ti-users"></i> Floor</div><div class="sh-chip active"><i class="ti ti-chef-hat"></i> Kitchen</div><div class="sh-chip"><i class="ti ti-user-heart"></i> Host</div></div></div>
+    <div class="sh-fld"><div class="sh-lb">Weekly hours <span class="sh-opt">solver keeps within this</span></div><div class="sh-hrs"><div class="sh-hc"><div class="sh-hl">Minimum</div><div class="sh-hst"><button class="cp-mini-btn">−</button><span class="sh-hv">8<span>h</span></span><button class="cp-mini-btn">+</button></div></div><div class="sh-hc"><div class="sh-hl">Maximum</div><div class="sh-hst"><button class="cp-mini-btn">−</button><span class="sh-hv">32<span>h</span></span><button class="cp-mini-btn">+</button></div></div></div></div>
+    <div class="sh-fld"><div class="sh-lb">Compliance &amp; role</div>
+      <div class="sh-rule"><div class="sh-rgi"><i class="ti ti-key"></i></div><div style="flex:1;"><div class="sh-rt">Key staff member</div><div class="sh-rd">Keyholder — can satisfy "require a Key member" rules</div></div><button class="cp-switch" onclick="this.classList.toggle('on')"></button></div>
+      <div class="sh-rule" style="margin-bottom:0;"><div class="sh-rgi"><i class="ti ti-shield"></i></div><div style="flex:1;"><div class="sh-rt">Under 18</div><div class="sh-rd">Applies 5 hard scheduling constraints, always enforced</div></div><button class="cp-switch" onclick="this.classList.toggle('on'); this.closest('.sh-fld').querySelector('.sh-dob').classList.toggle('show', this.classList.contains('on'));"></button></div>
+      <div class="sh-dob"><div class="sh-lb" style="margin-top:14px;">Date of birth <span class="sh-opt">constraints lift automatically at 18</span></div><input class="sh-in" placeholder="DD / MM / YYYY"></div>
+    </div>
+    <div class="sh-fld" style="margin-bottom:0;"><div class="sh-lb">Pay rate <span class="sh-opt">shown because per-staff pay is on</span></div><div class="sh-pay"><span style="color:var(--text-dim); font-size:15px;">£</span><input value="11.44"><span style="font-size:13px; color:var(--text-dim);">/ hr</span></div></div>
+  </div>
+  <div class="sh-foot"><button class="sh-sec">Cancel</button><button class="cp-primary" style="flex:1;"><i class="ti ti-send" style="font-size:15px;"></i> Add &amp; send link</button></div>
+</div></div>
+
+<!-- ========================= EDIT MEMBER SHEET ========================= -->
+<div class="screen-wrap"><div class="screen-name">9 · Edit member (pre-filled + link status + archive/remove)</div>
+<div class="cp" id="s_edit" style="min-height:680px; display:flex; flex-direction:column;">
+  <style>
+    #s_edit .sh-head { display:flex; align-items:center; justify-content:space-between; padding:8px 20px 16px; border-bottom:0.5px solid var(--border); }
+    #s_edit .sh-hl { display:flex; align-items:center; gap:12px; } #s_edit .sh-av { width:40px; height:40px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:500; }
+    #s_edit .sh-close { width:30px; height:30px; border-radius:8px; background:var(--icon-bg); border:none; color:var(--text-dim); font-size:15px; cursor:pointer; }
+    #s_edit .sh-body { flex:1; overflow-y:auto; padding:20px; }
+    #s_edit .sh-lb { font-size:12px; font-weight:500; color:var(--text-dim); margin-bottom:9px; } #s_edit .sh-fld { margin-bottom:22px; }
+    #s_edit .sh-link { display:flex; align-items:center; gap:12px; padding:13px 15px; background:var(--green-soft); border:0.5px solid rgba(46,204,113,0.25); border-radius:12px; margin-bottom:22px; }
+    #s_edit .sh-lic { width:32px; height:32px; border-radius:8px; background:rgba(46,204,113,0.2); display:flex; align-items:center; justify-content:center; color:var(--green); font-size:15px; flex-shrink:0; }
+    #s_edit .sh-lbt { font-size:12px; font-weight:500; color:var(--accent); background:none; border:none; cursor:pointer; padding:4px; }
+    #s_edit .sh-in { width:100%; padding:13px 15px; border-radius:11px; background:var(--card); border:0.5px solid var(--border); color:var(--text); font-size:15px; font-weight:500; outline:none; font-family:inherit; }
+    #s_edit .sh-chips { display:flex; flex-wrap:wrap; gap:8px; }
+    #s_edit .sh-chip { display:flex; align-items:center; gap:7px; padding:9px 14px; border-radius:10px; background:var(--card); border:0.5px solid var(--border); cursor:pointer; font-size:13px; font-weight:500; color:var(--text-dim); } #s_edit .sh-chip i { font-size:14px; } #s_edit .sh-chip.active { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); } #s_edit .sh-chip.active i { color:var(--accent); }
+    #s_edit .sh-hrs { display:flex; gap:10px; } #s_edit .sh-hc { flex:1; background:var(--card); border:0.5px solid var(--border); border-radius:11px; padding:12px 14px; } #s_edit .sh-hcl { font-size:11px; color:var(--text-dim); margin-bottom:8px; } #s_edit .sh-hst { display:flex; align-items:center; justify-content:space-between; } #s_edit .sh-hv { font-size:16px; font-weight:500; } #s_edit .sh-hv span { font-size:11px; color:var(--text-faint); font-weight:400; }
+    #s_edit .sh-rule { display:flex; align-items:center; gap:12px; padding:15px 16px; background:var(--card); border:0.5px solid var(--border); border-radius:11px; margin-bottom:10px; }
+    #s_edit .sh-rgi { width:34px; height:34px; border-radius:9px; background:var(--icon-bg); display:flex; align-items:center; justify-content:center; font-size:15px; color:var(--accent); flex-shrink:0; }
+    #s_edit .sh-rt { font-size:13px; font-weight:500; } #s_edit .sh-rd { font-size:11px; color:var(--text-dim); margin-top:1px; line-height:1.4; }
+    #s_edit .sh-dz { margin-top:8px; border-top:0.5px solid var(--border); padding-top:18px; }
+    #s_edit .sh-dr { display:flex; gap:10px; } #s_edit .sh-db { flex:1; padding:13px; border-radius:11px; background:transparent; border:0.5px solid var(--border); font-size:13px; font-weight:500; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px; } #s_edit .sh-arch { color:var(--text-dim); } #s_edit .sh-rem { color:var(--red); } #s_edit .sh-rem:hover { background:var(--red-soft); border-color:var(--red); }
+    #s_edit .sh-foot { padding:16px 20px; border-top:0.5px solid var(--border); display:flex; gap:10px; } #s_edit .sh-sec { padding:14px 20px; border-radius:11px; background:var(--card); border:0.5px solid var(--border); color:var(--text-dim); font-size:14px; font-weight:500; cursor:pointer; }
+  </style>
+  <div class="cp-grab"><span></span></div>
+  <div class="sh-head"><div class="sh-hl"><div class="sh-av">P</div><div><div style="font-size:17px; font-weight:500;">Priya Sharma</div><div style="font-size:12px; color:var(--text-dim); margin-top:1px;">Added 4 months ago</div></div></div><div style="display:flex; gap:10px;"><button class="cp-toggle" onclick="cpT(this)"><span class="cp-knob"><i class="ti ti-moon"></i></span></button><button class="sh-close"><i class="ti ti-x"></i></button></div></div>
+  <div class="sh-body">
+    <div class="sh-link"><div class="sh-lic"><i class="ti ti-link"></i></div><div style="flex:1;"><div style="font-size:13px; font-weight:500;">Access link active</div><div style="font-size:11px; color:var(--text-dim); margin-top:1px;">Last opened 2 days ago · PIN set</div></div><button class="sh-lbt">Resend</button></div>
+    <div class="sh-fld"><div class="sh-lb">Name</div><input class="sh-in" value="Priya Sharma"></div>
+    <div class="sh-fld"><div class="sh-lb">Contact</div><input class="sh-in" value="priya@email.com"></div>
+    <div class="sh-fld"><div class="sh-lb">Roles they can work</div><div class="sh-chips"><div class="sh-chip active"><i class="ti ti-glass-full"></i> Bar</div><div class="sh-chip active"><i class="ti ti-users"></i> Floor</div><div class="sh-chip"><i class="ti ti-chef-hat"></i> Kitchen</div><div class="sh-chip"><i class="ti ti-user-heart"></i> Host</div></div></div>
+    <div class="sh-fld"><div class="sh-lb">Weekly hours</div><div class="sh-hrs"><div class="sh-hc"><div class="sh-hcl">Minimum</div><div class="sh-hst"><button class="cp-mini-btn">−</button><span class="sh-hv">16<span>h</span></span><button class="cp-mini-btn">+</button></div></div><div class="sh-hc"><div class="sh-hcl">Maximum</div><div class="sh-hst"><button class="cp-mini-btn">−</button><span class="sh-hv">40<span>h</span></span><button class="cp-mini-btn">+</button></div></div></div></div>
+    <div class="sh-fld"><div class="sh-lb">Compliance &amp; role</div>
+      <div class="sh-rule"><div class="sh-rgi"><i class="ti ti-key"></i></div><div style="flex:1;"><div class="sh-rt">Key staff member</div><div class="sh-rd">Keyholder — can satisfy "require a Key member" rules</div></div><button class="cp-switch on" onclick="this.classList.toggle('on')"></button></div>
+      <div class="sh-rule" style="margin-bottom:0;"><div class="sh-rgi"><i class="ti ti-shield"></i></div><div style="flex:1;"><div class="sh-rt">Under 18</div><div class="sh-rd">Applies 5 hard scheduling constraints, always enforced</div></div><button class="cp-switch" onclick="this.classList.toggle('on')"></button></div>
+    </div>
+    <div class="sh-fld" style="margin-bottom:0;"><div class="sh-lb">Pay rate</div><div class="sh-hc" style="display:flex; align-items:center; gap:8px;"><span style="color:var(--text-dim); font-size:15px;">£</span><input value="12.20" style="background:transparent; border:none; outline:none; color:var(--text); font-size:15px; font-weight:500; width:100%; font-family:inherit;"><span style="font-size:13px; color:var(--text-dim);">/ hr</span></div></div>
+    <div class="sh-dz"><div class="sh-lb">Manage</div><div class="sh-dr"><button class="sh-db sh-arch"><i class="ti ti-archive" style="font-size:14px;"></i> Archive</button><button class="sh-db sh-rem"><i class="ti ti-trash" style="font-size:14px;"></i> Remove</button></div></div>
+  </div>
+  <div class="sh-foot"><button class="sh-sec">Cancel</button><button class="cp-primary" style="flex:1;"><i class="ti ti-check" style="font-size:15px;"></i> Save changes</button></div>
+</div></div>
+
+<!-- ========================= EXPORT (CLEAN, BRANDED) ========================= -->
+<div class="screen-wrap" style="max-width:640px;"><div class="screen-name">10 · Export — PDF / image / Excel (branded, no totals)</div>
+<div style="background:#2A2A2A; padding:24px 16px; border-radius:18px; display:flex; flex-direction:column; align-items:center; gap:14px;">
+  <div style="font-size:12px; color:#999; display:flex; align-items:center; gap:7px;"><i class="ti ti-file-type-pdf" style="font-size:14px; color:#FF4D00;"></i> PDF / image export — shift times only, no totals</div>
+  <div style="background:#FFFFFF; width:100%; max-width:620px; border-radius:6px; padding:32px 34px 26px; color:#1A1815; box-shadow:0 12px 40px rgba(0,0,0,0.35);">
+    <div style="display:flex; align-items:flex-start; justify-content:space-between; padding-bottom:16px; border-bottom:2px solid #FF4D00; margin-bottom:20px;">
+      <div style="display:flex; align-items:center; gap:9px;"><div style="width:28px; height:28px; border-radius:8px; background:#FF4D00; display:flex; align-items:center; justify-content:center; color:#fff; font-size:15px;"><i class="ti ti-calendar-bolt"></i></div><div style="font-size:17px; font-weight:600; letter-spacing:-0.5px;">crewplan<span style="color:#FF4D00;">.</span></div></div>
+      <div style="text-align:right;"><div style="font-size:15px; font-weight:600;">The Anchor</div><div style="font-size:12px; color:#78766F; margin-top:2px;">Week of 18–24 August 2025</div></div>
+    </div>
+    <table style="width:100%; border-collapse:collapse;">
+      <thead><tr>
+        <th style="text-align:left; padding:8px 4px 8px 4px; font-size:9.5px; color:#78766F; font-weight:600; text-transform:uppercase; letter-spacing:0.04em; border-bottom:1px solid #E5E3DB;">Staff</th>
+        <th style="padding:8px 4px; font-size:9.5px; color:#78766F; font-weight:600; text-transform:uppercase; border-bottom:1px solid #E5E3DB;">Mon 18</th><th style="padding:8px 4px; font-size:9.5px; color:#78766F; font-weight:600; text-transform:uppercase; border-bottom:1px solid #E5E3DB;">Tue 19</th><th style="padding:8px 4px; font-size:9.5px; color:#78766F; font-weight:600; text-transform:uppercase; border-bottom:1px solid #E5E3DB;">Wed 20</th><th style="padding:8px 4px; font-size:9.5px; color:#78766F; font-weight:600; text-transform:uppercase; border-bottom:1px solid #E5E3DB;">Thu 21</th>
+        <th style="padding:8px 4px; font-size:9.5px; color:#FF4D00; font-weight:600; text-transform:uppercase; border-bottom:1px solid #E5E3DB;">Fri 22</th><th style="padding:8px 4px; font-size:9.5px; color:#FF4D00; font-weight:600; text-transform:uppercase; border-bottom:1px solid #E5E3DB;">Sat 23</th><th style="padding:8px 4px; font-size:9.5px; color:#FF4D00; font-weight:600; text-transform:uppercase; border-bottom:1px solid #E5E3DB;">Sun 24</th>
+      </tr></thead>
+      <tbody>
+        <tr><td colspan="8" style="text-align:left; padding:11px 4px 5px; font-size:10px; font-weight:700; color:#FF4D00; text-transform:uppercase; letter-spacing:0.05em;">Bar</td></tr>
+        <tr><td style="text-align:left; padding:8px 4px; font-weight:600; font-size:11px;">Priya S.</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">18:00–23:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">14:00–22:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">12:00–20:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">17:00–00:00</td></tr>
+        <tr><td style="text-align:left; padding:8px 4px; font-weight:600; font-size:11px;">Jess O. <span style="font-size:8px; font-weight:700; color:#FF4D00; background:rgba(255,77,0,0.1); padding:1px 4px; border-radius:3px;">U18</span></td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">12:00–18:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">12:00–18:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">18:00–00:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td></tr>
+        <tr><td colspan="8" style="text-align:left; padding:11px 4px 5px; font-size:10px; font-weight:700; color:#FF4D00; text-transform:uppercase; letter-spacing:0.05em;">Floor</td></tr>
+        <tr><td style="text-align:left; padding:8px 4px; font-weight:600; font-size:11px;">Tom R.</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">14:00–22:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">14:00–22:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">14:00–22:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">18:00–00:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td></tr>
+        <tr><td style="text-align:left; padding:8px 4px; font-weight:600; font-size:11px;">Marcus B.</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td><td colspan="3" style="text-align:center; padding:8px 4px; font-size:9.5px; color:#A8A69E; font-style:italic; border-bottom:0.5px solid #F0EEE6;">On leave</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td></tr>
+        <tr><td colspan="8" style="text-align:left; padding:11px 4px 5px; font-size:10px; font-weight:700; color:#FF4D00; text-transform:uppercase; letter-spacing:0.05em;">Kitchen</td></tr>
+        <tr><td style="text-align:left; padding:8px 4px; font-weight:600; font-size:11px;">Sam W.</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">10:00–16:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">10:00–16:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">12:00–20:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">12:00–20:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; font-weight:500; border-bottom:0.5px solid #F0EEE6;">12:00–20:00</td><td style="text-align:center; padding:8px 4px; font-size:10.5px; color:#C8C6BE; border-bottom:0.5px solid #F0EEE6;">—</td></tr>
+      </tbody>
+    </table>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px; padding-top:12px; border-top:0.5px solid #E5E3DB;"><div style="font-size:9.5px; color:#A8A69E;">Generated 13 Aug 2025 · The Anchor, Southampton</div><div style="font-size:9.5px; color:#A8A69E;">Made with <strong style="color:#FF4D00; font-weight:600;">Crewplan</strong></div></div>
+  </div>
+</div></div>
+
+<div class="part-divider">
+  <h2>Part 2 · Build when ready</h2>
+  <p>Integrations and Plan &amp; billing — designed, not yet wired. Payments need a provider (Stripe); integrations are post-MVP. Deferred until you're ready.</p>
+</div>
+
+<!-- ========================= INTEGRATIONS ========================= -->
+<div class="screen-wrap"><div class="screen-name">P2 · 1 — Integrations hub</div>
+<div class="cp" id="s_int" style="min-height:680px; display:flex; flex-direction:column;">
+  <style>
+    #s_int .ig-head { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 16px; border-bottom:0.5px solid var(--border); }
+    #s_int .ig-hl { display:flex; align-items:center; gap:10px; } #s_int .ig-back { width:30px; height:30px; border-radius:8px; background:var(--icon-bg); border:none; color:var(--text-dim); font-size:15px; cursor:pointer; }
+    #s_int .ig-body { flex:1; overflow-y:auto; padding:20px; }
+    #s_int .ig-intro { font-size:13px; color:var(--text-dim); line-height:1.5; margin-bottom:22px; }
+    #s_int .ig-card { display:flex; align-items:center; gap:14px; padding:15px 16px; background:var(--card); border:0.5px solid var(--border); border-radius:13px; margin-bottom:10px; }
+    #s_int .ig-logo { width:44px; height:44px; border-radius:11px; display:flex; align-items:center; justify-content:center; font-size:21px; flex-shrink:0; font-weight:600; }
+    #s_int .l-sq { background:#000; color:#fff; } #s_int .l-xe { background:#13B5EA; color:#fff; } #s_int .l-su { background:#0070F0; color:#fff; } #s_int .l-gc { background:#EEF; color:#4285F4; } #s_int .l-qb { background:#2CA01C; color:#fff; }
+    #s_int .ig-nm { font-size:14px; font-weight:500; display:flex; align-items:center; gap:8px; } #s_int .ig-cat { font-size:10px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-faint); }
+    #s_int .ig-ds { font-size:12px; color:var(--text-dim); margin-top:2px; line-height:1.4; }
+    #s_int .ig-btn { padding:8px 15px; border-radius:9px; font-size:13px; font-weight:500; cursor:pointer; border:0.5px solid var(--border); background:transparent; color:var(--text); white-space:nowrap; }
+    #s_int .ig-soon { font-size:11px; font-weight:500; color:var(--text-faint); padding:8px 12px; border-radius:9px; background:var(--icon-bg); white-space:nowrap; }
+    #s_int .ig-notify { font-size:11px; color:var(--accent); background:none; border:none; cursor:pointer; padding:8px 4px; white-space:nowrap; }
+    #s_int .ig-req { margin-top:24px; padding:16px; border-radius:13px; border:0.5px dashed var(--border); text-align:center; } #s_int .ig-rt { font-size:12px; color:var(--text-dim); margin-bottom:10px; } #s_int .ig-rb { font-size:13px; font-weight:500; color:var(--accent); background:none; border:none; cursor:pointer; }
+  </style>
+  <div class="ig-head"><div class="ig-hl"><button class="ig-back"><i class="ti ti-arrow-left"></i></button><div style="font-size:17px; font-weight:500;">Integrations</div></div><button class="cp-toggle" onclick="cpT(this)"><span class="cp-knob"><i class="ti ti-moon"></i></span></button></div>
+  <div class="ig-body">
+    <div class="ig-intro">Connect the tools you already use. Crewplan can pull sales data to forecast how busy you'll be, and push worked hours straight to payroll.</div>
+    <div class="cp-slabel" style="margin-top:0;">Point of sale · forecast demand</div>
+    <div class="ig-card"><div class="ig-logo l-sq">□</div><div style="flex:1;"><div class="ig-nm">Square <span class="ig-cat">· EPOS</span></div><div class="ig-ds">Use past sales to suggest coverage — busier Fridays get more staff</div></div><span class="ig-soon">Coming soon</span></div>
+    <div class="ig-card"><div class="ig-logo l-su">S</div><div style="flex:1;"><div class="ig-nm">SumUp <span class="ig-cat">· EPOS</span></div><div class="ig-ds">Sync takings to inform demand-based scheduling</div></div><button class="ig-notify">Notify me</button></div>
+    <div class="cp-slabel">Payroll · push worked hours</div>
+    <div class="ig-card"><div class="ig-logo l-xe">X</div><div style="flex:1;"><div class="ig-nm">Xero <span class="ig-cat">· Payroll</span></div><div class="ig-ds">Send published rota hours to payroll — no manual re-entry</div></div><span class="ig-soon">Coming soon</span></div>
+    <div class="ig-card"><div class="ig-logo l-qb">qb</div><div style="flex:1;"><div class="ig-nm">QuickBooks <span class="ig-cat">· Payroll</span></div><div class="ig-ds">Export hours and pay estimates each pay run</div></div><button class="ig-notify">Notify me</button></div>
+    <div class="cp-slabel">Calendar</div>
+    <div class="ig-card"><div class="ig-logo l-gc"><i class="ti ti-calendar"></i></div><div style="flex:1;"><div class="ig-nm">Google Calendar</div><div class="ig-ds">Staff can sync their shifts to their own calendar</div></div><button class="ig-btn">Connect</button></div>
+    <div class="ig-req"><div class="ig-rt">Using something not listed?</div><button class="ig-rb">Request an integration →</button></div>
+  </div>
+</div></div>
+
+<!-- ========================= PLAN & BILLING ========================= -->
+<div class="screen-wrap"><div class="screen-name">P2 · 2 — Plan &amp; billing (placeholder pricing)</div>
+<div class="cp" id="s_plan" style="min-height:680px; display:flex; flex-direction:column;">
+  <style>
+    #s_plan .pl-head { display:flex; align-items:center; justify-content:space-between; padding:18px 20px 16px; border-bottom:0.5px solid var(--border); }
+    #s_plan .pl-hl { display:flex; align-items:center; gap:10px; } #s_plan .pl-back { width:30px; height:30px; border-radius:8px; background:var(--icon-bg); border:none; color:var(--text-dim); font-size:15px; cursor:pointer; }
+    #s_plan .pl-body { flex:1; overflow-y:auto; padding:20px; }
+    #s_plan .pl-cur { background:var(--accent-soft); border:0.5px solid rgba(255,77,0,0.25); border-radius:15px; padding:20px; margin-bottom:10px; }
+    #s_plan .pl-ct { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:18px; }
+    #s_plan .pl-cn { font-size:20px; font-weight:500; letter-spacing:-0.4px; display:flex; align-items:center; gap:8px; } #s_plan .pl-bg { font-size:10px; font-weight:600; letter-spacing:0.05em; color:var(--accent); background:rgba(255,77,0,0.18); padding:3px 9px; border-radius:5px; text-transform:uppercase; }
+    #s_plan .pl-pv { font-size:24px; font-weight:500; letter-spacing:-0.5px; text-align:right; } #s_plan .pl-pv span { font-size:13px; color:var(--text-dim); font-weight:400; } #s_plan .pl-rn { font-size:11px; color:var(--text-dim); margin-top:2px; text-align:right; }
+    #s_plan .pl-uh { display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; } #s_plan .pl-ul { color:var(--text-dim); } #s_plan .pl-uv { font-weight:500; }
+    #s_plan .pl-ut { height:5px; background:rgba(255,255,255,0.1); border-radius:3px; overflow:hidden; margin-bottom:12px; } #s_plan.light .pl-ut { background:rgba(0,0,0,0.08); } #s_plan .pl-uf { height:100%; background:var(--accent); border-radius:3px; } #s_plan .pl-uf.near { background:var(--amber); }
+    #s_plan .pl-tier { background:var(--card); border:0.5px solid var(--border); border-radius:13px; padding:16px; margin-bottom:10px; }
+    #s_plan .pl-tt { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; } #s_plan .pl-tn { font-size:15px; font-weight:500; } #s_plan .pl-td { font-size:12px; color:var(--text-dim); margin-top:2px; } #s_plan .pl-tp { font-size:18px; font-weight:500; letter-spacing:-0.3px; text-align:right; white-space:nowrap; } #s_plan .pl-tp span { font-size:12px; color:var(--text-dim); font-weight:400; }
+    #s_plan .pl-tf { display:flex; flex-direction:column; gap:8px; margin-bottom:14px; } #s_plan .pl-ft { display:flex; align-items:center; gap:9px; font-size:12px; color:var(--text-dim); } #s_plan .pl-ft i { color:var(--green); font-size:14px; }
+    #s_plan .pl-tb { width:100%; padding:11px; border-radius:10px; font-size:13px; font-weight:500; cursor:pointer; border:0.5px solid var(--border); background:transparent; color:var(--text); }
+    #s_plan .pl-tb.up { background:var(--accent); border-color:var(--accent); color:#fff; } #s_plan .pl-tb.cur { background:var(--icon-bg); color:var(--text-faint); cursor:default; border-color:transparent; }
+    #s_plan .pl-crow { display:flex; align-items:center; gap:12px; padding:14px 16px; background:var(--card); border:0.5px solid var(--border); border-radius:12px; margin-bottom:10px; cursor:pointer; } #s_plan .pl-ci { width:34px; height:34px; border-radius:9px; background:var(--icon-bg); display:flex; align-items:center; justify-content:center; font-size:16px; color:var(--accent); flex-shrink:0; } #s_plan .pl-cti { font-size:14px; font-weight:500; } #s_plan .pl-cs { font-size:12px; color:var(--text-dim); margin-top:1px; }
+    #s_plan .pl-cancel { text-align:center; margin-top:20px; } #s_plan .pl-cancel button { font-size:12px; color:var(--text-faint); background:none; border:none; cursor:pointer; }
+  </style>
+  <div class="pl-head"><div class="pl-hl"><button class="pl-back"><i class="ti ti-arrow-left"></i></button><div style="font-size:17px; font-weight:500;">Plan &amp; billing</div></div><button class="cp-toggle" onclick="cpT(this)"><span class="cp-knob"><i class="ti ti-moon"></i></span></button></div>
+  <div class="pl-body">
+    <div class="cp-slabel" style="margin-top:0;">Current plan</div>
+    <div class="pl-cur"><div class="pl-ct"><div><div class="pl-cn">Pro <span class="pl-bg">Active</span></div></div><div><div class="pl-pv">£29<span>/mo</span></div><div class="pl-rn">Renews 3 Sep</div></div></div>
+      <div><div class="pl-uh"><span class="pl-ul">Staff seats</span><span class="pl-uv">8 / 15</span></div><div class="pl-ut"><div class="pl-uf" style="width:53%;"></div></div></div>
+      <div><div class="pl-uh"><span class="pl-ul">Venues</span><span class="pl-uv">1 / 1</span></div><div class="pl-ut"><div class="pl-uf near" style="width:100%;"></div></div></div>
+    </div>
+    <div class="cp-slabel">Change plan</div>
+    <div class="pl-tier"><div class="pl-tt"><div><div class="pl-tn">Starter</div><div class="pl-td">For a single small venue</div></div><div class="pl-tp">£12<span>/mo</span></div></div><div class="pl-tf"><div class="pl-ft"><i class="ti ti-check"></i> Up to 8 staff</div><div class="pl-ft"><i class="ti ti-check"></i> Auto-solver rota</div><div class="pl-ft"><i class="ti ti-check"></i> Staff self-service hub</div></div><button class="pl-tb">Switch to Starter</button></div>
+    <div class="pl-tier" style="border-color:var(--accent);"><div class="pl-tt"><div><div class="pl-tn">Pro</div><div class="pl-td">Growing teams that want control</div></div><div class="pl-tp">£29<span>/mo</span></div></div><div class="pl-tf"><div class="pl-ft"><i class="ti ti-check"></i> Up to 15 staff</div><div class="pl-ft"><i class="ti ti-check"></i> Live labour cost</div><div class="pl-ft"><i class="ti ti-check"></i> Holiday &amp; leave management</div><div class="pl-ft"><i class="ti ti-check"></i> Per-role solver constraints</div></div><button class="pl-tb cur">Current plan</button></div>
+    <div class="pl-tier"><div class="pl-tt"><div><div class="pl-tn">Multi-site</div><div class="pl-td">Several venues, one account</div></div><div class="pl-tp">£69<span>/mo</span></div></div><div class="pl-tf"><div class="pl-ft"><i class="ti ti-check"></i> Unlimited staff</div><div class="pl-ft"><i class="ti ti-check"></i> Up to 5 venues</div><div class="pl-ft"><i class="ti ti-check"></i> Square &amp; Xero integrations</div><div class="pl-ft"><i class="ti ti-check"></i> Priority support</div></div><button class="pl-tb up">Upgrade</button></div>
+    <div class="cp-slabel">Billing</div>
+    <div class="pl-crow"><div class="pl-ci"><i class="ti ti-credit-card"></i></div><div style="flex:1;"><div class="pl-cti">Visa ending 4291</div><div class="pl-cs">Expires 08/28</div></div><i class="ti ti-chevron-right" style="color:var(--text-faint); font-size:15px;"></i></div>
+    <div class="pl-crow"><div class="pl-ci"><i class="ti ti-file-invoice"></i></div><div style="flex:1;"><div class="pl-cti">Invoices</div><div class="pl-cs">View and download past receipts</div></div><i class="ti ti-chevron-right" style="color:var(--text-faint); font-size:15px;"></i></div>
+    <div class="pl-cancel"><button>Cancel subscription</button></div>
+  </div>
+</div></div>
+
+<script>
+  // Shared theme toggle — flips the .light class on the nearest screen root (.cp)
+  function cpT(btn) {
+    var root = btn.closest('.cp');
+    root.classList.toggle('light');
+    var icon = btn.querySelector('.cp-knob i');
+    if (icon) icon.className = root.classList.contains('light') ? 'ti ti-sun' : 'ti ti-moon';
+  }
+</script>
+</body>
+</html>

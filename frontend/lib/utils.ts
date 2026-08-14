@@ -283,14 +283,17 @@ export function compactTimeRange(start: string, end: string): string {
   if (!s || !e) {
     return [start?.trim(), end?.trim()].filter(Boolean).join("–");
   }
-  const label = (h: number, m: number, has12: boolean) => {
-    const disp = has12 ? h : h % 12 || 12;
+  // parseClock returns 24-hour hours, so always fold back to a 12-hour display
+  // digit (13→1, 16→4, 0→12). A previous version skipped this fold on the
+  // cross-meridian branch, rendering "10:00am"/"4:00pm" as "10am–16pm".
+  const label = (h: number, m: number) => {
+    const disp = h % 12 || 12;
     return m ? `${disp}:${String(m).padStart(2, "0")}` : `${disp}`;
   };
   if (s.suffix && e.suffix && s.suffix === e.suffix) {
-    return `${label(s.h, s.m, false)}–${label(e.h, e.m, false)}${e.suffix}`;
+    return `${label(s.h, s.m)}–${label(e.h, e.m)}${e.suffix}`;
   }
-  return `${label(s.h, s.m, true)}${s.suffix}–${label(e.h, e.m, true)}${e.suffix}`;
+  return `${label(s.h, s.m)}${s.suffix}–${label(e.h, e.m)}${e.suffix}`;
 }
 
 function pad(n: number): string {
