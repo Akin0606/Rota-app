@@ -196,6 +196,9 @@ class StaffCreateRequest(BaseModel):
     phone: Optional[str] = None
     role: str = Field(min_length=1)
     is_under_18: bool = False
+    # Additional roles this person can work, beyond their primary `role`. The
+    # primary role is always folded in server-side, so eligibility ⊇ primary.
+    role_ids: list[str] = []
 
 
 class StaffManagerOut(BaseModel):
@@ -211,6 +214,32 @@ class StaffManagerOut(BaseModel):
     working_days_per_week: float = 5
     # None means "prorate the venue's full-time figure by working_days_per_week".
     annual_leave_days: Optional[float] = None
+    # Every role this person is eligible to work (the staff_roles M2M). The
+    # single `role` above is still their primary/display role; this is the
+    # superset used by the "who can work this role" and multi-role controls.
+    role_ids: list[str] = []
+
+
+class RoleOut(BaseModel):
+    id: str
+    name: str
+    icon: str
+    sort_order: int = 0
+    # Staff eligible to work this role (staff_roles membership).
+    staff_ids: list[str] = []
+
+
+class RoleCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=40)
+    icon: str = "users"
+    staff_ids: list[str] = []
+
+
+class RoleUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=40)
+    icon: Optional[str] = None
+    # None = leave membership unchanged; [] = clear all members.
+    staff_ids: Optional[list[str]] = None
 
 
 class ActivityOut(BaseModel):
@@ -233,6 +262,9 @@ class StaffUpdateRequest(BaseModel):
     # Explicitly nullable: clearing it returns this person to the pro-rata
     # calculation rather than pinning whatever number was there before.
     annual_leave_days: Optional[float] = Field(default=None, ge=0, le=366)
+    # None = leave eligible-role membership unchanged. A list replaces it (the
+    # primary role is always folded back in server-side).
+    role_ids: Optional[list[str]] = None
 
 
 class RemindRequest(BaseModel):

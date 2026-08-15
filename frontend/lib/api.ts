@@ -496,6 +496,19 @@ export type StaffManager = {
   working_days_per_week: number;
   // null means "prorate the venue's full-time figure by working_days_per_week".
   annual_leave_days: number | null;
+  // Every role this person is eligible to work (staff_roles M2M). `role` above
+  // is still the primary/display role.
+  role_ids: string[];
+};
+
+// A venue-configurable role (migration 022). `staff_ids` is the "who can work
+// this role" membership.
+export type Role = {
+  id: string;
+  name: string;
+  icon: string;
+  sort_order: number;
+  staff_ids: string[];
 };
 
 export type Activity = {
@@ -570,11 +583,43 @@ export function createStaff(staff: {
   phone?: string | null;
   role: string;
   is_under_18?: boolean;
+  role_ids?: string[];
 }): Promise<StaffManager> {
   return authedRequest(`/api/staff`, {
     method: "POST",
     body: JSON.stringify(staff),
   });
+}
+
+// --- Roles (venue-configurable, migration 022) ------------------------------
+
+export function listRoles(): Promise<Role[]> {
+  return authedRequest(`/api/roles`);
+}
+
+export function createRole(role: {
+  name: string;
+  icon: string;
+  staff_ids: string[];
+}): Promise<Role> {
+  return authedRequest(`/api/roles`, {
+    method: "POST",
+    body: JSON.stringify(role),
+  });
+}
+
+export function updateRole(
+  id: string,
+  role: Partial<{ name: string; icon: string; staff_ids: string[] }>,
+): Promise<Role> {
+  return authedRequest(`/api/roles/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(role),
+  });
+}
+
+export function deleteRole(id: string): Promise<void> {
+  return authedRequest(`/api/roles/${id}`, { method: "DELETE" });
 }
 
 export function listPeriods(): Promise<Period[]> {
@@ -700,6 +745,7 @@ export function updateStaff(
     is_under_18: boolean;
     working_days_per_week: number;
     annual_leave_days: number | null;
+    role_ids: string[];
   }>,
 ): Promise<StaffManager> {
   return authedRequest(`/api/staff/${id}`, {

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import ManagerIcon, { type ManagerIconName } from "@/components/manager/icon";
+import RoleSheet from "@/components/manager/role-sheet";
 import LoadingScreen from "@/components/loading-screen";
 import Modal from "@/components/modal";
 import StatusBanner from "@/components/status-banner";
@@ -12,8 +13,10 @@ import Toast from "@/components/toast";
 import {
   ApiError,
   Period,
+  Role,
   SchedulingRules,
   Shift,
+  StaffManager,
   Venue,
   VenueLeaveSettings,
   createShift,
@@ -22,6 +25,7 @@ import {
   getVenue,
   getVenueLeaveSettings,
   listPeriods,
+  listRoles,
   listShifts,
   listStaff,
   unpublishRota,
@@ -30,7 +34,7 @@ import {
   updateVenue,
   updateVenueLeaveSettings,
 } from "@/lib/api";
-import { END_TIMES, SHIFT_COLORS, START_TIMES, STAFF_ROLES } from "@/lib/constants";
+import { END_TIMES, SHIFT_COLORS, START_TIMES } from "@/lib/constants";
 import { DAY_NAMES, formatWeekRange } from "@/lib/utils";
 
 const MONTH_NAMES = [
@@ -57,7 +61,13 @@ export default function SettingsPage() {
     }
   }
   const [periods, setPeriods] = useState<Period[]>([]);
+  const [staff, setStaff] = useState<StaffManager[]>([]);
   const [staffCount, setStaffCount] = useState<number | null>(null);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [roleSheet, setRoleSheet] = useState<{ open: boolean; role: Role | null }>({
+    open: false,
+    role: null,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -75,12 +85,13 @@ export default function SettingsPage() {
       setLoading(true);
       setError(false);
       try {
-        const [venueRes, shiftsRes, rulesRes, periodsRes, staffRes] = await Promise.all([
+        const [venueRes, shiftsRes, rulesRes, periodsRes, staffRes, rolesRes] = await Promise.all([
           getVenue(),
           listShifts(),
           getRules(),
           listPeriods(),
           listStaff().catch(() => []),
+          listRoles().catch(() => []),
         ]);
         if (cancelled) return;
         setVenue(venueRes);
@@ -88,7 +99,9 @@ export default function SettingsPage() {
         setShifts(shiftsRes);
         setRules(rulesRes);
         setPeriods(periodsRes);
+        setStaff(staffRes.filter((m) => m.is_active));
         setStaffCount(staffRes.filter((m) => m.is_active).length);
+        setRoles(rolesRes);
       } catch {
         if (!cancelled) setError(true);
       } finally {
@@ -257,17 +270,29 @@ export default function SettingsPage() {
         <div className="rounded-panel border border-hairline bg-surface-card p-6">
           <div className="mb-1 text-base font-bold text-ink">Roles &amp; stations</div>
           <div className="mb-4 text-[13px] text-ink-faint">
-            What staff can be assigned to. Fixed for now — role management is on the roadmap.
+            What staff can be assigned to. Tap a role to edit who works it, or add a new one.
           </div>
           <div className="flex flex-wrap gap-2">
-            {STAFF_ROLES.map((r) => (
-              <div
-                key={r}
-                className="rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3.5 py-2 text-[13px] font-medium text-ink-muted"
+            {roles.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => setRoleSheet({ open: true, role: r })}
+                className="flex items-center gap-2 rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle py-2 pl-2.5 pr-3.5 text-[13px] font-medium text-ink-muted transition-colors hover:border-accent/40 hover:text-ink"
               >
-                {r}
-              </div>
+                <ManagerIcon name={r.icon as ManagerIconName} size={15} className="text-accent" />
+                {r.name}
+                {r.staff_ids.length > 0 && (
+                  <span className="text-[11px] text-ink-faint">· {r.staff_ids.length}</span>
+                )}
+              </button>
             ))}
+            <button
+              onClick={() => setRoleSheet({ open: true, role: null })}
+              className="flex items-center gap-1.5 rounded-cp-control border-[0.5px] border-dashed border-hairline bg-transparent px-3.5 py-2 text-[13px] font-medium text-accent"
+            >
+              <ManagerIcon name="plus" size={14} />
+              Add role
+            </button>
           </div>
         </div>
 
@@ -545,6 +570,27 @@ export default function SettingsPage() {
           </button>
         </div>
       </Modal>
+
+      <RoleSheet
+        open={roleSheet.open}
+        role={roleSheet.role}
+        staff={staff}
+        onClose={() => setRoleSheet({ open: false, role: null })}
+        onSaved={(saved) => {
+          setRoles((prev) => {
+            const exists = prev.some((r) => r.id === saved.id);
+            return exists
+              ? prev.map((r) => (r.id === saved.id ? saved : r))
+              : [...prev, saved];
+          });
+          showToast(roleSheet.role ? "Role updated" : `“${saved.name}” added`);
+        }}
+        onDeleted={(id) => {
+          setRoles((prev) => prev.filter((r) => r.id !== id));
+          showToast("Role deleted");
+        }}
+        onError={showToast}
+      />
 
       <Toast message={toast} />
     </div>

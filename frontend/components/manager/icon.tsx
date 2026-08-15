@@ -41,7 +41,11 @@ export type ManagerIconName =
   | "coins"
   | "star"
   | "plug"
-  | "building";
+  | "building"
+  | "glass"
+  | "chef-hat"
+  | "user"
+  | "broom";
 
 const PATHS: Record<ManagerIconName, string[]> = {
   moon: ["M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"],
@@ -185,6 +189,26 @@ const PATHS: Record<ManagerIconName, string[]> = {
     "M14 16l1 0",
     "M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16",
   ],
+  glass: [
+    "M8 21l8 0",
+    "M12 15l0 6",
+    "M6 4l1.5 11a2 2 0 0 0 2 1.75h5a2 2 0 0 0 2 -1.75l1.5 -11",
+    "M5 4l14 0",
+  ],
+  "chef-hat": [
+    "M12 3c1.918 0 3.52 1.35 3.91 3.151a4 4 0 0 1 2.09 7.723v6.126a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2v-6.126a4 4 0 0 1 2.09 -7.723a4 4 0 0 1 3.91 -3.151z",
+    "M6.161 17.009l11.839 -.009",
+  ],
+  user: [
+    "M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0",
+    "M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2",
+  ],
+  broom: [
+    "M12 3l3 3",
+    "M9.5 6.5l8 8",
+    "M14 10l-8.5 8.5a2.12 2.12 0 0 1 -3 -3l8.5 -8.5",
+    "M5 18l4 4",
+  ],
 };
 
 type IconProps = {
@@ -195,6 +219,10 @@ type IconProps = {
 };
 
 export default function ManagerIcon({ name, size = 20, strokeWidth = 1.75, className }: IconProps) {
+  // Role icons come from the DB as free strings (cast to ManagerIconName at the
+  // call site), so an unknown name is possible — fall back to `users` rather
+  // than crashing the render on `undefined.map`.
+  const paths = PATHS[name] ?? PATHS.users;
   return (
     <svg
       viewBox="0 0 24 24"
@@ -210,7 +238,7 @@ export default function ManagerIcon({ name, size = 20, strokeWidth = 1.75, class
       className={className}
       style={{ flexShrink: 0 }}
     >
-      {PATHS[name].map((d) => (
+      {paths.map((d) => (
         <path key={d} d={d} />
       ))}
     </svg>

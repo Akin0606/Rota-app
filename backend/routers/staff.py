@@ -34,6 +34,60 @@ def _get_staff_or_404(venue_id: str, staff_id: str) -> dict:
     return res.data[0]
 
 
+def _primary_role_id(venue_id: str, role_name: str) -> Optional[str]:
+    supabase = get_supabase()
+    res = (
+        supabase.table("roles")
+        .select("id")
+        .eq("venue_id", venue_id)
+        .eq("name", role_name)
+        .limit(1)
+        .execute()
+    )
+    return res.data[0]["id"] if res.data else None
+
+
+def _sync_staff_roles(
+    venue_id: str,
+    staff_id: str,
+    primary_role_name: str,
+    role_ids: Optional[list[str]],
+) -> None:
+    """Keep the staff_roles M2M in step with a member's primary role and any
+    explicit extra roles. Primary is always folded in so eligibility ⊇ primary.
+    role_ids=None on update means "leave membership alone" (handled by caller);
+    this is only invoked when membership should be (re)written."""
+    supabase = get_supabase()
+    wanted: set[str] = set(role_ids or [])
+    primary_id = _primary_role_id(venue_id, primary_role_name)
+    if primary_id:
+        wanted.add(primary_id)
+    # Only keep ids that are real roles of this venue.
+    if wanted:
+        valid = (
+            supabase.table("roles")
+            .select("id")
+            .eq("venue_id", venue_id)
+            .in_("id", list(wanted))
+            .execute()
+            .data
+        )
+        wanted = {r["id"] for r in valid}
+    supabase.table("staff_roles").delete().eq("staff_id", staff_id).execute()
+    if wanted:
+        supabase.table("staff_roles").insert(
+            [{"staff_id": staff_id, "role_id": rid} for rid in wanted]
+        ).execute()
+
+
+def _read_role_ids(staff_id: str) -> list[str]:
+    supabase = get_supabase()
+    rows = (
+        supabase.table("staff_roles").select("role_id").eq("staff_id", staff_id).execute().data
+    )
+    return [r["role_id"] for r in rows]
+
+
 def _generate_unique_pin(venue_id: str) -> str:
     supabase = get_supabase()
     for _ in range(10):
@@ -78,8 +132,22 @@ def list_staff(
         )
         submitted_staff_ids = {s["staff_id"] for s in subs}
 
+    # Eligible-role membership (staff_roles) for every member, in one query.
+    role_ids_by_staff: dict[str, list[str]] = {}
+    if staff:
+        sr = (
+            supabase.table("staff_roles")
+            .select("staff_id, role_id")
+            .in_("staff_id", [m["id"] for m in staff])
+            .execute()
+            .data
+        )
+        for row in sr:
+            role_ids_by_staff.setdefault(row["staff_id"], []).append(row["role_id"])
+
     for member in staff:
         member["submitted"] = member["id"] in submitted_staff_ids if period_id else None
+        member["role_ids"] = role_ids_by_staff.get(member["id"], [])
 
     return staff
 
@@ -117,6 +185,8 @@ def create_staff(payload: StaffCreateRequest, manager: dict = Depends(get_curren
         }
     ).execute()
 
+    _sync_staff_roles(venue["id"], staff["id"], payload.role, payload.role_ids)
+
     if staff.get("email"):
         email_service.send_staff_welcome_email(
             to_email=staff["email"],
@@ -127,6 +197,7 @@ def create_staff(payload: StaffCreateRequest, manager: dict = Depends(get_curren
         )
 
     staff["submitted"] = None
+    staff["role_ids"] = _read_role_ids(staff["id"])
     return staff
 
 
@@ -137,21 +208,38 @@ def update_staff(
     manager: dict = Depends(get_current_manager),
 ):
     venue = get_manager_venue(manager["id"])
-    _get_staff_or_404(venue["id"], staff_id)
+    existing = _get_staff_or_404(venue["id"], staff_id)
     supabase = get_supabase()
 
     updates = {k: v for k, v in payload.model_dump(exclude_unset=True).items()}
-    if not updates:
-        return _get_staff_or_404(venue["id"], staff_id) | {"submitted": None}
+    # role_ids lives in the staff_roles join, not on staff_members — pull it out
+    # of the column update so it never reaches the table write.
+    role_ids_provided = "role_ids" in updates
+    role_ids = updates.pop("role_ids", None)
 
-    staff = (
-        supabase.table("staff_members")
-        .update(updates)
-        .eq("id", staff_id)
-        .execute()
-        .data[0]
-    )
+    staff = existing
+    if updates:
+        staff = (
+            supabase.table("staff_members")
+            .update(updates)
+            .eq("id", staff_id)
+            .execute()
+            .data[0]
+        )
+
+    primary_role = updates.get("role", existing["role"])
+    if role_ids_provided:
+        # Explicit membership replaces whatever was there (primary folded in).
+        _sync_staff_roles(venue["id"], staff_id, primary_role, role_ids)
+    elif "role" in updates:
+        # Primary role changed with no explicit list: add the new primary to
+        # the existing eligible set rather than wiping the extras.
+        _sync_staff_roles(
+            venue["id"], staff_id, primary_role, _read_role_ids(staff_id)
+        )
+
     staff["submitted"] = None
+    staff["role_ids"] = _read_role_ids(staff_id)
     return staff
 
 

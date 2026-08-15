@@ -11,6 +11,7 @@ import Toast from "@/components/toast";
 import {
   ApiError,
   Period,
+  Role,
   StaffManager,
   Venue,
   VenueLeaveSettings,
@@ -19,14 +20,13 @@ import {
   getVenue,
   getVenueLeaveSettings,
   listPeriods,
+  listRoles,
   listStaff,
   remindStaff,
   resetStaffPin,
   updateStaff,
 } from "@/lib/api";
-import { STAFF_ROLES } from "@/lib/constants";
-
-const ROLES = STAFF_ROLES;
+import type { ManagerIconName } from "@/components/manager/icon";
 
 function initials(name: string): string {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -37,6 +37,9 @@ type FormState = {
   email: string;
   phone: string;
   role: string;
+  // Additional roles this person can also work, beyond `role` (their primary).
+  // Holds role ids; the primary is folded in server-side on save.
+  roleIds: string[];
   isUnder18: boolean;
   // Leave fields are edit-only: a new starter gets the venue defaults, and
   // asking for a holiday entitlement while adding someone to a rota is noise.
@@ -57,6 +60,7 @@ const EMPTY_FORM: FormState = {
   email: "",
   phone: "",
   role: "Server",
+  roleIds: [],
   isUnder18: false,
   workingDays: "5",
   leaveDays: "",
@@ -65,6 +69,7 @@ const EMPTY_FORM: FormState = {
 export default function TeamPage() {
   const [venue, setVenue] = useState<Venue | null>(null);
   const [staff, setStaff] = useState<StaffManager[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [period, setPeriod] = useState<Period | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -99,7 +104,11 @@ export default function TeamPage() {
       setLoading(true);
       setError(false);
       try {
-        const [venueRes, periodsRes] = await Promise.all([getVenue(), listPeriods()]);
+        const [venueRes, periodsRes, rolesRes] = await Promise.all([
+          getVenue(),
+          listPeriods(),
+          listRoles().catch(() => []),
+        ]);
         if (cancelled) return;
         const current = periodsRes.find((p) => p.status === "collecting") ?? periodsRes[0] ?? null;
         const staffRes = await listStaff(current?.id);
@@ -107,6 +116,7 @@ export default function TeamPage() {
         setVenue(venueRes);
         setPeriod(current);
         setStaff(staffRes);
+        setRoles(rolesRes);
       } catch {
         if (!cancelled) setError(true);
       } finally {
@@ -130,18 +140,25 @@ export default function TeamPage() {
     showToast("Link copied!");
   }
 
+  // The role id for a given role name, so we can translate between the picker
+  // (names) and the staff_roles membership (ids).
+  const roleIdByName = (name: string) => roles.find((r) => r.name === name)?.id;
+
   function openAdd() {
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, role: roles[0]?.name ?? EMPTY_FORM.role });
     setSheetMode("add");
   }
 
   function openEdit(member: StaffManager) {
     setEditingId(member.id);
+    const primaryId = roleIdByName(member.role);
     setForm({
       name: member.name,
       email: member.email ?? "",
       phone: member.phone ?? "",
       role: member.role,
+      // "Also works" excludes the primary role — it's shown by the picker above.
+      roleIds: member.role_ids.filter((id) => id !== primaryId),
       isUnder18: member.is_under_18,
       workingDays: String(member.working_days_per_week ?? 5),
       // Blank means "use the pro-rata figure" rather than a stored zero.
@@ -171,6 +188,7 @@ export default function TeamPage() {
           phone: form.phone.trim() || null,
           role: form.role,
           is_under_18: form.isUnder18,
+          role_ids: form.roleIds,
         });
         setStaff((prev) => [...prev, created]);
         showToast(`${created.name.split(" ")[0]} added — PIN ${created.pin}`);
@@ -187,6 +205,7 @@ export default function TeamPage() {
           // Explicitly null when blank, which returns them to the pro-rata
           // calculation instead of freezing whatever was there.
           annual_leave_days: form.leaveDays.trim() === "" ? null : Number(form.leaveDays),
+          role_ids: form.roleIds,
         });
         setStaff((prev) => prev.map((m) => (m.id === editingId ? { ...m, ...updated } : m)));
         showToast(`${updated.name.split(" ")[0]} updated`);
@@ -437,23 +456,67 @@ export default function TeamPage() {
           </div>
         </div>
         <div className="mb-5">
-          <div className="mb-2 text-xs font-medium text-ink-muted">Role</div>
+          <div className="mb-2 text-xs font-medium text-ink-muted">Primary role</div>
           <div className="flex flex-wrap gap-2">
-            {ROLES.map((r) => (
+            {roles.map((r) => (
               <button
-                key={r}
-                onClick={() => setForm((f) => ({ ...f, role: r }))}
-                className={`rounded-cp-control border-[0.5px] px-3.5 py-2.5 text-[13px] font-medium ${
-                  form.role === r
+                key={r.id}
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    role: r.name,
+                    // Drop the new primary from "also works" — it's shown above.
+                    roleIds: f.roleIds.filter((id) => id !== r.id),
+                  }))
+                }
+                className={`flex items-center gap-1.5 rounded-cp-control border-[0.5px] px-3.5 py-2.5 text-[13px] font-medium ${
+                  form.role === r.name
                     ? "border-accent bg-accent-light text-accent"
                     : "border-hairline bg-surface-subtle text-ink-muted"
                 }`}
               >
-                {r}
+                <ManagerIcon name={r.icon as ManagerIconName} size={14} />
+                {r.name}
               </button>
             ))}
           </div>
         </div>
+
+        {roles.filter((r) => r.name !== form.role).length > 0 && (
+          <div className="mb-5">
+            <div className="mb-2 text-xs font-medium text-ink-muted">
+              Also works <span className="font-normal text-ink-faint">· optional</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {roles
+                .filter((r) => r.name !== form.role)
+                .map((r) => {
+                  const on = form.roleIds.includes(r.id);
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          roleIds: on
+                            ? f.roleIds.filter((id) => id !== r.id)
+                            : [...f.roleIds, r.id],
+                        }))
+                      }
+                      className={`flex items-center gap-1.5 rounded-cp-control border-[0.5px] px-3.5 py-2.5 text-[13px] font-medium ${
+                        on
+                          ? "border-accent bg-accent-light text-accent"
+                          : "border-hairline bg-surface-subtle text-ink-muted"
+                      }`}
+                    >
+                      <ManagerIcon name={r.icon as ManagerIconName} size={14} />
+                      {r.name}
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        )}
 
         <div className="mb-5 flex items-center gap-3 rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3.5 py-3.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cp-icon text-accent">
