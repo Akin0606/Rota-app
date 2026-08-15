@@ -38,9 +38,13 @@ router = APIRouter(prefix="/api/rota", tags=["rota"])
 VALID_ORIENTATIONS = ("staff-rows", "day-rows")
 
 
-def _gather_export_data(venue_id: str, period_id: str) -> tuple[list[dict], list[dict], list[dict]]:
-    """Shifts (by sort_order), active staff (by name), and assignments for a
-    period — the shared input for PDF/Excel export and the rota emails."""
+def _gather_export_data(
+    venue_id: str, period_id: str, week_start: str
+) -> tuple[list[dict], list[dict], list[dict], dict[str, set[int]]]:
+    """Shifts (by sort_order), active staff (by name, with role + under-18 for
+    the export's role grouping and U18 tag), assignments, and the same
+    leave-blocked-days map the rota matrix uses — the shared input for
+    PDF/Excel export, the on-screen Image view, and the rota emails."""
     supabase = get_supabase()
     shifts = sorted(
         supabase.table("shifts").select("*").eq("venue_id", venue_id).execute().data,
@@ -48,7 +52,7 @@ def _gather_export_data(venue_id: str, period_id: str) -> tuple[list[dict], list
     )
     staff = sorted(
         supabase.table("staff_members")
-        .select("id, name, email")
+        .select("id, name, email, role, is_under_18")
         .eq("venue_id", venue_id)
         .eq("is_active", True)
         .execute()
@@ -62,7 +66,8 @@ def _gather_export_data(venue_id: str, period_id: str) -> tuple[list[dict], list
         .execute()
         .data
     )
-    return shifts, staff, assignments
+    leave_days = leave.blocked_days_for_week(supabase, venue_id, week_start)
+    return shifts, staff, assignments, leave_days
 
 
 def _get_period_or_404(venue_id: str, period_id: str) -> dict:
@@ -1329,13 +1334,16 @@ def export_pdf(
 ):
     venue = get_manager_venue(manager["id"])
     period = _get_period_or_404(venue["id"], period_id)
-    shifts, staff, assignments = _gather_export_data(venue["id"], period_id)
+    shifts, staff, assignments, leave_days = _gather_export_data(
+        venue["id"], period_id, str(period["week_start"])
+    )
     pdf = rota_export.build_rota_pdf(
         venue_name=venue["name"],
         week_start=date.fromisoformat(str(period["week_start"])),
         shifts=shifts,
         staff=staff,
         assignments=assignments,
+        leave=leave_days,
         orientation=_normalise_orientation(orientation),
     )
     filename = _export_filename(venue, period, "pdf")
@@ -1354,13 +1362,16 @@ def export_xlsx(
 ):
     venue = get_manager_venue(manager["id"])
     period = _get_period_or_404(venue["id"], period_id)
-    shifts, staff, assignments = _gather_export_data(venue["id"], period_id)
+    shifts, staff, assignments, leave_days = _gather_export_data(
+        venue["id"], period_id, str(period["week_start"])
+    )
     xlsx = rota_export.build_rota_xlsx(
         venue_name=venue["name"],
         week_start=date.fromisoformat(str(period["week_start"])),
         shifts=shifts,
         staff=staff,
         assignments=assignments,
+        leave=leave_days,
         orientation=_normalise_orientation(orientation),
     )
     filename = _export_filename(venue, period, "xlsx")
@@ -1384,7 +1395,9 @@ def email_rota(
     period = _get_period_or_404(venue["id"], period_id)
     settings = get_settings()
 
-    shifts, staff, assignments = _gather_export_data(venue["id"], period_id)
+    shifts, staff, assignments, leave_days = _gather_export_data(
+        venue["id"], period_id, str(period["week_start"])
+    )
     orientation = _normalise_orientation(payload.orientation)
     week_start = date.fromisoformat(str(period["week_start"]))
     pdf = rota_export.build_rota_pdf(
@@ -1393,6 +1406,7 @@ def email_rota(
         shifts=shifts,
         staff=staff,
         assignments=assignments,
+        leave=leave_days,
         orientation=orientation,
     )
     attachment = email_service.pdf_attachment(_export_filename(venue, period, "pdf"), pdf)

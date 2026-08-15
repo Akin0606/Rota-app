@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 
+import BottomSheet from "@/components/manager/bottom-sheet";
+import ManagerIcon from "@/components/manager/icon";
+import Switch from "@/components/manager/switch";
 import LoadingScreen from "@/components/loading-screen";
 import Modal from "@/components/modal";
 import Toast from "@/components/toast";
@@ -12,6 +15,7 @@ import {
   Venue,
   VenueLeaveSettings,
   createStaff,
+  deleteStaff,
   getVenue,
   getVenueLeaveSettings,
   listPeriods,
@@ -67,13 +71,14 @@ export default function TeamPage() {
   const [reloadToken, setReloadToken] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
-  const [modalMode, setModalMode] = useState<"add" | "edit" | null>(null);
+  const [sheetMode, setSheetMode] = useState<"add" | "edit" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<StaffManager | null>(null);
+  const [removing, setRemoving] = useState(false);
   const [pendingOnly, setPendingOnly] = useState(false);
-  // Only needed for the pro-rata placeholder in the edit modal, so a failure
+  // Only needed for the pro-rata placeholder in the edit sheet, so a failure
   // here just falls back to the statutory 28.
   const [leaveSettings, setLeaveSettings] = useState<VenueLeaveSettings | null>(null);
 
@@ -127,7 +132,7 @@ export default function TeamPage() {
 
   function openAdd() {
     setForm(EMPTY_FORM);
-    setModalMode("add");
+    setSheetMode("add");
   }
 
   function openEdit(member: StaffManager) {
@@ -142,13 +147,15 @@ export default function TeamPage() {
       // Blank means "use the pro-rata figure" rather than a stored zero.
       leaveDays: member.annual_leave_days === null ? "" : String(member.annual_leave_days),
     });
-    setModalMode("edit");
+    setSheetMode("edit");
   }
 
-  function closeModal() {
-    setModalMode(null);
+  function closeSheet() {
+    setSheetMode(null);
     setEditingId(null);
   }
+
+  const editingMember = editingId ? staff.find((m) => m.id === editingId) ?? null : null;
 
   async function handleSave() {
     if (!form.name.trim()) {
@@ -157,7 +164,7 @@ export default function TeamPage() {
     }
     setSaving(true);
     try {
-      if (modalMode === "add") {
+      if (sheetMode === "add") {
         const created = await createStaff({
           name: form.name.trim(),
           email: form.email.trim() || null,
@@ -167,7 +174,7 @@ export default function TeamPage() {
         });
         setStaff((prev) => [...prev, created]);
         showToast(`${created.name.split(" ")[0]} added — PIN ${created.pin}`);
-      } else if (modalMode === "edit" && editingId) {
+      } else if (sheetMode === "edit" && editingId) {
         const workingDays = Number(form.workingDays);
         const updated = await updateStaff(editingId, {
           name: form.name.trim(),
@@ -184,7 +191,7 @@ export default function TeamPage() {
         setStaff((prev) => prev.map((m) => (m.id === editingId ? { ...m, ...updated } : m)));
         showToast(`${updated.name.split(" ")[0]} updated`);
       }
-      closeModal();
+      closeSheet();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Something went wrong");
     } finally {
@@ -196,6 +203,7 @@ export default function TeamPage() {
     try {
       const updated = await updateStaff(member.id, { is_active: !member.is_active });
       setStaff((prev) => prev.map((m) => (m.id === member.id ? { ...m, ...updated } : m)));
+      showToast(updated.is_active ? `${updated.name.split(" ")[0]} reactivated` : `${updated.name.split(" ")[0]} archived`);
     } catch {
       showToast("Could not update status");
     }
@@ -226,6 +234,22 @@ export default function TeamPage() {
     }
   }
 
+  async function handleRemove() {
+    if (!removeTarget) return;
+    setRemoving(true);
+    try {
+      await deleteStaff(removeTarget.id);
+      setStaff((prev) => prev.filter((m) => m.id !== removeTarget.id));
+      showToast(`${removeTarget.name.split(" ")[0]} removed`);
+      setRemoveTarget(null);
+      closeSheet();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not remove this person");
+    } finally {
+      setRemoving(false);
+    }
+  }
+
   if (loading) {
     return <LoadingScreen base="Loading your team…" />;
   }
@@ -251,19 +275,24 @@ export default function TeamPage() {
         <div className="flex flex-wrap gap-2.5">
           <button
             onClick={copyLink}
-            className="rounded-[10px] border border-accent-border bg-surface-card px-4 py-2.5 text-sm font-medium text-accent"
+            className="flex items-center gap-1.5 rounded-cp-control border-[0.5px] border-hairline bg-surface-card px-3.5 py-2.5 text-[13px] font-medium text-ink-muted"
           >
+            <ManagerIcon name="link" size={14} />
             Copy team link
           </button>
-          <button onClick={openAdd} className="rounded-[10px] bg-accent px-4 py-2.5 text-sm font-semibold text-white">
-            + Add team member
+          <button
+            onClick={openAdd}
+            className="flex items-center gap-1.5 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-semibold text-white"
+          >
+            <ManagerIcon name="plus" size={14} />
+            Add team member
           </button>
         </div>
       </div>
 
       {pendingOnly && (
         <div className="mb-4 flex items-center gap-2 text-[13px] text-ink-muted">
-          <span className="rounded-full bg-warn-bg px-2.5 py-1 text-[11px] font-semibold text-warn-text">
+          <span className="rounded-full bg-cp-amber-soft px-2.5 py-1 text-[11px] font-semibold text-cp-amber">
             Showing pending
           </span>
           <button onClick={() => setPendingOnly(false)} className="font-semibold text-accent">
@@ -291,147 +320,133 @@ export default function TeamPage() {
           );
         }
         return (
-          <div className="flex flex-col gap-2.5">
-            {visible.map((member) => {
-              const expanded = expandedId === member.id;
-              return (
-                <div
-                  key={member.id}
-                  className={`overflow-hidden rounded-panel border bg-surface-card ${
-                    expanded ? "border-accent-border" : "border-hairline"
-                  } ${member.is_active ? "" : "opacity-60"}`}
-                >
-                  <button
-                    onClick={() => setExpandedId(expanded ? null : member.id)}
-                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
-                  >
-                    <div
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-xs font-bold ${
-                        member.is_active ? "bg-accent-border text-accent" : "bg-surface-page text-ink-faint"
-                      }`}
-                    >
-                      {initials(member.name)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-ink">{member.name}</div>
-                      <div className="flex items-center gap-1.5 text-xs text-ink-faint">
-                        {member.role}
-                        {member.is_under_18 && (
-                          <span className="rounded-full bg-warn-bg px-1.5 py-0.5 text-[10px] font-semibold text-warn-text">
-                            Under 18
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {member.submitted !== null && member.is_active && (
-                      <span
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                          member.submitted ? "bg-avail-bg text-avail-text" : "bg-warn-bg text-warn-text"
-                        }`}
-                      >
-                        {member.submitted ? "Submitted" : "Pending"}
-                      </span>
-                    )}
-                    {!member.is_active && (
-                      <span className="shrink-0 rounded-full bg-surface-page px-2.5 py-1 text-[11px] font-semibold text-ink-faint">
-                        Inactive
-                      </span>
-                    )}
-                    <span
-                      className={`shrink-0 text-ink-faint transition-transform ${expanded ? "rotate-180" : ""}`}
-                    >
-                      ⌄
-                    </span>
-                  </button>
-
-                  {expanded && (
-                    <div className="border-t border-surface-page px-4 py-3.5">
-                      <div className="mb-3 flex flex-wrap gap-x-6 gap-y-1.5 text-[13px]">
-                        <div>
-                          <span className="text-ink-faint">Email </span>
-                          <span className="text-ink-label">{member.email || "—"}</span>
-                        </div>
-                        <div>
-                          <span className="text-ink-faint">PIN </span>
-                          <span className="font-bold tracking-wide text-ink-label">{member.pin}</span>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {member.is_active ? (
-                          <>
-                            <button
-                              onClick={() => openEdit(member)}
-                              className="rounded-lg bg-surface-subtle px-3.5 py-2 text-xs font-medium text-accent"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleResetPin(member)}
-                              className="rounded-lg bg-surface-subtle px-3.5 py-2 text-xs font-medium text-ink-muted"
-                            >
-                              Reset PIN
-                            </button>
-                            <button
-                              onClick={() => handleRemind(member)}
-                              className="rounded-lg bg-surface-subtle px-3.5 py-2 text-xs font-medium text-ink-muted"
-                            >
-                              Remind
-                            </button>
-                            <button
-                              onClick={() => toggleActive(member)}
-                              className="rounded-lg bg-surface-subtle px-3.5 py-2 text-xs font-medium text-unavail-text"
-                            >
-                              Deactivate
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            onClick={() => toggleActive(member)}
-                            className="rounded-lg bg-surface-subtle px-3.5 py-2 text-xs font-medium text-accent"
-                          >
-                            Reactivate
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
+          <div className="overflow-hidden rounded-panel border border-hairline bg-surface-card">
+            {visible.map((member) => (
+              <button
+                key={member.id}
+                onClick={() => openEdit(member)}
+                className={`flex w-full items-center gap-3 border-b border-hairline px-4 py-3.5 text-left last:border-0 ${
+                  member.is_active ? "" : "opacity-55"
+                }`}
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-light text-xs font-medium text-accent">
+                  {initials(member.name)}
                 </div>
-              );
-            })}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-ink">{member.name}</div>
+                  <div className="flex items-center gap-1.5 text-xs text-ink-faint">
+                    {member.role}
+                    {member.is_under_18 && (
+                      <span className="rounded-[5px] bg-accent-light px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+                        U18
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {!member.is_active ? (
+                  <span className="shrink-0 rounded-full bg-surface-subtle px-2.5 py-1 text-[11px] font-medium text-ink-faint">
+                    Archived
+                  </span>
+                ) : member.submitted !== null ? (
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                      member.submitted ? "bg-cp-green-soft text-cp-green" : "bg-cp-amber-soft text-cp-amber"
+                    }`}
+                  >
+                    {member.submitted ? "Submitted" : "Pending"}
+                  </span>
+                ) : null}
+                <ManagerIcon name="chevron-right" size={16} className="shrink-0 text-ink-faint" />
+              </button>
+            ))}
           </div>
         );
       })()}
 
-      <Modal open={modalMode !== null} onClose={closeModal} title={modalMode === "add" ? "Add Team Member" : "Edit Team Member"}>
-        <div className="mb-3">
-          <div className="mb-1 text-xs font-semibold text-ink-label">Full name</div>
+      <BottomSheet
+        open={sheetMode !== null}
+        onClose={closeSheet}
+        title={sheetMode === "edit" ? editingMember?.name ?? "Edit team member" : "Add team member"}
+        subtitle={sheetMode === "edit" && editingMember ? `PIN ${editingMember.pin}` : undefined}
+        avatarLabel={sheetMode === "edit" && editingMember ? initials(editingMember.name) : undefined}
+        footer={
+          <>
+            <button
+              onClick={closeSheet}
+              className="flex-1 rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle py-3.5 text-center text-sm font-medium text-ink-muted"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
+            >
+              <ManagerIcon name="check" size={15} />
+              {saving ? "Saving…" : sheetMode === "add" ? "Add to team" : "Save changes"}
+            </button>
+          </>
+        }
+      >
+        {sheetMode === "edit" && editingMember && (
+          <div className="mb-5 flex items-center gap-3 rounded-cp-control border-[0.5px] border-hairline bg-cp-green-soft px-3.5 py-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-light text-cp-green">
+              <ManagerIcon name="link" size={15} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium text-ink">PIN {editingMember.pin}</div>
+              <div className="mt-0.5 text-xs text-ink-muted">
+                {editingMember.submitted === null
+                  ? "No open week to submit for"
+                  : editingMember.submitted
+                    ? "Submitted this week"
+                    : "Hasn't submitted this week yet"}
+              </div>
+            </div>
+            <button onClick={() => handleResetPin(editingMember)} className="shrink-0 px-1 text-xs font-medium text-accent">
+              Reset PIN
+            </button>
+            {editingMember.submitted === false && (
+              <button onClick={() => handleRemind(editingMember)} className="shrink-0 px-1 text-xs font-medium text-accent">
+                Remind
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="mb-5">
+          <div className="mb-2 text-xs font-medium text-ink-muted">Name</div>
           <input
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             placeholder="e.g. Priya Sharma"
-            className="w-full rounded-[10px] border-[1.5px] border-unset-border px-3.5 py-2.5 text-sm outline-none"
+            className="w-full rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3.5 py-3 text-[15px] font-medium text-ink outline-none"
           />
         </div>
-        <div className="mb-3">
-          <div className="mb-1 text-xs font-semibold text-ink-label">Email</div>
+        <div className="mb-5">
+          <div className="mb-2 text-xs font-medium text-ink-muted">Contact</div>
           <input
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             placeholder="email@example.com"
-            className="w-full rounded-[10px] border-[1.5px] border-unset-border px-3.5 py-2.5 text-sm outline-none"
+            className="w-full rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3.5 py-3 text-[15px] font-medium text-ink outline-none"
           />
+          <div className="mt-1.5 flex items-center gap-1.5 text-[11px] leading-[1.4] text-ink-faint">
+            <ManagerIcon name="info-circle" size={12} />
+            Used for reminder emails — everyone signs in with the shared venue link and their own PIN
+          </div>
         </div>
         <div className="mb-5">
-          <div className="mb-1 text-xs font-semibold text-ink-label">Role</div>
+          <div className="mb-2 text-xs font-medium text-ink-muted">Role</div>
           <div className="flex flex-wrap gap-2">
             {ROLES.map((r) => (
               <button
                 key={r}
                 onClick={() => setForm((f) => ({ ...f, role: r }))}
-                className={`rounded-[10px] border-2 px-3 py-2 text-xs font-semibold ${
+                className={`rounded-cp-control border-[0.5px] px-3.5 py-2.5 text-[13px] font-medium ${
                   form.role === r
                     ? "border-accent bg-accent-light text-accent"
-                    : "border-transparent bg-surface-subtle text-ink-muted"
+                    : "border-hairline bg-surface-subtle text-ink-muted"
                 }`}
               >
                 {r}
@@ -439,24 +454,28 @@ export default function TeamPage() {
             ))}
           </div>
         </div>
-        <label className="mb-5 flex items-center gap-2.5 text-sm text-ink-label">
-          <input
-            type="checkbox"
-            checked={form.isUnder18}
-            onChange={(e) => setForm((f) => ({ ...f, isUnder18: e.target.checked }))}
-            className="h-4 w-4 accent-accent"
-          />
-          This staff member is under 18
-        </label>
+
+        <div className="mb-5 flex items-center gap-3 rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3.5 py-3.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cp-icon text-accent">
+            <ManagerIcon name="shield" size={15} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-medium text-ink">Under 18</div>
+            <div className="mt-0.5 text-[11px] leading-[1.4] text-ink-muted">
+              Applies the app&apos;s under-18 rules, always enforced
+            </div>
+          </div>
+          <Switch checked={form.isUnder18} onChange={(v) => setForm((f) => ({ ...f, isUnder18: v }))} />
+        </div>
 
         {/* Edit only: a new starter takes the venue defaults, and asking about
             holiday entitlement mid-way through adding someone to a rota is
             noise. Both drive the Time off screen this person sees. */}
-        {modalMode === "edit" && (
-          <div className="mb-5 rounded-panel border border-hairline bg-surface-subtle p-3.5">
-            <div className="mb-2.5 text-xs font-semibold text-ink-label">Holiday</div>
+        {sheetMode === "edit" && (
+          <div className="mb-1 rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle p-3.5">
+            <div className="mb-2.5 text-xs font-medium text-ink-muted">Holiday</div>
             <div className="flex gap-3">
-              <label className="min-w-0 flex-1 text-xs font-semibold text-ink-faint">
+              <label className="min-w-0 flex-1 text-xs font-medium text-ink-faint">
                 Days worked per week
                 <input
                   type="number"
@@ -465,10 +484,10 @@ export default function TeamPage() {
                   step="0.5"
                   value={form.workingDays}
                   onChange={(e) => setForm((f) => ({ ...f, workingDays: e.target.value }))}
-                  className="mt-1.5 w-full rounded-[10px] border-[1.5px] border-unset-border bg-surface-card px-3 py-2 text-sm text-ink outline-none"
+                  className="mt-1.5 w-full rounded-lg border-[0.5px] border-hairline bg-surface-card px-3 py-2 text-sm text-ink outline-none"
                 />
               </label>
-              <label className="min-w-0 flex-1 text-xs font-semibold text-ink-faint">
+              <label className="min-w-0 flex-1 text-xs font-medium text-ink-faint">
                 Days per year
                 <input
                   type="number"
@@ -478,7 +497,7 @@ export default function TeamPage() {
                   value={form.leaveDays}
                   onChange={(e) => setForm((f) => ({ ...f, leaveDays: e.target.value }))}
                   placeholder={proRataPlaceholder(form.workingDays, leaveSettings?.full_time_leave_days)}
-                  className="mt-1.5 w-full rounded-[10px] border-[1.5px] border-unset-border bg-surface-card px-3 py-2 text-sm text-ink outline-none"
+                  className="mt-1.5 w-full rounded-lg border-[0.5px] border-hairline bg-surface-card px-3 py-2 text-sm text-ink outline-none"
                 />
               </label>
             </div>
@@ -489,19 +508,49 @@ export default function TeamPage() {
           </div>
         )}
 
+        {sheetMode === "edit" && editingMember && (
+          <div className="mt-5 border-t border-hairline pt-5">
+            <div className="mb-2.5 text-xs font-medium text-ink-muted">Manage</div>
+            <div className="flex gap-2.5">
+              <button
+                onClick={() => toggleActive(editingMember)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control border-[0.5px] border-hairline py-3 text-[13px] font-medium text-ink-muted"
+              >
+                <ManagerIcon name="archive" size={14} />
+                {editingMember.is_active ? "Archive" : "Reactivate"}
+              </button>
+              <button
+                onClick={() => setRemoveTarget(editingMember)}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control border-[0.5px] border-hairline py-3 text-[13px] font-medium text-cp-red"
+              >
+                <ManagerIcon name="trash" size={14} />
+                Remove
+              </button>
+            </div>
+          </div>
+        )}
+      </BottomSheet>
+
+      <Modal open={!!removeTarget} onClose={() => setRemoveTarget(null)} title="Remove this person?">
+        <div className="mb-5 text-[13px] text-ink-muted">
+          This permanently deletes{" "}
+          <span className="font-semibold text-ink">{removeTarget?.name}</span> and their PIN. Past rota
+          history stays intact, but they can&apos;t be scheduled again — if you might want them back,{" "}
+          <span className="font-semibold text-ink">Archive</span> instead.
+        </div>
         <div className="flex gap-2.5">
           <button
-            onClick={closeModal}
+            onClick={() => setRemoveTarget(null)}
             className="flex-1 rounded-xl bg-unset-bg py-3.5 text-center text-sm font-semibold text-ink-muted"
           >
             Cancel
           </button>
           <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
+            onClick={handleRemove}
+            disabled={removing}
+            className="flex-1 rounded-xl bg-cp-red py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
           >
-            {saving ? "Saving…" : modalMode === "add" ? "Add to team" : "Save changes"}
+            {removing ? "Removing…" : "Remove"}
           </button>
         </div>
       </Modal>

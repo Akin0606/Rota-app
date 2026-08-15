@@ -15,6 +15,7 @@ type RotaImageViewProps = {
   shifts: Shift[];
   staff: StaffManager[];
   assignments: AssignmentOut[];
+  leave: Record<string, number[]>;
 };
 
 // Matches the PDF export: a fixed narrow label column, everything else split
@@ -39,6 +40,7 @@ export default function RotaImageView({
   shifts,
   staff,
   assignments,
+  leave,
 }: RotaImageViewProps) {
   if (!open) return null;
 
@@ -46,23 +48,55 @@ export default function RotaImageView({
   const shiftsById = new Map(shifts.map((s) => [s.id, s]));
   const activeStaff = staff.filter((s) => s.is_active);
 
+  // Same grouping as the on-screen matrix (rota-matrix.tsx) so a printed and
+  // screenshotted rota read the same way — role label, U18 tag, dashed
+  // "Leave" span for a leave-blocked day with no shift.
+  const roleGroups = new Map<string, StaffManager[]>();
+  for (const s of activeStaff) {
+    const list = roleGroups.get(s.role) ?? [];
+    list.push(s);
+    roleGroups.set(s.role, list);
+  }
+
   function assignmentFor(staffId: string, dayIndex: number): AssignmentOut | undefined {
     return assignments.find((a) => a.staff_id === staffId && a.day_index === dayIndex);
+  }
+
+  function NameLabel({ member }: { member: StaffManager }) {
+    return (
+      <div className="flex items-center gap-1 truncate text-[10px] font-semibold text-ink-label">
+        <span className="truncate">{member.name}</span>
+        {member.is_under_18 && (
+          <span className="shrink-0 rounded bg-accent-light px-[4px] py-[1px] text-[7px] font-bold text-accent">
+            U18
+          </span>
+        )}
+      </div>
+    );
   }
 
   function CellContent({ staffId, dayIndex }: { staffId: string; dayIndex: number }) {
     const a = assignmentFor(staffId, dayIndex);
     const shift = a?.shift_id ? shiftsById.get(a.shift_id) : undefined;
-    if (!shift) return <div className="min-h-[32px]" />;
-    return (
-      <div
-        className="truncate rounded-md px-1 py-1 text-center text-[10px] font-semibold leading-tight"
-        style={{ background: `${shift.color}22`, color: shift.color }}
-        title={`${shift.name} ${compactTimeRange(shift.start_time, shift.end_time)}`}
-      >
-        {shift.name} {compactTimeRange(shift.start_time, shift.end_time)}
-      </div>
-    );
+    if (shift) {
+      return (
+        <div
+          className="truncate rounded-md px-1 py-1 text-center text-[10px] font-semibold leading-tight"
+          style={{ background: `${shift.color}22`, color: shift.color }}
+          title={`${shift.name} ${compactTimeRange(shift.start_time, shift.end_time)}`}
+        >
+          {shift.name} {compactTimeRange(shift.start_time, shift.end_time)}
+        </div>
+      );
+    }
+    if (leave[staffId]?.includes(dayIndex)) {
+      return (
+        <div className="rounded-md border border-dashed border-hairline px-1 py-1 text-center text-[9px] text-ink-faint">
+          Leave
+        </div>
+      );
+    }
+    return <div className="min-h-[32px]" />;
   }
 
   return (
@@ -105,21 +139,28 @@ export default function RotaImageView({
                   </div>
                 ))}
               </div>
-              {activeStaff.map((member, ri) => (
-                <div
-                  key={member.id}
-                  className="grid"
-                  style={{ gridTemplateColumns: `${LABEL_COL} repeat(7, 1fr)` }}
-                >
-                  <div className={`min-w-0 flex items-center p-1 ${ri < activeStaff.length - 1 ? "border-b border-surface-page" : ""}`}>
-                    <div className="truncate text-[10px] font-semibold text-ink-label">{member.name}</div>
+              {Array.from(roleGroups.entries()).map(([role, members]) => (
+                <div key={role}>
+                  <div className="px-0.5 pb-1 pt-2.5 text-[9px] font-semibold uppercase tracking-wide text-ink-faint">
+                    {role}
                   </div>
-                  {DAY_LABELS.map((_, di) => (
+                  {members.map((member, ri) => (
                     <div
-                      key={di}
-                      className={`min-w-0 flex min-h-[34px] flex-col justify-center border-l border-surface-page p-0.5 ${ri < activeStaff.length - 1 ? "border-b border-surface-page" : ""}`}
+                      key={member.id}
+                      className="grid"
+                      style={{ gridTemplateColumns: `${LABEL_COL} repeat(7, 1fr)` }}
                     >
-                      <CellContent staffId={member.id} dayIndex={di} />
+                      <div className={`min-w-0 flex items-center p-1 ${ri < members.length - 1 ? "border-b border-surface-page" : ""}`}>
+                        <NameLabel member={member} />
+                      </div>
+                      {DAY_LABELS.map((_, di) => (
+                        <div
+                          key={di}
+                          className={`min-w-0 flex min-h-[34px] flex-col justify-center border-l border-surface-page p-0.5 ${ri < members.length - 1 ? "border-b border-surface-page" : ""}`}
+                        >
+                          <CellContent staffId={member.id} dayIndex={di} />
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
@@ -134,7 +175,14 @@ export default function RotaImageView({
                 <div />
                 {activeStaff.map((member) => (
                   <div key={member.id} className="min-w-0 border-l border-surface-page px-0.5 py-2 text-center">
-                    <div className="truncate text-[10px] font-semibold text-ink-label">{member.name}</div>
+                    <div className="mx-auto flex w-fit items-center gap-1 truncate text-[10px] font-semibold text-ink-label">
+                      <span className="truncate">{member.name}</span>
+                      {member.is_under_18 && (
+                        <span className="shrink-0 rounded bg-accent-light px-[4px] py-[1px] text-[7px] font-bold text-accent">
+                          U18
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

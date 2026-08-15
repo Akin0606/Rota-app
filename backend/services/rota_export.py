@@ -141,6 +141,10 @@ class _RotaPDF(FPDF):
         self.cell(w_dot, 6, dot)
 
 
+def _name_with_tag(person: dict) -> str:
+    return f"{person['name']} (U18)" if person.get("is_under_18") else person["name"]
+
+
 def build_rota_pdf(
     *,
     venue_name: str,
@@ -148,8 +152,10 @@ def build_rota_pdf(
     shifts: list[dict],
     staff: list[dict],
     assignments: list[dict],
+    leave: dict[str, set[int]] | None = None,
     orientation: str = "staff-rows",
 ) -> bytes:
+    leave = leave or {}
     week_label = _week_range_label(week_start)
     cell = _build_matrix(shifts, assignments)
 
@@ -158,20 +164,38 @@ def build_rota_pdf(
 
     if orientation == "day-rows":
         row_headers = [DAY_SHORT[i] for i in range(7)]
-        col_headers = [s["name"] for s in staff]
+        col_headers = [_name_with_tag(s) for s in staff]
         col_keys = [s["id"] for s in staff]
 
         def lookup(r: int, c: int):
             return cell.get((col_keys[c], r))
+
+        def is_leave(r: int, c: int) -> bool:
+            return r in leave.get(col_keys[c], ())
+
+        _draw_table(pdf, row_headers, col_headers, lookup, is_leave)
     else:
-        row_headers = [s["name"] for s in staff]
-        row_keys = [s["id"] for s in staff]
+        # Grouped by role, same as the on-screen matrix — a manager scanning a
+        # printed rota reads it the same way they read the app.
+        groups: dict[str, list[dict]] = {}
+        for s in staff:
+            groups.setdefault(s.get("role") or "Staff", []).append(s)
         col_headers = [DAY_SHORT[i] for i in range(7)]
+        for role, members in groups.items():
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(*INK_MUTED)
+            pdf.cell(0, 7, _pdf_safe(role), new_x="LMARGIN", new_y="NEXT")
+            row_headers = [_name_with_tag(m) for m in members]
+            row_keys = [m["id"] for m in members]
 
-        def lookup(r: int, c: int):
-            return cell.get((row_keys[r], c))
+            def lookup(r: int, c: int, _keys=row_keys):
+                return cell.get((_keys[r], c))
 
-    _draw_table(pdf, row_headers, col_headers, lookup)
+            def is_leave(r: int, c: int, _keys=row_keys) -> bool:
+                return c in leave.get(_keys[r], ())
+
+            _draw_table(pdf, row_headers, col_headers, lookup, is_leave)
+            pdf.ln(2)
 
     if not assignments:
         pdf.ln(4)
@@ -183,7 +207,8 @@ def build_rota_pdf(
     return bytes(out)
 
 
-def _draw_table(pdf: _RotaPDF, row_headers, col_headers, lookup) -> None:
+def _draw_table(pdf: _RotaPDF, row_headers, col_headers, lookup, is_leave=None) -> None:
+    is_leave = is_leave or (lambda r, c: False)
     n_cols = len(col_headers)
     usable = pdf.w - 24  # left+right margins
     label_w = min(40, max(24, usable * 0.16))
@@ -230,6 +255,17 @@ def _draw_table(pdf: _RotaPDF, row_headers, col_headers, lookup) -> None:
                     max_line_height=3.6,
                 )
                 pdf.set_xy(x + col_w, y)
+            elif is_leave(r, c):
+                pdf.set_draw_color(*HAIRLINE)
+                pdf.set_dash_pattern(dash=1.2, gap=1)
+                pdf.rect(x, y, col_w, cell_h)
+                pdf.set_dash_pattern()
+                pdf.set_font("Helvetica", "I", 7)
+                pdf.set_text_color(*INK_MUTED)
+                pdf.set_xy(x, y + cell_h / 2 - 2)
+                pdf.cell(col_w, 4, "Leave", align="C")
+                pdf.set_font("Helvetica", "", 8)
+                pdf.set_xy(x + col_w, y)
             else:
                 pdf.cell(col_w, cell_h, "", border=1)
         pdf.set_xy(x0, y0 + cell_h)
@@ -275,12 +311,14 @@ def build_rota_xlsx(
     shifts: list[dict],
     staff: list[dict],
     assignments: list[dict],
+    leave: dict[str, set[int]] | None = None,
     orientation: str = "staff-rows",
 ) -> bytes:
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
+    leave = leave or {}
     cell = _build_matrix(shifts, assignments)
     wb = Workbook()
     ws = wb.active
@@ -300,19 +338,30 @@ def build_rota_xlsx(
     start_row = 4
 
     if orientation == "day-rows":
-        row_headers = [DAY_NAMES[i] for i in range(7)]
-        col_headers = [s["name"] for s in staff]
+        col_headers = [_name_with_tag(s) for s in staff]
         col_keys = [s["id"] for s in staff]
+        # No natural role axis once days are the rows — one flat group.
+        row_groups = [(None, [(DAY_NAMES[i], i) for i in range(7)])]
 
         def lookup(r: int, c: int):
             return cell.get((col_keys[c], r))
+
+        def is_leave(r: int, c: int) -> bool:
+            return r in leave.get(col_keys[c], ())
     else:
-        row_headers = [s["name"] for s in staff]
-        row_keys = [s["id"] for s in staff]
+        groups: dict[str, list[dict]] = {}
+        for s in staff:
+            groups.setdefault(s.get("role") or "Staff", []).append(s)
+        row_groups = [
+            (role, [(_name_with_tag(m), m["id"]) for m in members]) for role, members in groups.items()
+        ]
         col_headers = [DAY_NAMES[i] for i in range(7)]
 
-        def lookup(r: int, c: int):
-            return cell.get((row_keys[r], c))
+        def lookup(r_key: str, c: int):
+            return cell.get((r_key, c))
+
+        def is_leave(r_key: str, c: int) -> bool:
+            return c in leave.get(r_key, ())
 
     # Header row
     ws.cell(row=start_row, column=1, value="").border = border
@@ -323,24 +372,38 @@ def build_rota_xlsx(
         cellref.border = border
         cellref.alignment = center
 
-    # Body
-    for r, rh in enumerate(row_headers):
-        row = start_row + 1 + r
-        label = ws.cell(row=row, column=1, value=rh)
-        label.font = Font(bold=True, size=10, color="111827")
-        label.border = border
-        label.alignment = center
-        for c in range(len(col_headers)):
-            shift = lookup(r, c)
-            cref = ws.cell(row=row, column=c + 2, value=_cell_text(shift))
-            cref.border = border
-            cref.alignment = center
-            cref.font = Font(size=9, color="111827")
-            if shift:
-                fill_hex = _tint_hex(shift.get("color"))
-                cref.fill = PatternFill("solid", fgColor=fill_hex)
+    # Body, grouped by role (day-rows has a single unlabelled group)
+    row = start_row
+    for role, rows in row_groups:
+        if role is not None:
+            row += 1
+            role_cell = ws.cell(row=row, column=1, value=role)
+            role_cell.font = Font(bold=True, size=10, color="6B7280")
+        for label_text, row_key in rows:
+            row += 1
+            label = ws.cell(row=row, column=1, value=label_text)
+            label.font = Font(bold=True, size=10, color="111827")
+            label.border = border
+            label.alignment = center
+            for c in range(len(col_headers)):
+                # day-rows passes the day index as row_key via lookup(r, c);
+                # staff-rows passes the staff id — both lookup/is_leave accept
+                # whichever key this orientation produced.
+                shift = lookup(row_key, c)
+                on_leave = is_leave(row_key, c)
+                cref = ws.cell(row=row, column=c + 2, value=_cell_text(shift) or ("Leave" if on_leave and not shift else ""))
+                cref.border = border
+                cref.alignment = center
+                if shift:
+                    cref.font = Font(size=9, color="111827")
+                    fill_hex = _tint_hex(shift.get("color"))
+                    cref.fill = PatternFill("solid", fgColor=fill_hex)
+                elif on_leave:
+                    cref.font = Font(size=9, italic=True, color="9CA3AF")
+                else:
+                    cref.font = Font(size=9, color="111827")
 
-    ws.column_dimensions["A"].width = 22
+    ws.column_dimensions["A"].width = 24
     for c in range(len(col_headers)):
         ws.column_dimensions[get_column_letter(c + 2)].width = 18
 

@@ -971,6 +971,7 @@ export default function RotaPage() {
         shifts={shifts}
         staff={staff}
         assignments={summary?.assignments ?? []}
+        leave={summary?.leave ?? {}}
       />
 
       {/* Risk popup: adult rule flagged by a manual add (rest gap / day-off-in-7) */}

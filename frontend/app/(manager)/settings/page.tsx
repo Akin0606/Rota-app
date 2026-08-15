@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
+import ManagerIcon, { type ManagerIconName } from "@/components/manager/icon";
 import LoadingScreen from "@/components/loading-screen";
 import Modal from "@/components/modal";
 import StatusBanner from "@/components/status-banner";
@@ -21,13 +23,14 @@ import {
   getVenueLeaveSettings,
   listPeriods,
   listShifts,
+  listStaff,
   unpublishRota,
   updateRules,
   updateShift,
   updateVenue,
   updateVenueLeaveSettings,
 } from "@/lib/api";
-import { END_TIMES, SHIFT_COLORS, START_TIMES } from "@/lib/constants";
+import { END_TIMES, SHIFT_COLORS, START_TIMES, STAFF_ROLES } from "@/lib/constants";
 import { DAY_NAMES, formatWeekRange } from "@/lib/utils";
 
 const MONTH_NAMES = [
@@ -54,6 +57,7 @@ export default function SettingsPage() {
     }
   }
   const [periods, setPeriods] = useState<Period[]>([]);
+  const [staffCount, setStaffCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -71,11 +75,12 @@ export default function SettingsPage() {
       setLoading(true);
       setError(false);
       try {
-        const [venueRes, shiftsRes, rulesRes, periodsRes] = await Promise.all([
+        const [venueRes, shiftsRes, rulesRes, periodsRes, staffRes] = await Promise.all([
           getVenue(),
           listShifts(),
           getRules(),
           listPeriods(),
+          listStaff().catch(() => []),
         ]);
         if (cancelled) return;
         setVenue(venueRes);
@@ -83,6 +88,7 @@ export default function SettingsPage() {
         setShifts(shiftsRes);
         setRules(rulesRes);
         setPeriods(periodsRes);
+        setStaffCount(staffRes.filter((m) => m.is_active).length);
       } catch {
         if (!cancelled) setError(true);
       } finally {
@@ -223,10 +229,13 @@ export default function SettingsPage() {
         </div>
 
         {/* Venue */}
-        <div className="rounded-panel border border-hairline bg-surface-card p-6">
-          <div className="mb-4 text-base font-bold text-ink">Venue Details</div>
-          <div className="flex flex-col gap-3.5">
-            <div>
+        <div className="overflow-hidden rounded-panel border border-hairline bg-surface-card">
+          <div className="px-6 pt-5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+            Venue
+          </div>
+          <div className="flex items-center gap-3 px-6 py-3.5">
+            <SettingsIconBox name="building" />
+            <div className="min-w-0 flex-1">
               <div className="mb-1 text-xs text-ink-faint">Venue name</div>
               <input
                 value={venueName}
@@ -234,17 +243,91 @@ export default function SettingsPage() {
                 className="w-full rounded-[10px] border-[1.5px] border-unset-border px-3.5 py-2.5 text-sm outline-none"
               />
             </div>
-            <div>
-              <div className="mb-1 text-xs text-ink-faint">Manager email</div>
-              <div className="rounded-[10px] border-[1.5px] border-unset-border px-3.5 py-2.5 text-sm text-ink-label">
-                {venue?.manager_email}
+          </div>
+          <div className="flex items-center gap-3 border-t border-hairline px-6 py-3.5">
+            <SettingsIconBox name="mail" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium text-ink">Manager email</div>
+              <div className="truncate text-xs text-ink-faint">{venue?.manager_email}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Roles */}
+        <div className="rounded-panel border border-hairline bg-surface-card p-6">
+          <div className="mb-1 text-base font-bold text-ink">Roles &amp; stations</div>
+          <div className="mb-4 text-[13px] text-ink-faint">
+            What staff can be assigned to. Fixed for now — role management is on the roadmap.
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {STAFF_ROLES.map((r) => (
+              <div
+                key={r}
+                className="rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3.5 py-2 text-[13px] font-medium text-ink-muted"
+              >
+                {r}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Team */}
+        <Link
+          href="/team"
+          className="flex items-center gap-3 rounded-panel border border-hairline bg-surface-card p-6"
+        >
+          <SettingsIconBox name="users" />
+          <div className="min-w-0 flex-1">
+            <div className="text-base font-bold text-ink">Team</div>
+            <div className="text-[13px] text-ink-faint">
+              {staffCount === null ? "Manage your staff" : `${staffCount} active staff member${staffCount === 1 ? "" : "s"}`}
+            </div>
+          </div>
+          <ManagerIcon name="chevron-right" size={18} className="shrink-0 text-ink-faint" />
+        </Link>
+
+        {/* Pay & labour cost — no backend field for a rate yet, honest placeholder */}
+        <div className="rounded-panel border border-hairline bg-surface-card p-6">
+          <div className="flex items-start gap-3">
+            <SettingsIconBox name="coins" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium text-ink">
+                Pay &amp; labour cost <span className="font-normal text-ink-faint">· optional</span>
+              </div>
+              <div className="mt-1 text-[12px] leading-[1.5] text-ink-faint">
+                Not available yet — Crewplan doesn&apos;t track pay rates today, so there&apos;s no live
+                labour cost to show. Coming in a future update.
               </div>
             </div>
           </div>
         </div>
 
+        {/* Account */}
+        <div className="overflow-hidden rounded-panel border border-hairline bg-surface-card">
+          <div className="flex items-center gap-3 px-6 py-3.5">
+            <SettingsIconBox name="star" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium text-ink">Plan</div>
+              <div className="text-xs text-ink-faint">Crewplan Pro</div>
+            </div>
+            <span className="rounded-full bg-surface-subtle px-2.5 py-1 text-[11px] font-medium text-ink-faint">
+              Coming soon
+            </span>
+          </div>
+          <div className="flex items-center gap-3 border-t border-hairline px-6 py-3.5">
+            <SettingsIconBox name="plug" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium text-ink">Integrations</div>
+              <div className="text-xs text-ink-faint">Square, Xero</div>
+            </div>
+            <span className="rounded-full bg-surface-subtle px-2.5 py-1 text-[11px] font-medium text-ink-faint">
+              Coming soon
+            </span>
+          </div>
+        </div>
+
         {/* Shifts */}
-        <div className="rounded-panel border border-hairline bg-surface-card p-6">
+        <div className="rounded-panel border border-hairline bg-surface-card p-6 md:col-span-2">
           <div className="mb-1 text-base font-bold text-ink">Shift Types</div>
           <div className="mb-4 text-[13px] text-ink-faint">
             Name and timing live here. Adjust min/max staff per shift, max hours/week and min rest in{" "}
@@ -464,6 +547,14 @@ export default function SettingsPage() {
       </Modal>
 
       <Toast message={toast} />
+    </div>
+  );
+}
+
+function SettingsIconBox({ name }: { name: ManagerIconName }) {
+  return (
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-cp-icon text-accent">
+      <ManagerIcon name={name} size={16} />
     </div>
   );
 }
