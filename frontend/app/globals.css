@@ -38,6 +38,12 @@
   --c-hairline: #232323;
   --c-shadow: rgba(0, 0, 0, 0.4);
 
+  /* Shared motion vocabulary. Every animation in the app pulls its curve from
+     one of these — the built-in CSS easings are too weak for UI. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1); /* entrances/exits */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); /* on-screen movement */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1); /* iOS-like sheet slide */
+
   --background: var(--c-bg);
   --foreground: var(--c-fg);
   color-scheme: dark;
@@ -333,5 +339,102 @@ a:hover {
   .cpm-knob {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================================
+   Overlay enter/exit — modals, bottom sheets, the generate overlay, toasts
+   --------------------------------------------------------------------------
+   Driven by `data-state="open" | "closed"` set by usePresence (lib/use-presence
+   .ts). Global (not scoped to .cp-staff/.cp-manager) because these surfaces
+   render in the admin console and marketing shells too. transform + opacity
+   only — no layout thrash. Reduced motion keeps the fade, drops the movement.
+   ========================================================================== */
+
+/* Backdrop: a plain fade. */
+.cp-overlay {
+  opacity: 1;
+  transition: opacity 200ms var(--ease-out);
+}
+.cp-overlay[data-state="closed"] {
+  opacity: 0;
+}
+
+/* Centered dialog card (modal, generate overlay): scale up from just under
+   full size. Modals aren't anchored to a trigger, so they stay centered and
+   never slide. */
+.cp-overlay-card {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity 240ms var(--ease-out),
+    transform 240ms var(--ease-out);
+}
+.cp-overlay[data-state="closed"] .cp-overlay-card {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+/* Bottom sheet: slides in from the bottom edge it lives on — the whole point
+   of a sheet is that it comes from and returns to that edge. translateY(100%)
+   is the card's own height, so it's content-length-agnostic. */
+.cp-sheet-card {
+  transform: translateY(0);
+  transition: transform 320ms var(--ease-drawer);
+}
+.cp-overlay[data-state="closed"] .cp-sheet-card {
+  transform: translateY(100%);
+}
+
+/* Toast: enters and exits the same bottom edge — symmetric, so it reads as one
+   object arriving and leaving rather than two unrelated fades. */
+.cp-toast {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+.cp-toast[data-state="closed"] {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* Success pop — the rare, earned delight beat (rota generated). One-shot CSS
+   animation (runs off the main thread while the result view settles) with a
+   small overshoot so the check feels like it lands, not like it fades in. */
+@keyframes cp-pop-in {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.cp-pop-in {
+  animation: cp-pop-in 420ms var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-overlay,
+  .cp-overlay-card,
+  .cp-sheet-card,
+  .cp-toast {
+    transition-property: opacity;
+    transition-duration: 160ms;
+  }
+  /* Keep a gentle fade, drop the movement entirely. */
+  .cp-overlay[data-state="closed"] .cp-overlay-card,
+  .cp-overlay[data-state="closed"] .cp-sheet-card,
+  .cp-toast[data-state="closed"] {
+    transform: none;
+  }
+  .cp-pop-in {
+    animation: none;
   }
 }

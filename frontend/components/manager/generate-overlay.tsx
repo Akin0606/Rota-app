@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { RotaSummary, Shift } from "@/lib/api";
+import { usePresence } from "@/lib/use-presence";
 import { DAY_LABELS } from "@/lib/utils";
 
 import ManagerIcon from "./icon";
@@ -73,11 +74,15 @@ export default function GenerateOverlay({
 
   const shiftsById = useMemo(() => new Map(shifts.map((s) => [s.id, s])), [shifts]);
 
-  if (!open) return null;
+  const { render, state } = usePresence(open, 260);
+  if (!render) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-6">
-      <div className="cp-manager w-full max-w-[380px] rounded-cp-card border-[0.5px] border-hairline bg-surface-card p-8 text-center">
+    <div
+      data-state={state}
+      className="cp-overlay fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-6"
+    >
+      <div className="cp-overlay-card cp-manager w-full max-w-[380px] rounded-cp-card border-[0.5px] border-hairline bg-surface-card p-8 text-center">
         {error ? (
           <ErrorState message={error} onClose={onClose} />
         ) : result ? (
@@ -194,7 +199,7 @@ function ResultState({
 
   return (
     <div className="flex flex-col items-center">
-      <div className="mb-[18px] flex h-16 w-16 items-center justify-center rounded-[18px] bg-cp-green-soft text-cp-green">
+      <div className="cp-pop-in mb-[18px] flex h-16 w-16 items-center justify-center rounded-[18px] bg-cp-green-soft text-cp-green">
         <ManagerIcon name="check" size={30} strokeWidth={2.25} />
       </div>
       <div className="mb-1.5 text-[21px] font-medium tracking-[-0.4px] text-ink">Rota generated</div>
