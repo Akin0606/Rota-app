@@ -9,6 +9,7 @@ from routers import (
     availability,
     cron,
     leave,
+    onboarding,
     periods,
     roles,
     rota,
@@ -60,6 +61,7 @@ app.include_router(leave.router)
 app.include_router(admin.router)
 app.include_router(cron.router)
 app.include_router(waitlist.router)
+app.include_router(onboarding.router)
 
 
 @app.on_event("startup")

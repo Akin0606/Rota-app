@@ -166,6 +166,23 @@ class VenueOut(BaseModel):
     # The rotatable join code that gates self-registration. None = joining is
     # disabled for this venue (a forwarded link can't register anyone).
     join_pin: Optional[str] = None
+    # Onboarding save-and-resume (§1). {"step": N} while in-flight,
+    # {"completed": true} when done, None on a legacy/already-onboarded venue.
+    setup_state: Optional[dict] = None
+
+
+class OnboardingActivateRequest(BaseModel):
+    token: str = Field(min_length=1)
+
+
+class OnboardingSessionOut(BaseModel):
+    access_token: str
+    refresh_token: str
+    email: str
+
+
+class SetupStateRequest(BaseModel):
+    setup_state: Optional[dict] = None
 
 
 class VenueCreateRequest(BaseModel):

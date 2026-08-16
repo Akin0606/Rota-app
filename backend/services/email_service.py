@@ -103,6 +103,19 @@ def send_magic_link_email(to_email: str, venue_name: str, magic_link_url: str) -
     return _send(to_email, subject, html)
 
 
+# 1b. Onboarding activation (§1) — an activation moment, not a receipt --------
+
+def send_activation_email(to_email: str, activation_url: str) -> dict:
+    subject = "You're in — set up your venue"
+    body = f"""
+<p style="margin:0 0 16px;">You're in. Set up your venue in about 3 minutes — no password to create, this link signs you in.</p>
+{_button("Set up my venue", activation_url)}
+<p style="margin:20px 0 0;font-size:13px;color:#6b7280;">This link works for 7 days and signs you in once. If you didn't request it, you can ignore this email.</p>
+"""
+    html = _shell("You're in — set up your venue", "Your Crewplan invite is ready — set up your venue in about 3 minutes.", body)
+    return _send(to_email, subject, html)
+
+
 # 2. Staff welcome / PIN delivery --------------------------------------------
 
 def send_staff_welcome_email(to_email: str, name: str, venue_name: str, pin: str, venue_link_url: str) -> dict:

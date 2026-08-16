@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from database import get_supabase
 from models.schemas import (
     JoinCodeOut,
+    SetupStateRequest,
     VenueCreateRequest,
     VenueLeaveSettingsOut,
     VenueLeaveSettingsRequest,
@@ -94,6 +95,23 @@ def update_venue(payload: VenueUpdateRequest, manager: dict = Depends(get_curren
     return (
         supabase.table("venues")
         .update({"name": payload.name})
+        .eq("id", venue["id"])
+        .execute()
+        .data[0]
+    )
+
+
+@router.put("/setup-state", response_model=VenueOut)
+def update_setup_state(payload: SetupStateRequest, manager: dict = Depends(get_current_manager)):
+    """Persist onboarding wizard progress on the manager's venue so a phone
+    interruption resumes where it stopped (§1 save-and-resume). Passing a
+    setup_state of null marks onboarding finished (the manager skips to the app
+    on any later visit)."""
+    venue = get_manager_venue(manager["id"])
+    return (
+        get_supabase()
+        .table("venues")
+        .update({"setup_state": payload.setup_state})
         .eq("id", venue["id"])
         .execute()
         .data[0]

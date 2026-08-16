@@ -435,6 +435,25 @@ export function getStaffActivity(
   );
 }
 
+export type OnboardingSession = { access_token: string; refresh_token: string; email: string };
+
+// Token-landing (§1). Validates + burns the one-time activation token and returns
+// a server-minted Supabase session; a 410 means expired/used/unknown (resend wall).
+export function activateOnboarding(token: string): Promise<OnboardingSession> {
+  return request(`/api/onboarding/activate`, {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+// Persist wizard progress for save-and-resume (null = onboarding finished).
+export function saveSetupState(setup_state: SetupState): Promise<Venue> {
+  return authedRequest(`/api/venue/setup-state`, {
+    method: "PUT",
+    body: JSON.stringify({ setup_state }),
+  });
+}
+
 export async function requestLoginCode(email: string): Promise<{ status: string }> {
   // Sends a 6-digit OTP code rather than a clickable magic link. We
   // deliberately omit emailRedirectTo: with no redirect URL, Supabase's email
@@ -494,7 +513,12 @@ export type Venue = {
   is_active: boolean;
   // Self-registration code (§3). null = joining disabled.
   join_pin: string | null;
+  // Onboarding save-and-resume (§1). {step} while in-flight, {completed} when
+  // done, null on a legacy/already-onboarded venue.
+  setup_state: SetupState | null;
 };
+
+export type SetupState = { step?: number; completed?: boolean } | null;
 
 export type Period = {
   id: string;

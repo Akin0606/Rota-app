@@ -20,6 +20,7 @@ from models.schemas import (
 )
 from routers.rota import _build_summary, run_solver_for_period
 from routers.staff import _generate_unique_pin
+from services import email_service, onboarding
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -206,9 +207,9 @@ def _create_manager_account(email: str) -> str:
         raise HTTPException(status_code=409, detail="A venue already exists for this email")
 
     try:
-        # email_confirm=True marks the account confirmed so they can request a
-        # login code and sign in immediately, without any email verification
-        # step or Supabase "allow signups" toggle getting in the way.
+        # email_confirm=True marks the account confirmed so the activation link
+        # signs them straight in, with no email-verification step or Supabase
+        # "allow signups" toggle getting in the way.
         supabase.auth.admin.create_user({"email": email, "email_confirm": True})
     except Exception as exc:
         message = str(exc)
@@ -216,7 +217,11 @@ def _create_manager_account(email: str) -> str:
             raise HTTPException(status_code=409, detail="That email already has an account")
         raise HTTPException(status_code=500, detail=f"Could not create account: {message}")
 
-    return f"{get_settings().frontend_url}/login"
+    # Activation link = auth + email proof (§1). One email, no OTP on first run:
+    # tapping it mints a session server-side and drops them into the wizard.
+    activation_url = onboarding.mint_activation_token(email)
+    email_service.send_activation_email(email, activation_url)
+    return activation_url
 
 
 @router.post("/managers", response_model=AdminManagerOut, dependencies=[Depends(require_admin)])
@@ -372,11 +377,14 @@ def create_support_login_link(venue_id: str):
     dependencies=[Depends(require_admin)],
 )
 def resend_pending_manager_login_link(email: str):
-    """Mints a fresh magic login link for a manager who has an account but
-    hasn't finished onboarding (no venue yet) — for when they've lost the
-    original invite. Same mechanism as the venue-level support login link."""
-    action_link = _generate_magic_link(email)
-    return {"email": email, "status": "link_created", "login_url": action_link}
+    """Resends the activation link for a manager who has an account but hasn't
+    finished onboarding (no venue yet) — the resend wall behind an expired/used
+    link. Mints a fresh 7-day token and emails it (§1), NOT a Supabase magic
+    link (whose PKCE breaks in the in-app browser)."""
+    email = email.strip().lower()
+    activation_url = onboarding.mint_activation_token(email)
+    email_service.send_activation_email(email, activation_url)
+    return {"email": email, "status": "link_created", "login_url": activation_url}
 
 
 @router.delete("/venues/{venue_id}", dependencies=[Depends(require_admin)])

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import StepProgress from "@/components/step-progress";
 import Toast from "@/components/toast";
@@ -9,10 +9,13 @@ import {
   ApiError,
   StaffManager,
   Venue,
+  activateOnboarding,
   createShift,
   createStaff,
   createVenue,
   getVenue,
+  listStaff,
+  saveSetupState,
 } from "@/lib/api";
 import { createClient } from "@/lib/supabase";
 import { END_TIMES, SHIFT_COLORS, START_TIMES, STAFF_ROLES } from "@/lib/constants";
@@ -33,10 +36,13 @@ const DEFAULT_SHIFTS: LocalShift[] = [
 const NEW_SHIFT_COLORS = SHIFT_COLORS;
 const ROLES = STAFF_ROLES;
 
-export default function OnboardingPage() {
+function OnboardingWizard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [checking, setChecking] = useState(true);
+  const [resendWall, setResendWall] = useState(false);
+  const [managerEmail, setManagerEmail] = useState<string | null>(null);
   const [step, setStep] = useState(1);
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -53,22 +59,80 @@ export default function OnboardingPage() {
   const [newRole, setNewRole] = useState("Server");
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => {
+    async function boot() {
+      const supabase = createClient();
+
+      // Token landing (§1): the accept link carries a one-time token. Validate +
+      // burn it server-side, install the minted session on-device (setSession —
+      // NOT a PKCE code exchange), then drop the token from the URL.
+      const token = searchParams.get("token");
+      if (token) {
+        try {
+          const s = await activateOnboarding(token);
+          await supabase.auth.setSession({ access_token: s.access_token, refresh_token: s.refresh_token });
+          setManagerEmail(s.email);
+          window.history.replaceState({}, "", "/onboarding");
+        } catch (err) {
+          // A burned/expired token is only a dead end if we're NOT already
+          // signed in. If a session exists (double-tap, reload, dev
+          // StrictMode's double-mount, or a bookmarked activated link), just
+          // proceed — the token already did its job. Otherwise, the resend wall.
+          const { data: existing } = await supabase.auth.getSession();
+          if (err instanceof ApiError && err.status === 410 && !existing.session) {
+            setResendWall(true);
+            setChecking(false);
+            return;
+          }
+          if (!existing.session) {
+            showToast(err instanceof ApiError ? err.message : "Could not open your setup link");
+            setChecking(false);
+            return;
+          }
+          window.history.replaceState({}, "", "/onboarding");
+        }
+      }
+
+      const { data } = await supabase.auth.getSession();
       if (!data.session) {
         router.replace("/login");
         return;
       }
-      getVenue()
-        .then(() => router.replace("/dashboard"))
-        .catch(() => setChecking(false));
-    });
+      if (!managerEmail) setManagerEmail(data.session.user.email ?? null);
+
+      // Save-and-resume: a legacy/finished venue (no setup_state or completed)
+      // skips to the app; a half-finished one resumes at its saved step.
+      try {
+        const v = await getVenue();
+        setVenue(v);
+        const st = v.setup_state;
+        if (!st || st.completed) {
+          router.replace("/dashboard");
+          return;
+        }
+        const resumeStep = st.step ?? 1;
+        if (resumeStep >= 3) {
+          const team = await listStaff().catch(() => []);
+          setTeamMembers(team.filter((m) => !m.pending));
+        }
+        setStep(resumeStep);
+        setChecking(false);
+      } catch {
+        // No venue yet → fresh start at step 1.
+        setChecking(false);
+      }
+    }
+    void boot();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
+  }
+
+  // Best-effort progress save — never blocks the user if it fails.
+  function persistStep(next: number) {
+    void saveSetupState({ step: next }).catch(() => {});
   }
 
   async function handleStep1Continue() {
@@ -81,11 +145,13 @@ export default function OnboardingPage() {
       const created = await createVenue(venueName.trim());
       setVenue(created);
       setStep(2);
+      persistStep(2);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         const existing = await getVenue();
         setVenue(existing);
         setStep(2);
+        persistStep(2);
       } else {
         showToast(err instanceof ApiError ? err.message : "Could not create venue");
       }
@@ -123,6 +189,7 @@ export default function OnboardingPage() {
         });
       }
       setStep(3);
+      persistStep(3);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not save shifts");
     } finally {
@@ -162,6 +229,31 @@ export default function OnboardingPage() {
     showToast("Link copied!");
   }
 
+  if (resendWall) {
+    return (
+      <div className="mx-auto max-w-[420px] py-4">
+        <div className="mx-4 animate-fadeIn overflow-hidden rounded-card bg-surface shadow-card">
+          <div className="flex min-h-[360px] flex-col items-center justify-center px-6 py-10 text-center">
+            <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-accent-light text-[28px]">
+              ⏳
+            </div>
+            <div className="mb-2 text-2xl font-bold text-ink">This link has expired</div>
+            <div className="mb-7 max-w-[300px] text-sm leading-relaxed text-ink-muted">
+              Setup links work once and for 7 days. Ask your Crewplan contact to send a fresh one, and
+              you&apos;ll be set up in a few minutes.
+            </div>
+            <a
+              href="mailto:hello@crewplan.app?subject=Resend%20my%20setup%20link"
+              className="w-full rounded-control bg-accent py-3.5 text-center text-base font-semibold text-white"
+            >
+              Request a new link
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (checking) {
     return (
       <div className="mx-auto flex max-w-[420px] items-center justify-center px-6 py-24 text-sm text-ink-muted">
@@ -179,7 +271,15 @@ export default function OnboardingPage() {
           {step === 1 && (
             <div>
               <div className="mb-1.5 text-[22px] font-bold text-ink">What&apos;s your venue called?</div>
-              <div className="mb-7 text-sm text-ink-faint">This is how your team will see it</div>
+              <div className="mb-4 text-sm text-ink-faint">This is how your team will see it</div>
+              {managerEmail && (
+                <div className="mb-5 flex items-center gap-2 rounded-xl bg-surface-subtle px-3.5 py-2.5 text-[13px] text-ink-muted">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-avail-bg text-[11px] text-avail-text">
+                    ✓
+                  </span>
+                  Signed in as <span className="font-medium text-ink">{managerEmail}</span>
+                </div>
+              )}
               <div className="mb-4">
                 <div className="mb-1.5 text-[13px] font-semibold text-ink-label">Venue name</div>
                 <input
@@ -387,7 +487,10 @@ export default function OnboardingPage() {
                   Back
                 </button>
                 <button
-                  onClick={() => setStep(4)}
+                  onClick={() => {
+                    setStep(4);
+                    persistStep(4);
+                  }}
                   className="flex-1 rounded-control bg-accent py-4 text-center text-base font-semibold text-white"
                 >
                   Continue
@@ -421,7 +524,11 @@ export default function OnboardingPage() {
                 {teamMembers.length === 1 ? "" : "s"}
               </div>
               <button
-                onClick={() => router.push("/dashboard")}
+                onClick={async () => {
+                  // Mark onboarding finished so any later visit skips to the app.
+                  await saveSetupState(null).catch(() => {});
+                  router.push("/dashboard");
+                }}
                 className="w-full rounded-control bg-accent py-4 text-center text-base font-semibold text-white"
               >
                 Go to Dashboard
@@ -432,5 +539,19 @@ export default function OnboardingPage() {
       </div>
       <Toast message={toast} />
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto flex max-w-[420px] items-center justify-center px-6 py-24 text-sm text-ink-muted">
+          Loading…
+        </div>
+      }
+    >
+      <OnboardingWizard />
+    </Suspense>
   );
 }
