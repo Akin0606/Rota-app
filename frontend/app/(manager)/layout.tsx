@@ -46,14 +46,15 @@ export default async function ManagerLayout({ children }: { children: React.Reac
     );
   }
 
-  // The reference is a centred, phone-width column — the whole manager surface
-  // lives in one `.cp-manager` root so every colour utility resolves to the
-  // reference palette (see globals.css). Not-yet-rebuilt pages already ship a
-  // mobile layout (they used to have a bottom nav), so they render coherently
-  // inside this column while later phases restyle them one by one.
+  // Phone-width column on mobile, widening to a comfortable laptop width at md+
+  // so the pages' existing desktop grids (dashboard `md:grid-cols-4` /
+  // `lg:grid-cols-[1fr_380px]`, settings `md:grid-cols-2`) finally get room to
+  // fire — they were being suffocated by a hard 460px cap. The whole manager
+  // surface lives in one `.cp-manager` root so every colour utility resolves to
+  // the reference palette (see globals.css).
   return (
     <div className="cp-manager min-h-screen bg-surface-page text-ink">
-      <div className="mx-auto flex min-h-screen w-full max-w-[460px] flex-col">
+      <div className="mx-auto flex min-h-screen w-full max-w-[460px] flex-col md:max-w-[1120px]">
         <ManagerNav />
         <div className="flex-1">{children}</div>
       </div>
