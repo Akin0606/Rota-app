@@ -185,6 +185,29 @@ def send_availability_reminder_email(
     return _send(to_email, subject, html)
 
 
+# 4a2. Auto-submit heads-up (§6b) — sent when the cron copies a staffer's usual
+#      pattern forward, so it's never silent. -------------------------------------
+
+def send_auto_submit_email(
+    to_email: Optional[str],
+    name: str,
+    venue_name: str,
+    week_label: str,
+    venue_link_url: str,
+    pin: Optional[str] = None,
+) -> dict:
+    subject = f"We submitted your usual availability for {week_label}"
+    body = f"""
+<p style="margin:0 0 8px;">Hi {name},</p>
+<p style="margin:0 0 16px;">You&apos;re set to auto-submit, so we sent your usual availability for <strong>{week_label}</strong> at {venue_name} — no need to do anything if it still fits.</p>
+<p style="margin:0 0 16px;">If this week is different, tap below to change it before the deadline.</p>
+{_pin_badge(pin) if pin else ""}
+{_button("Change my availability", venue_link_url)}
+"""
+    html = _shell(f"Your usual availability was sent for {week_label}", f"Sent because auto-submit is on for your {venue_name} account on Crewplan.", body)
+    return _send(to_email, subject, html)
+
+
 # 4b. Availability window opens (to staff) -----------------------------------
 
 def send_availability_open_email(

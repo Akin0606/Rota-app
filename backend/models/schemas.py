@@ -78,6 +78,8 @@ class AvailabilityAuthResponse(BaseModel):
     shifts: list[ShiftOut]
     submissions: list[AvailabilityEntryOut]
     rules: RulesOut
+    # True when the current week's submission was auto-copied by the cron (§6b).
+    auto_submitted: bool = False
 
 
 class AvailabilityEntryIn(BaseModel):
@@ -108,6 +110,9 @@ class WeekAvailabilityOut(BaseModel):
     # True when `submissions` wasn't actually saved for this week yet, but is
     # the staff member's most recent prior pattern shown as a starting point.
     prefilled: bool = False
+    # True when the saved submission was auto-copied by the cron (§6b) and not
+    # yet re-affirmed — drives the "we auto-submitted for you" banner.
+    auto_submitted: bool = False
 
 
 class AutoSubmitToggleRequest(BaseModel):

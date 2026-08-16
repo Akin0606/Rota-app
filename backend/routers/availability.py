@@ -286,14 +286,16 @@ def authenticate(venue_token: str, payload: PinAuthRequest, request: Request):
     # if the cron cycle left a gap.
     period = _get_or_create_current_period(venue["id"])
     supabase = get_supabase()
-    submissions = (
+    saved = (
         supabase.table("availability_submissions")
-        .select("day_index, shift_id, status, note")
+        .select("day_index, shift_id, status, note, auto_submitted")
         .eq("period_id", period["id"])
         .eq("staff_id", staff["id"])
         .execute()
         .data
     )
+    auto_submitted = period["status"] == "collecting" and any(r.get("auto_submitted") for r in saved)
+    submissions = [{k: v for k, v in r.items() if k != "auto_submitted"} for r in saved]
 
     return {
         "staff": {
@@ -304,6 +306,7 @@ def authenticate(venue_token: str, payload: PinAuthRequest, request: Request):
             "pending": staff.get("pending", False),
         },
         "venue_name": venue["name"],
+        "auto_submitted": auto_submitted,
         "period": (
             {
                 "id": period["id"],
@@ -446,16 +449,21 @@ def get_week_availability(venue_token: str, payload: WeekAvailabilityRequest):
     editable = period is None or period["status"] == "collecting"
 
     submissions = []
+    auto_submitted = False
     if period:
         supabase = get_supabase()
-        submissions = (
+        saved = (
             supabase.table("availability_submissions")
-            .select("day_index, shift_id, status, note")
+            .select("day_index, shift_id, status, note, auto_submitted")
             .eq("period_id", period["id"])
             .eq("staff_id", staff["id"])
             .execute()
             .data
         )
+        # The cron copied this week forward (§6b) if any saved row is flagged.
+        # A manual re-submit re-inserts without the flag, so it clears itself.
+        auto_submitted = editable and any(r.get("auto_submitted") for r in saved)
+        submissions = [{k: v for k, v in r.items() if k != "auto_submitted"} for r in saved]
 
     # Nothing saved for this week yet — show their last pattern as a
     # starting point so a no-change week is a single tap, not a rebuild.
@@ -467,6 +475,7 @@ def get_week_availability(venue_token: str, payload: WeekAvailabilityRequest):
     return {
         "week_start": monday.isoformat(),
         "prefilled": prefilled,
+        "auto_submitted": auto_submitted,
         "period": (
             {"id": period["id"], "week_start": str(period["week_start"]), "status": period["status"]}
             if period

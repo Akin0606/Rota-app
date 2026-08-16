@@ -73,15 +73,33 @@ const CYCLE: Record<SlotState, number> = {
   no: AVAILABLE,
 };
 
-const SLOT_STYLE: Record<SlotState, { box: string; label: string }> = {
-  yes: { box: "border-[0.5px] border-[rgba(46,204,113,0.4)] bg-cp-green-soft", label: "text-cp-green" },
-  maybe: { box: "border-[0.5px] border-[rgba(255,193,7,0.4)] bg-cp-amber-soft", label: "text-cp-amber" },
-  no: { box: "border-[0.5px] border-[rgba(229,72,77,0.4)] bg-cp-red-soft", label: "text-cp-red" },
-  // Dashed hollow, no fill — "no answer yet". §6's prefill will render carried
-  // over cells as a *lighter fill* of the real colour, so keep this hollow to
-  // stay distinct from that (a new shift added mid-week shows untouched beside
-  // carried-over cells — desirable, spotlights exactly what's new to answer).
-  unset: { box: "border-[0.5px] border-dashed border-[var(--c-hairline)] bg-transparent", label: "text-ink-muted" },
+// Each real state has a solid fill (this week's committed answer) and an "echo"
+// — a lighter fill of the same colour (§6a): unmistakably the real state, but
+// visibly *last week's, carried over*, not yet re-affirmed for this week. The
+// echo is a provenance cue, not a confirm gate — one touch commits the whole
+// grid to solid. Echo stays distinct from §2's untouched (dashed hollow, no
+// fill), so a shift added mid-week shows untouched beside carried-over cells.
+const SLOT_STYLE: Record<SlotState, { box: string; echo: string; label: string }> = {
+  yes: {
+    box: "border-[0.5px] border-[rgba(46,204,113,0.4)] bg-cp-green-soft",
+    echo: "border-[0.5px] border-[rgba(46,204,113,0.2)] bg-[rgba(46,204,113,0.05)]",
+    label: "text-cp-green",
+  },
+  maybe: {
+    box: "border-[0.5px] border-[rgba(255,193,7,0.4)] bg-cp-amber-soft",
+    echo: "border-[0.5px] border-[rgba(255,193,7,0.2)] bg-[rgba(255,193,7,0.05)]",
+    label: "text-cp-amber",
+  },
+  no: {
+    box: "border-[0.5px] border-[rgba(229,72,77,0.4)] bg-cp-red-soft",
+    echo: "border-[0.5px] border-[rgba(229,72,77,0.2)] bg-[rgba(229,72,77,0.05)]",
+    label: "text-cp-red",
+  },
+  unset: {
+    box: "border-[0.5px] border-dashed border-[var(--c-hairline)] bg-transparent",
+    echo: "border-[0.5px] border-dashed border-[var(--c-hairline)] bg-transparent",
+    label: "text-ink-muted",
+  },
 };
 
 type Grid = Record<number, Record<string, number>>;
@@ -114,6 +132,11 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   const [editable, setEditable] = useState(true);
   const [weekLoading, setWeekLoading] = useState(false);
   const [prefilled, setPrefilled] = useState(false);
+  // Prefilled cells render as a lighter echo until the first touch commits the
+  // whole grid to solid (§6a). A non-prefilled week is committed from the start.
+  const [committed, setCommitted] = useState(true);
+  // The cron auto-submitted this week's pattern (§6b) — surfaces a heads-up banner.
+  const [autoSubmitted, setAutoSubmitted] = useState(false);
   const [autoSubmit, setAutoSubmitState] = useState(false);
 
   const [grid, setGrid] = useState<Grid>({});
@@ -176,6 +199,10 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
         setNotes(n);
         setEditable(res.editable);
         setPrefilled(res.prefilled);
+        // A prefilled week starts uncommitted (echo cells); a real saved week
+        // is solid from the off.
+        setCommitted(!res.prefilled);
+        setAutoSubmitted(res.auto_submitted ?? false);
       })
       .catch(() => {
         if (!cancelled) {
@@ -183,6 +210,8 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
           setNotes({});
           setEditable(true);
           setPrefilled(false);
+          setCommitted(true);
+          setAutoSubmitted(false);
         }
       })
       .finally(() => {
@@ -213,6 +242,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
 
   function cycleSlot(dayIndex: number, shiftId: string) {
     if (!editable) return;
+    setCommitted(true); // first touch commits the whole grid to solid (§6a)
     setGrid((prev) => {
       const current = prev[dayIndex]?.[shiftId];
       return {
@@ -224,6 +254,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
 
   function setAllDay(dayIndex: number) {
     if (!editable || !data) return;
+    setCommitted(true);
     setGrid((prev) => {
       const row: Record<string, number> = { ...(prev[dayIndex] || {}) };
       for (const shift of data.shifts) row[shift.id] = AVAILABLE;
@@ -236,6 +267,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   // the grid blank (which trips the guard). One answered, negative week.
   function setCantWorkWeek() {
     if (!editable || !data) return;
+    setCommitted(true);
     setGrid(() => {
       const g: Grid = {};
       for (let di = 0; di < DAY_LABELS.length; di += 1) {
@@ -374,9 +406,20 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
         <LegendItem swatch="border-[0.5px] border-dashed border-[var(--c-hairline)]" label="No answer yet" />
       </div>
 
-      {prefilled && editable && (
+      {prefilled && editable && !committed && (
         <div className="mb-3.5 rounded-cp-control bg-accent-light px-3.5 py-2.5 text-center text-[12px] text-accent">
           This is what you sent last time — still right? Just hit submit.
+        </div>
+      )}
+
+      {/* §6b — the cron auto-submitted this week's usual pattern. A courtesy
+          backstop so it's never silent; tapping any slot edits it as normal. */}
+      {autoSubmitted && editable && (
+        <div className="mb-3.5 flex items-start gap-2 rounded-cp-control bg-accent-light px-3.5 py-2.5 text-[12px] text-accent">
+          <Icon name="info-circle" size={14} />
+          <span className="text-left leading-[1.45]">
+            We auto-submitted your usual availability for this week — still right? Tap any slot to change it.
+          </span>
         </div>
       )}
 
@@ -407,6 +450,8 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                 {data.shifts.map((shift) => {
                   const state = toState(grid[dayIndex]?.[shift.id]);
                   const style = SLOT_STYLE[state];
+                  // Carried-over cells echo (lighter) until first touch commits.
+                  const boxClass = prefilled && !committed ? style.echo : style.box;
                   return (
                     <button
                       key={shift.id}
@@ -424,7 +469,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                       // scale (apple-design: respond on press). transform/opacity
                       // only; no transition-all. Reduced-motion is handled globally
                       // by the .cp-staff * rule in globals.css.
-                      className={`min-w-0 flex-1 rounded-cp-slot px-2 py-2.5 text-center transition-[background-color,border-color,color,transform] duration-[180ms] active:scale-[0.97] ${style.box}`}
+                      className={`min-w-0 flex-1 rounded-cp-slot px-2 py-2.5 text-center transition-[background-color,border-color,color,transform] duration-[180ms] active:scale-[0.97] ${boxClass}`}
                     >
                       <div className={`truncate text-[12px] font-medium transition-colors ${style.label}`}>
                         {shift.name}

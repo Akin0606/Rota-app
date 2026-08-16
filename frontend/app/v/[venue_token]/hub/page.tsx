@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import Icon from "@/components/staff/icon";
 import ModeToggle from "@/components/staff/mode-toggle";
@@ -317,6 +318,18 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
           </span>
         )}
       </div>
+
+      {auth.auto_submitted && (
+        <Link
+          href={`/v/${venue_token}/availability`}
+          className="cp-hairline mb-3 flex items-start gap-2.5 rounded-cp-panel bg-accent-light px-3.5 py-3 transition-transform duration-150 active:scale-[0.99]"
+        >
+          <Icon name="info-circle" size={16} className="mt-0.5 shrink-0 text-accent" />
+          <span className="text-left text-[13px] leading-[1.45] text-accent">
+            We auto-submitted your usual availability this week — <span className="font-medium">still right?</span> Tap to check.
+          </span>
+        </Link>
+      )}
 
       {pendingGive && giveShift && giverName && (
         <ActionBanner

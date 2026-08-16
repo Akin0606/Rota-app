@@ -98,13 +98,16 @@ def _auto_submit_for_new_period(venue: dict, period: dict) -> None:
 
     opted_in = (
         supabase.table("staff_members")
-        .select("id, name")
+        .select("id, name, email, pin")
         .eq("venue_id", venue["id"])
         .eq("is_active", True)
+        .eq("pending", False)
         .eq("auto_submit_availability", True)
         .execute()
         .data
     )
+    week_label = f"w/c {week_monday.strftime('%d %b %Y')}"
+    venue_link_url = f"{get_settings().frontend_url}/v/{venue['link_token']}"
     for member in opted_in:
         rows = _most_recent_submission_pattern(venue["id"], member["id"], week_monday)
         if not rows:
@@ -118,6 +121,9 @@ def _auto_submit_for_new_period(venue: dict, period: dict) -> None:
                 "shift_id": r["shift_id"],
                 "status": r["status"],
                 "note": r["note"],
+                # Marks the row as machine-copied so the app can show a heads-up
+                # banner (§6b) until the staffer next edits + re-submits.
+                "auto_submitted": True,
             }
             for r in rows
         ]
@@ -131,6 +137,18 @@ def _auto_submit_for_new_period(venue: dict, period: dict) -> None:
                 "detail": f"{member['name']}'s availability was auto-submitted for week of {period['week_start']} (no changes)",
             }
         ).execute()
+
+        # Never silent: email a heads-up now so they can change it before close.
+        # (Push notification is future work — see CLAUDE.md. Auto-submit is
+        # opt-in, so this email is the courtesy backstop, not a hard guard.)
+        email_service.send_auto_submit_email(
+            to_email=member.get("email"),
+            name=member["name"],
+            venue_name=venue["name"],
+            week_label=week_label,
+            venue_link_url=venue_link_url,
+            pin=member.get("pin"),
+        )
 
 
 def _send_open_emails(venue: dict, week_monday: date) -> None:

@@ -26,12 +26,14 @@ export type VenueInfo = {
 };
 
 export type PinAuthData = {
-  staff: { id: string; name: string; role: string; auto_submit_availability: boolean };
+  staff: { id: string; name: string; role: string; auto_submit_availability: boolean; pending?: boolean };
   venue_name: string;
   period: { id: string; week_start: string; status: string } | null;
   shifts: Shift[];
   submissions: AvailabilityEntry[];
   rules: { avail_closes_day: string; avail_closes_time: string };
+  // The cron auto-submitted the current week (§6b) — drives a hub banner.
+  auto_submitted?: boolean;
 };
 
 class ApiError extends Error {
@@ -249,6 +251,8 @@ export type WeekAvailability = {
   editable: boolean;
   submissions: AvailabilityEntry[];
   prefilled: boolean;
+  // The cron auto-copied this week's pattern (§6b); drives a heads-up banner.
+  auto_submitted: boolean;
 };
 
 export function getWeekAvailability(
