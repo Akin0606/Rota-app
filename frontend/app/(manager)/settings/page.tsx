@@ -28,6 +28,7 @@ import {
   listRoles,
   listShifts,
   listStaff,
+  reopenAvailability,
   unpublishRota,
   updateRules,
   updateShift,
@@ -115,6 +116,21 @@ export default function SettingsPage() {
   }, [reloadToken]);
 
   const livePeriods = periods.filter((p) => p.status === "published" || p.status === "confirmed");
+  const generatedPeriods = periods.filter((p) => p.status === "generated");
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
+
+  async function handleReopen(p: Period) {
+    setReopeningId(p.id);
+    try {
+      await reopenAvailability(p.id);
+      setPeriods((prev) => prev.map((x) => (x.id === p.id ? { ...x, status: "collecting" } : x)));
+      showToast(`Availability reopened for week of ${formatWeekRange(p.week_start)}`);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not reopen this week");
+    } finally {
+      setReopeningId(null);
+    }
+  }
 
   async function handleUnpublish() {
     if (!unpublishTarget) return;
@@ -525,6 +541,36 @@ export default function SettingsPage() {
                     className="rounded-lg px-3 py-2 text-[13px] font-medium text-unavail-text"
                   >
                     Unpublish
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {generatedPeriods.length > 0 && (
+          <div className="rounded-panel border border-hairline bg-surface-card p-6 md:col-span-2">
+            <div className="mb-1 text-base font-bold text-ink">Generated (not published)</div>
+            <div className="mb-4 text-[13px] text-ink-faint">
+              These rotas have been solved but not published. Reopen a week to unlock the availability
+              grid so staff can submit or amend again before you re-generate — assignments are kept.
+            </div>
+            <div className="flex flex-col gap-2">
+              {generatedPeriods.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-surface-subtle px-3.5 py-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm font-semibold text-ink">{formatWeekRange(p.week_start)}</div>
+                    <StatusBanner status={p.status} />
+                  </div>
+                  <button
+                    onClick={() => handleReopen(p)}
+                    disabled={reopeningId === p.id}
+                    className="rounded-lg px-3 py-2 text-[13px] font-medium text-accent disabled:opacity-60"
+                  >
+                    {reopeningId === p.id ? "Reopening…" : "Reopen availability"}
                   </button>
                 </div>
               ))}

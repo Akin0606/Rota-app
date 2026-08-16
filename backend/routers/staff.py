@@ -13,7 +13,7 @@ from models.schemas import (
     StaffManagerOut,
     StaffUpdateRequest,
 )
-from services import email_service, notice_window, schedule_windows
+from services import email_service, lifecycle, notice_window, schedule_windows
 from services.auth_service import get_current_manager, get_manager_venue
 from services.pin_service import generate_unique_pin
 
@@ -312,6 +312,31 @@ def delete_staff(staff_id: str, manager: dict = Depends(get_current_manager)):
     supabase = get_supabase()
 
     supabase.table("staff_members").update({"is_active": False}).eq("id", staff_id).execute()
+    return {"status": "ok"}
+
+
+@router.post("/{staff_id}/erase")
+def erase_staff(staff_id: str, manager: dict = Depends(get_current_manager)):
+    """Right-to-erasure (UK GDPR Art 17): irreversibly anonymise a staff
+    member's personal data — name, email, phone, PIN — and scrub their name
+    from historical activity_log detail, while keeping the row so rota/leave
+    history stays referentially intact. Distinct from delete (deactivation):
+    this cannot be undone."""
+    venue = get_manager_venue(manager["id"])
+    _get_staff_or_404(venue["id"], staff_id)
+    supabase = get_supabase()
+
+    lifecycle.anonymise_staff(supabase, venue["id"], staff_id)
+
+    # Logged AFTER the scrub so this row (which names no one) survives it.
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "action": "staff_erased",
+            "detail": "A staff member's personal data was erased on request",
+        }
+    ).execute()
+
     return {"status": "ok"}
 
 

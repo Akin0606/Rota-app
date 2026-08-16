@@ -1252,7 +1252,13 @@ def publish(period_id: str, manager: dict = Depends(get_current_manager)):
     updated_period = {**period, "status": new_status}
     summary = _build_summary(venue["id"], updated_period)
 
-    summary["email"] = _send_published_rota_emails(venue, updated_period, summary["assignments"])
+    # Idempotency: only email the team on the generated -> published/confirmed
+    # transition. A double-tap or retry against an already-live period must not
+    # re-send the whole rota to every staff member.
+    if period["status"] in ("published", "confirmed"):
+        summary["email"] = {"sent": 0, "failed": 0, "errors": [], "skipped": "already published"}
+    else:
+        summary["email"] = _send_published_rota_emails(venue, updated_period, summary["assignments"])
 
     return summary
 
@@ -1282,6 +1288,43 @@ def unpublish(period_id: str, manager: dict = Depends(get_current_manager)):
     ).execute()
 
     updated_period = {**period, "status": "generated"}
+    return _build_summary(venue["id"], updated_period)
+
+
+@router.post("/{period_id}/reopen", response_model=RotaSummaryOut)
+def reopen_availability(period_id: str, manager: dict = Depends(get_current_manager)):
+    """Returns a solved-but-unpublished week (status "generated") to
+    "collecting" so staff can submit/amend availability again — e.g. after the
+    cron closed the week early, or the manager wants a fresh solve on new
+    input. This is the in-app path that previously required hand-run SQL: there
+    was no way back from "generated" once the solver had run.
+
+    Only "generated" reopens — a published/confirmed rota is live to staff and
+    must be pulled back with unpublish first. The existing assignments are left
+    in place (a later Auto-fill or re-solve overwrites them); this only flips
+    the status so the availability grid unlocks (editable == status ==
+    "collecting")."""
+    venue = get_manager_venue(manager["id"])
+    period = _get_period_or_404(venue["id"], period_id)
+
+    if period["status"] != "generated":
+        raise HTTPException(
+            status_code=400,
+            detail="Only a generated (unpublished) rota can be reopened for availability. Unpublish it first if it's live.",
+        )
+
+    supabase = get_supabase()
+    supabase.table("availability_periods").update({"status": "collecting"}).eq("id", period_id).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "action": "availability_reopened",
+            "detail": f"Availability reopened for week of {period['week_start']}",
+        }
+    ).execute()
+
+    updated_period = {**period, "status": "collecting"}
     return _build_summary(venue["id"], updated_period)
 
 

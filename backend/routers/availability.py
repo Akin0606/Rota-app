@@ -34,6 +34,15 @@ from services.solver import UNAVAILABLE, check_manual_assignment
 # PIN auth: block a venue_token + IP after this many wrong PINs in the window.
 PIN_MAX_ATTEMPTS = 5
 PIN_WINDOW_SECONDS = 15 * 60
+# IP-independent backstop. The per-IP limit above is keyed on client_ip(),
+# which trusts X-Forwarded-For and can therefore be dodged by rotating a
+# spoofed header. This second cap counts ALL wrong PINs against a single
+# venue_token regardless of source IP, so brute-forcing a 4-digit PIN is
+# bounded even when the per-IP key is attacker-controlled. Set well above what
+# a venue's real staff would ever trip in the window. (Proper fix is a shared
+# store + longer PINs — tracked; this is the mitigation that needs no infra.)
+PIN_GLOBAL_MAX = 30
+PIN_GLOBAL_WINDOW_SECONDS = 15 * 60
 # Forgot-PIN: cap requests per venue + email to curb enumeration/abuse.
 FORGOT_MAX_REQUESTS = 3
 FORGOT_WINDOW_SECONDS = 60 * 60
@@ -264,22 +273,31 @@ def authenticate(venue_token: str, payload: PinAuthRequest, request: Request):
     venue = _get_venue_or_404(venue_token)
 
     lock_key = f"pinauth:{venue_token}:{rate_limit.client_ip(request)}"
-    locked, retry_after = rate_limit.is_locked(lock_key, PIN_MAX_ATTEMPTS, PIN_WINDOW_SECONDS)
-    if locked:
-        minutes = rate_limit.minutes_from_seconds(retry_after)
-        raise HTTPException(
-            status_code=429,
-            detail=f"Too many incorrect attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}.",
-        )
+    global_key = f"pinauth-global:{venue_token}"
+    for key, limit, window in (
+        (lock_key, PIN_MAX_ATTEMPTS, PIN_WINDOW_SECONDS),
+        (global_key, PIN_GLOBAL_MAX, PIN_GLOBAL_WINDOW_SECONDS),
+    ):
+        locked, retry_after = rate_limit.is_locked(key, limit, window)
+        if locked:
+            minutes = rate_limit.minutes_from_seconds(retry_after)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many incorrect attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}.",
+            )
 
     try:
         staff = _get_staff_by_pin(venue["id"], payload.pin)
     except HTTPException as exc:
         if exc.status_code == 401:
-            # Only wrong PINs count toward the lockout.
+            # Only wrong PINs count toward the lockout — both the per-IP key and
+            # the IP-independent venue-wide backstop.
             rate_limit.record(lock_key)
+            rate_limit.record(global_key)
         raise
-    # Successful PIN clears the failure count for this venue_token + IP.
+    # Successful PIN clears the per-IP failure count for this venue_token + IP.
+    # The global backstop is deliberately NOT cleared by one success, so a
+    # single valid login can't reset an in-progress venue-wide brute-force.
     rate_limit.clear(lock_key)
 
     # Always give the staff member an open week to fill — create one on the fly
@@ -356,16 +374,24 @@ def join_team(venue_token: str, payload: StaffJoinRequest, request: Request):
         raise HTTPException(status_code=403, detail="Joining isn't open for this venue right now.")
 
     lock_key = f"joinpin:{venue_token}:{rate_limit.client_ip(request)}"
-    locked, retry_after = rate_limit.is_locked(lock_key, PIN_MAX_ATTEMPTS, PIN_WINDOW_SECONDS)
-    if locked:
-        minutes = rate_limit.minutes_from_seconds(retry_after)
-        raise HTTPException(
-            status_code=429,
-            detail=f"Too many incorrect attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}.",
-        )
+    global_key = f"joinpin-global:{venue_token}"
+    for key, limit, window in (
+        (lock_key, PIN_MAX_ATTEMPTS, PIN_WINDOW_SECONDS),
+        (global_key, PIN_GLOBAL_MAX, PIN_GLOBAL_WINDOW_SECONDS),
+    ):
+        locked, retry_after = rate_limit.is_locked(key, limit, window)
+        if locked:
+            minutes = rate_limit.minutes_from_seconds(retry_after)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many incorrect attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}.",
+            )
 
     if payload.join_pin != join_pin:
+        # Count the wrong code against both the per-IP key and the
+        # IP-independent venue-wide backstop (spoof-proof).
         rate_limit.record(lock_key)
+        rate_limit.record(global_key)
         raise HTTPException(status_code=401, detail="Incorrect join code")
     rate_limit.clear(lock_key)
 
@@ -738,10 +764,14 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
     }
 
 
-@router.get("/{venue_token}/rota", response_model=StaffRotaOut)
-def get_staff_rota(venue_token: str, pin: str = Query(pattern=r"^\d{4}$")):
+@router.post("/{venue_token}/rota", response_model=StaffRotaOut)
+def get_staff_rota(venue_token: str, payload: PinAuthRequest):
+    # POST (not GET) so the PIN travels in the request body, never the URL —
+    # a URL-borne credential lands in access logs, proxy logs, browser history
+    # and Referer headers. A read done over POST; the staff cache classifies it
+    # by path tail, not method, so caching is unaffected.
     venue = _get_venue_or_404(venue_token)
-    staff = _get_staff_by_pin(venue["id"], pin)
+    staff = _get_staff_by_pin(venue["id"], payload.pin)
     return _build_staff_rota(venue, staff["id"])
 
 
@@ -946,20 +976,36 @@ def claim_shift(venue_token: str, payload: AvailabilityClaimRequest):
                 detail="You have a swap pending on that day — resolve it before claiming this shift",
             )
 
+        # Atomic claim: only the first concurrent claimant wins. Guarding the
+        # write on drop_status='pending_pickup' means a second claimant whose
+        # read passed but whose write arrives late gets zero rows back — the
+        # shift moved under them — instead of silently overwriting the winner.
+        # Do this BEFORE deleting the claimant's other same-day row, so a lost
+        # race never destroys their existing assignment.
+        claimed = (
+            supabase.table("rota_assignments")
+            .update(
+                {
+                    "staff_id": staff["id"],
+                    "drop_status": None,
+                    "dropped_at": None,
+                    "claim_staff_id": None,
+                    "claim_reason": None,
+                    "manually_assigned": True,
+                }
+            )
+            .eq("id", assignment["id"])
+            .eq("drop_status", "pending_pickup")
+            .execute()
+        )
+        if not claimed.data:
+            raise HTTPException(status_code=409, detail="Someone just picked up this shift")
+
+        # Now clear any OTHER assignment the claimant held that day (one shift
+        # per day) — excluding the shift they just claimed.
         supabase.table("rota_assignments").delete().eq("period_id", period["id"]).eq(
             "staff_id", staff["id"]
-        ).eq("day_index", assignment["day_index"]).execute()
-
-        supabase.table("rota_assignments").update(
-            {
-                "staff_id": staff["id"],
-                "drop_status": None,
-                "dropped_at": None,
-                "claim_staff_id": None,
-                "claim_reason": None,
-                "manually_assigned": True,
-            }
-        ).eq("id", assignment["id"]).execute()
+        ).eq("day_index", assignment["day_index"]).neq("id", assignment["id"]).execute()
 
         supabase.table("activity_log").insert(
             {
@@ -976,9 +1022,15 @@ def claim_shift(venue_token: str, payload: AvailabilityClaimRequest):
         return ClaimSubmitResponse(status="approved", rota=_build_staff_rota(venue, staff["id"]))
 
     reason_text = "; ".join(reasons)
-    supabase.table("rota_assignments").update(
-        {"drop_status": "pending_approval", "claim_staff_id": staff["id"], "claim_reason": reason_text}
-    ).eq("id", assignment["id"]).execute()
+    requested = (
+        supabase.table("rota_assignments")
+        .update({"drop_status": "pending_approval", "claim_staff_id": staff["id"], "claim_reason": reason_text})
+        .eq("id", assignment["id"])
+        .eq("drop_status", "pending_pickup")
+        .execute()
+    )
+    if not requested.data:
+        raise HTTPException(status_code=409, detail="Someone just picked up this shift")
 
     supabase.table("activity_log").insert(
         {
@@ -1165,21 +1217,32 @@ def accept_give(venue_token: str, payload: AvailabilityGiveActionRequest):
                 detail="You have a swap pending on that day — resolve it before accepting this shift",
             )
 
+        # Atomic accept — see claim_shift. Guard the write on the still-open
+        # state so a race can't double-assign the given shift, and take it
+        # before deleting the recipient's other same-day row.
+        accepted = (
+            supabase.table("rota_assignments")
+            .update(
+                {
+                    "staff_id": staff["id"],
+                    "drop_status": None,
+                    "dropped_at": None,
+                    "target_staff_id": None,
+                    "claim_staff_id": None,
+                    "claim_reason": None,
+                    "manually_assigned": True,
+                }
+            )
+            .eq("id", assignment["id"])
+            .eq("drop_status", "pending_pickup")
+            .execute()
+        )
+        if not accepted.data:
+            raise HTTPException(status_code=409, detail="This shift is no longer available")
+
         supabase.table("rota_assignments").delete().eq("period_id", period["id"]).eq(
             "staff_id", staff["id"]
-        ).eq("day_index", assignment["day_index"]).execute()
-
-        supabase.table("rota_assignments").update(
-            {
-                "staff_id": staff["id"],
-                "drop_status": None,
-                "dropped_at": None,
-                "target_staff_id": None,
-                "claim_staff_id": None,
-                "claim_reason": None,
-                "manually_assigned": True,
-            }
-        ).eq("id", assignment["id"]).execute()
+        ).eq("day_index", assignment["day_index"]).neq("id", assignment["id"]).execute()
 
         supabase.table("activity_log").insert(
             {
@@ -1196,14 +1259,22 @@ def accept_give(venue_token: str, payload: AvailabilityGiveActionRequest):
         return ClaimSubmitResponse(status="approved", rota=_build_staff_rota(venue, staff["id"]))
 
     reason_text = check["reason"]
-    supabase.table("rota_assignments").update(
-        {
-            "drop_status": "pending_approval",
-            "target_staff_id": None,
-            "claim_staff_id": staff["id"],
-            "claim_reason": reason_text,
-        }
-    ).eq("id", assignment["id"]).execute()
+    accept_pending = (
+        supabase.table("rota_assignments")
+        .update(
+            {
+                "drop_status": "pending_approval",
+                "target_staff_id": None,
+                "claim_staff_id": staff["id"],
+                "claim_reason": reason_text,
+            }
+        )
+        .eq("id", assignment["id"])
+        .eq("drop_status", "pending_pickup")
+        .execute()
+    )
+    if not accept_pending.data:
+        raise HTTPException(status_code=409, detail="This shift is no longer available")
 
     supabase.table("activity_log").insert(
         {
@@ -1493,9 +1564,15 @@ def accept_swap(venue_token: str, payload: AvailabilitySwapActionRequest):
     confirm_reasons = [c["reason"] for c in (check_a, check_b) if c["severity"] == "confirm"]
     if confirm_reasons:
         reason_text = "; ".join(confirm_reasons)
-        supabase.table("shift_swaps").update({"status": "pending_approval", "reason": reason_text}).eq(
-            "id", swap["id"]
-        ).execute()
+        swap_pending = (
+            supabase.table("shift_swaps")
+            .update({"status": "pending_approval", "reason": reason_text})
+            .eq("id", swap["id"])
+            .eq("status", "pending_response")
+            .execute()
+        )
+        if not swap_pending.data:
+            raise HTTPException(status_code=409, detail="This swap was already handled")
 
         supabase.table("activity_log").insert(
             {
@@ -1513,10 +1590,20 @@ def accept_swap(venue_token: str, payload: AvailabilitySwapActionRequest):
 
     from datetime import datetime
 
+    # Atomically claim the swap before moving anyone: guard the status flip on
+    # 'pending_response' so two concurrent accepts can't both run execute_swap
+    # (which would move the assignments twice). Zero rows = already handled.
+    locked = (
+        supabase.table("shift_swaps")
+        .update({"status": "approved", "resolved_at": datetime.utcnow().isoformat()})
+        .eq("id", swap["id"])
+        .eq("status", "pending_response")
+        .execute()
+    )
+    if not locked.data:
+        raise HTTPException(status_code=409, detail="This swap was already handled")
+
     swap_guard.execute_swap(period["id"], initiator_assignment, recipient_assignment)
-    supabase.table("shift_swaps").update(
-        {"status": "approved", "resolved_at": datetime.utcnow().isoformat()}
-    ).eq("id", swap["id"]).execute()
 
     supabase.table("activity_log").insert(
         {
@@ -1570,14 +1657,14 @@ def decline_swap(venue_token: str, payload: AvailabilitySwapActionRequest):
     return _build_staff_rota(venue, staff["id"])
 
 
-@router.get("/{venue_token}/activity", response_model=list[ActivityOut])
-def get_staff_activity(venue_token: str, pin: str = Query(pattern=r"^\d{4}$"), limit: int = Query(default=20, le=50)):
+@router.post("/{venue_token}/activity", response_model=list[ActivityOut])
+def get_staff_activity(venue_token: str, payload: PinAuthRequest, limit: int = Query(default=20, le=50)):
     """Venue-wide notification feed for the hub bell — same shape and join
     pattern as the manager's GET /api/activity, just PIN-gated instead of a
     manager session, and filtered to STAFF_ACTIVITY_ACTIONS so rule-change/
     admin/PIN-reset noise doesn't show up for staff."""
     venue = _get_venue_or_404(venue_token)
-    _get_staff_by_pin(venue["id"], pin)
+    _get_staff_by_pin(venue["id"], payload.pin)
     supabase = get_supabase()
 
     rows = (

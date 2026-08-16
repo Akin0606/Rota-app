@@ -18,6 +18,7 @@ import {
   approveStaff,
   createStaff,
   deleteStaff,
+  eraseStaff,
   disableJoinCode,
   getVenue,
   getVenueLeaveSettings,
@@ -328,6 +329,22 @@ export default function TeamPage() {
       showToast(`New PIN for ${member.name.split(" ")[0]}: ${updated.pin}`);
     } catch {
       showToast("Could not reset PIN");
+    }
+  }
+
+  async function handleErase() {
+    if (!removeTarget) return;
+    setRemoving(true);
+    try {
+      await eraseStaff(removeTarget.id);
+      setStaff((prev) => prev.filter((m) => m.id !== removeTarget.id));
+      showToast(`${removeTarget.name.split(" ")[0]}'s data erased`);
+      setRemoveTarget(null);
+      closeSheet();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Couldn't erase — try again");
+    } finally {
+      setRemoving(false);
     }
   }
 
@@ -799,10 +816,12 @@ export default function TeamPage() {
 
       <Modal open={!!removeTarget} onClose={() => setRemoveTarget(null)} title="Remove this person?">
         <div className="mb-5 text-[13px] text-ink-muted">
-          This permanently deletes{" "}
-          <span className="font-semibold text-ink">{removeTarget?.name}</span> and their PIN. Past rota
-          history stays intact, but they can&apos;t be scheduled again — if you might want them back,{" "}
-          <span className="font-semibold text-ink">Archive</span> instead.
+          <span className="font-semibold text-ink">Remove</span> takes{" "}
+          <span className="font-semibold text-ink">{removeTarget?.name}</span> off the schedule — their PIN
+          stops working and they won&apos;t be rostered again, but their details are kept in case you add them
+          back. To honour a data-deletion request, use{" "}
+          <span className="font-semibold text-ink">Erase data</span>: that permanently anonymises their name,
+          email, phone and PIN and can&apos;t be undone. Past rota history stays intact either way.
         </div>
         <div className="flex gap-2.5">
           <button
@@ -819,6 +838,13 @@ export default function TeamPage() {
             {removing ? "Removing…" : "Remove"}
           </button>
         </div>
+        <button
+          onClick={handleErase}
+          disabled={removing}
+          className="mt-3 w-full py-2 text-center text-[12px] font-medium text-cp-red underline underline-offset-2 disabled:opacity-60"
+        >
+          Erase personal data (permanent)
+        </button>
       </Modal>
 
       <Toast message={toast} />

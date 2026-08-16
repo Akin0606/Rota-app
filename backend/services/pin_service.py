@@ -1,11 +1,12 @@
-import random
 import re
 import secrets
 import unicodedata
 
 
 def generate_pin() -> str:
-    return f"{random.randint(0, 9999):04d}"
+    # Cryptographically-secure: a staff PIN is an auth credential, so it must
+    # not come from a predictable PRNG (random.randint / Mersenne Twister).
+    return f"{secrets.randbelow(10000):04d}"
 
 
 def generate_unique_pin(supabase, venue_id: str) -> str:

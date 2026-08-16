@@ -335,7 +335,13 @@ export function getStaffRota(
 ): Promise<StaffRota> {
   return cached(
     `rota|${venueToken}|${pin}`,
-    () => request<StaffRota>(`/api/availability/${venueToken}/rota?pin=${pin}`),
+    // POST so the PIN is in the body, not the URL. The cache keys off the path
+    // tail ("rota"), which is in STAFF_READ_TAILS, so this stays a cached read.
+    () =>
+      request<StaffRota>(`/api/availability/${venueToken}/rota`, {
+        method: "POST",
+        body: JSON.stringify({ pin }),
+      }),
     opts?.onRevalidate,
   );
 }
@@ -434,7 +440,13 @@ export function getStaffActivity(
 ): Promise<Activity[]> {
   return cached(
     `activity|${venueToken}|${pin}|${limit}`,
-    () => request<Activity[]>(`/api/availability/${venueToken}/activity?pin=${pin}&limit=${limit}`),
+    // POST so the PIN is in the body, not the URL; limit stays a query param
+    // (not a credential). Path tail "activity" keeps it a cached read.
+    () =>
+      request<Activity[]>(`/api/availability/${venueToken}/activity?limit=${limit}`, {
+        method: "POST",
+        body: JSON.stringify({ pin }),
+      }),
     opts?.onRevalidate,
   );
 }
@@ -807,6 +819,12 @@ export function deleteStaff(id: string): Promise<{ status: string }> {
   return authedRequest(`/api/staff/${id}`, { method: "DELETE" });
 }
 
+// Right-to-erasure: irreversibly anonymise a staff member's personal data.
+// Distinct from deleteStaff (reversible deactivation).
+export function eraseStaff(id: string): Promise<{ status: string }> {
+  return authedRequest(`/api/staff/${id}/erase`, { method: "POST" });
+}
+
 export function resetStaffPin(id: string): Promise<StaffManager> {
   return authedRequest(`/api/staff/${id}/reset-pin`, { method: "POST" });
 }
@@ -936,6 +954,12 @@ export function publishRota(periodId: string): Promise<RotaSummary> {
 
 export function unpublishRota(periodId: string): Promise<RotaSummary> {
   return authedRequest(`/api/rota/${periodId}/unpublish`, { method: "POST" });
+}
+
+// Returns a solved-but-unpublished ("generated") week to "collecting" so staff
+// can submit availability again — the in-app path that replaces hand-run SQL.
+export function reopenAvailability(periodId: string): Promise<RotaSummary> {
+  return authedRequest(`/api/rota/${periodId}/reopen`, { method: "POST" });
 }
 
 export type SubmissionEntry = {
