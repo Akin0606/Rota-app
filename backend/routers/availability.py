@@ -19,6 +19,8 @@ from models.schemas import (
     ClaimSubmitResponse,
     ForgotPinRequest,
     PinAuthRequest,
+    StaffJoinRequest,
+    StaffJoinResponse,
     StaffRotaOut,
     VenueInfoResponse,
     WeekAvailabilityOut,
@@ -26,6 +28,7 @@ from models.schemas import (
 )
 from services import email_service, notice_window, rate_limit, swap_guard
 from services.auth_service import INACTIVE_VENUE_MESSAGE
+from services.pin_service import generate_unique_pin
 from services.solver import UNAVAILABLE, check_manual_assignment
 
 # PIN auth: block a venue_token + IP after this many wrong PINs in the window.
@@ -298,6 +301,7 @@ def authenticate(venue_token: str, payload: PinAuthRequest, request: Request):
             "name": staff["name"],
             "role": staff["role"],
             "auto_submit_availability": staff.get("auto_submit_availability", False),
+            "pending": staff.get("pending", False),
         },
         "venue_name": venue["name"],
         "period": (
@@ -312,6 +316,88 @@ def authenticate(venue_token: str, payload: PinAuthRequest, request: Request):
         "shifts": _get_shifts(venue["id"]),
         "submissions": submissions,
         "rules": _get_rules(venue["id"]),
+    }
+
+
+def _default_join_role(venue_id: str) -> str:
+    """The role a self-registered member is created with — the venue's first
+    role by sort order, so it's a real, valid role. Falls back to "Staff" for a
+    venue with no roles configured. The manager sets the real role on approval."""
+    supabase = get_supabase()
+    res = (
+        supabase.table("roles")
+        .select("name")
+        .eq("venue_id", venue_id)
+        .order("sort_order")
+        .limit(1)
+        .execute()
+    )
+    return res.data[0]["name"] if res.data else "Staff"
+
+
+@router.post("/{venue_token}/join", response_model=StaffJoinResponse)
+def join_team(venue_token: str, payload: StaffJoinRequest, request: Request):
+    """Public self-registration. Gated by the venue's rotatable join_pin — a
+    forwarded link with no code is inert, and the roster is never exposed to an
+    unauthenticated visitor. Creates a *pending* staff row (is_active=true,
+    pending=true: can PIN-auth and submit availability, but the solver ignores
+    them) and returns their new PIN exactly once. Rate-limited like PIN auth."""
+    venue = _get_venue_or_404(venue_token)
+
+    join_pin = venue.get("join_pin")
+    if not join_pin:
+        # Joining disabled for this venue — no code set. Same 403 shape whether
+        # the code is unset here or wrong below is deliberately avoided: an
+        # unset code is a venue-config state worth stating plainly, and it
+        # leaks nothing (there's no roster to protect if nobody can join).
+        raise HTTPException(status_code=403, detail="Joining isn't open for this venue right now.")
+
+    lock_key = f"joinpin:{venue_token}:{rate_limit.client_ip(request)}"
+    locked, retry_after = rate_limit.is_locked(lock_key, PIN_MAX_ATTEMPTS, PIN_WINDOW_SECONDS)
+    if locked:
+        minutes = rate_limit.minutes_from_seconds(retry_after)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many incorrect attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}.",
+        )
+
+    if payload.join_pin != join_pin:
+        rate_limit.record(lock_key)
+        raise HTTPException(status_code=401, detail="Incorrect join code")
+    rate_limit.clear(lock_key)
+
+    supabase = get_supabase()
+    pin = generate_unique_pin(supabase, venue["id"])
+    staff = (
+        supabase.table("staff_members")
+        .insert(
+            {
+                "venue_id": venue["id"],
+                "name": payload.name.strip(),
+                "role": _default_join_role(venue["id"]),
+                "pin": pin,
+                "pending": True,
+                "is_active": True,
+            }
+        )
+        .execute()
+        .data[0]
+    )
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": staff["id"],
+            "action": "staff_joined_pending",
+            "detail": f"{staff['name']} joined via the team link and is awaiting approval",
+        }
+    ).execute()
+
+    return {
+        "staff_id": staff["id"],
+        "name": staff["name"],
+        "pin": pin,
+        "venue_name": venue["name"],
     }
 
 
@@ -606,6 +692,8 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
         .select("id, name, role")
         .eq("venue_id", venue["id"])
         .eq("is_active", True)
+        # Pending self-registrants can't be a give/swap counterpart until approved.
+        .eq("pending", False)
         .execute()
         .data
         if s["id"] != staff_id
@@ -946,6 +1034,8 @@ def give_shift(venue_token: str, payload: AvailabilityGiveRequest):
         .eq("id", payload.target_staff_id)
         .eq("venue_id", venue["id"])
         .eq("is_active", True)
+        # A shift can't be given/swapped to a member still awaiting approval.
+        .eq("pending", False)
         .limit(1)
         .execute()
     )
@@ -1224,6 +1314,8 @@ def propose_swap(venue_token: str, payload: AvailabilitySwapProposeRequest):
         .eq("id", payload.target_staff_id)
         .eq("venue_id", venue["id"])
         .eq("is_active", True)
+        # A shift can't be given/swapped to a member still awaiting approval.
+        .eq("pending", False)
         .limit(1)
         .execute()
     )

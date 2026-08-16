@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import BackButton from "@/components/staff/back-button";
 import Icon from "@/components/staff/icon";
+import Modal from "@/components/modal";
 import ModeToggle from "@/components/staff/mode-toggle";
 import ProgressBar from "@/components/staff/progress-bar";
 import StaffScreen, { ScreenTitle, SectionLabel, StaffTopBar } from "@/components/staff/screen";
@@ -45,26 +46,42 @@ const AVAILABLE = 3;
 const IF_NEEDED = 1;
 const CANT_WORK = 2;
 
-type SlotState = "yes" | "maybe" | "no";
+// Four states, not three. The trust fix (§2): an *untouched* slot must be
+// distinguishable from a deliberate "can't work". Before, `toState` collapsed
+// status 0 (never answered) and 2 (explicitly can't) both to "no", so a staffer
+// who half-filled the week was silently marked unavailable for the rest while
+// the progress bar read "done". Now "unset" is its own state — dashed and
+// hollow, "no answer yet" — and the submit guard names the blank days.
+type SlotState = "yes" | "maybe" | "no" | "unset";
 
 function toState(status: number | undefined): SlotState {
   if (status === AVAILABLE) return "yes";
   if (status === IF_NEEDED) return "maybe";
-  // 0 (never set) and 2 both read as "can't work" — the new UI has no unset
-  // state, and the solver treats the two identically anyway.
-  return "no";
+  if (status === CANT_WORK) return "no";
+  // undefined / 0 — never answered. Kept distinct from an explicit "can't work".
+  return "unset";
 }
 
+// Tap order. The first tap moves a slot off "unset" into a real answer; further
+// taps cycle the three real states. Tapping never returns a slot to "unset" —
+// you can't accidentally un-answer (agency/forgiveness). To wipe a week back to
+// a clean negative, the "can't work all week" bulk action sets explicit red.
 const CYCLE: Record<SlotState, number> = {
-  no: AVAILABLE,
+  unset: AVAILABLE,
   yes: IF_NEEDED,
   maybe: CANT_WORK,
+  no: AVAILABLE,
 };
 
 const SLOT_STYLE: Record<SlotState, { box: string; label: string }> = {
   yes: { box: "border-[0.5px] border-[rgba(46,204,113,0.4)] bg-cp-green-soft", label: "text-cp-green" },
   maybe: { box: "border-[0.5px] border-[rgba(255,193,7,0.4)] bg-cp-amber-soft", label: "text-cp-amber" },
-  no: { box: "cp-hairline bg-transparent", label: "text-ink" },
+  no: { box: "border-[0.5px] border-[rgba(229,72,77,0.4)] bg-cp-red-soft", label: "text-cp-red" },
+  // Dashed hollow, no fill — "no answer yet". §6's prefill will render carried
+  // over cells as a *lighter fill* of the real colour, so keep this hollow to
+  // stay distinct from that (a new shift added mid-week shows untouched beside
+  // carried-over cells — desirable, spotlights exactly what's new to answer).
+  unset: { box: "border-[0.5px] border-dashed border-[var(--c-hairline)] bg-transparent", label: "text-ink-muted" },
 };
 
 type Grid = Record<number, Record<string, number>>;
@@ -105,6 +122,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   const [noteText, setNoteText] = useState("");
   const [toast, setToast] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [guardOpen, setGuardOpen] = useState(false);
 
   useEffect(() => {
     const storedPin = sessionStorage.getItem(pinStorageKey(venue_token));
@@ -213,6 +231,22 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
     });
   }
 
+  // Bulk "can't work at all this week" — sets every slot to explicit red. This
+  // is the deliberate way to say "I'm off the whole week", distinct from leaving
+  // the grid blank (which trips the guard). One answered, negative week.
+  function setCantWorkWeek() {
+    if (!editable || !data) return;
+    setGrid(() => {
+      const g: Grid = {};
+      for (let di = 0; di < DAY_LABELS.length; di += 1) {
+        const row: Record<string, number> = {};
+        for (const shift of data.shifts) row[shift.id] = CANT_WORK;
+        g[di] = row;
+      }
+      return g;
+    });
+  }
+
   function saveNote() {
     if (noteDay === null || !noteText.trim()) return;
     setNotes((prev) => ({ ...prev, [noteDay]: noteText.trim() }));
@@ -228,20 +262,32 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
     });
   }
 
-  async function handleSubmit() {
-    if (!data || !pin) return;
+  // A day is blank when every one of its slots is still unanswered.
+  function dayIsBlank(dayIndex: number): boolean {
+    if (!data) return false;
+    return data.shifts.every((s) => toState(grid[dayIndex]?.[s.id]) === "unset");
+  }
 
-    const anyMarked = DAY_LABELS.some((_, di) =>
-      data.shifts.some((s) => toState(grid[di]?.[s.id]) !== "no"),
-    );
-    if (!anyMarked) {
-      showToast("Mark at least one slot before submitting");
+  function handleSubmit() {
+    if (!data) return;
+    // Guard: any fully-blank day gets an explicit confirm before submit. Blank
+    // is stored as can't-work, and a half-filled week almost never means "I'm
+    // unavailable for the rest" — the staffer just stopped. Name the days, make
+    // the consequence a deliberate choice (manager-side warn-and-confirm pattern).
+    const hasBlank = DAY_LABELS.some((_, di) => dayIsBlank(di));
+    if (hasBlank) {
+      setGuardOpen(true);
       return;
     }
+    void doSubmit();
+  }
 
-    // Every slot is sent explicitly, including "can't work" — the three-state
-    // signal only means anything to the solver if it isn't collapsed back into
-    // "present or absent".
+  async function doSubmit() {
+    if (!data || !pin) return;
+    setGuardOpen(false);
+
+    // Every slot is sent explicitly. "unset" and "no" both submit as can't-work
+    // (blank counts as can't-work); "yes"/"maybe" carry the two positive tiers.
     const submissions: AvailabilityEntry[] = [];
     for (let di = 0; di < DAY_LABELS.length; di += 1) {
       for (const shift of data.shifts) {
@@ -269,9 +315,11 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   if (error || !data) return <CenteredMessage>{error || "Something went wrong."}</CenteredMessage>;
 
   const weekStart = parseISODate(selectedWeek);
-  const daysTouched = DAY_LABELS.filter((_, di) =>
-    data.shifts.some((s) => toState(grid[di]?.[s.id]) !== "no"),
-  ).length;
+  // A day counts as answered once it has *any* non-unset slot — including an
+  // explicit can't-work. Progress and the submit guard key off the same thing,
+  // so they never disagree (a fully-blank day is neither "done" nor guard-free).
+  const blankDayLabels = DAY_LABELS.filter((_, di) => dayIsBlank(di));
+  const answeredDays = DAY_LABELS.length - blankDayLabels.length;
 
   return (
     <StaffScreen>
@@ -319,10 +367,11 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
         })}
       </div>
 
-      <div className="cp-hairline mb-3.5 flex gap-4 rounded-cp-control bg-surface-card px-3.5 py-3 transition-all duration-[350ms]">
+      <div className="cp-hairline mb-3.5 flex flex-wrap gap-x-4 gap-y-2 rounded-cp-control bg-surface-card px-3.5 py-3 transition-[background-color,color] duration-[350ms]">
         <LegendItem swatch="bg-cp-green" label="Available" />
         <LegendItem swatch="bg-cp-amber" label="If needed" />
-        <LegendItem swatch="cp-hairline bg-cp-icon" label="Can't work" />
+        <LegendItem swatch="bg-cp-red" label="Can't work" />
+        <LegendItem swatch="border-[0.5px] border-dashed border-[var(--c-hairline)]" label="No answer yet" />
       </div>
 
       {prefilled && editable && (
@@ -363,9 +412,19 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                       key={shift.id}
                       onClick={() => cycleSlot(dayIndex, shift.id)}
                       aria-label={`${shift.name} on ${DAY_NAMES[dayIndex]}: ${
-                        state === "yes" ? "available" : state === "maybe" ? "if needed" : "can't work"
+                        state === "yes"
+                          ? "available"
+                          : state === "maybe"
+                            ? "if needed"
+                            : state === "no"
+                              ? "can't work"
+                              : "no answer yet"
                       }`}
-                      className={`min-w-0 flex-1 rounded-cp-slot px-2 py-2.5 text-center transition-all duration-[180ms] ${style.box}`}
+                      // ~180ms colour settle (kept from before) + a light press-
+                      // scale (apple-design: respond on press). transform/opacity
+                      // only; no transition-all. Reduced-motion is handled globally
+                      // by the .cp-staff * rule in globals.css.
+                      className={`min-w-0 flex-1 rounded-cp-slot px-2 py-2.5 text-center transition-[background-color,border-color,color,transform] duration-[180ms] active:scale-[0.97] ${style.box}`}
                     >
                       <div className={`truncate text-[12px] font-medium transition-colors ${style.label}`}>
                         {shift.name}
@@ -381,6 +440,16 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
           );
         })}
       </div>
+
+      {editable && (
+        <button
+          onClick={setCantWorkWeek}
+          className="cp-hairline mb-3.5 flex w-full items-center justify-center gap-1.5 rounded-cp-control bg-surface-card py-2.5 text-[12px] font-medium text-ink-muted transition-[color,transform] duration-150 active:scale-[0.98] hover:text-cp-red"
+        >
+          <Icon name="circle-x" size={13} />
+          Can&apos;t work at all this week
+        </button>
+      )}
 
       {/* Notes aren't in the reference, but they're a real feature staff use to
           qualify a week ("can stay late if needed"). */}
@@ -461,10 +530,10 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
 
       <div className="my-[18px] flex items-center justify-center gap-1.5 text-center text-[12px] text-ink-faint transition-colors duration-[350ms]">
         <Icon name="info-circle" size={13} />
-        Tap a slot to cycle: available → if needed → can&apos;t work
+        Tap to cycle: available → if needed → can&apos;t work · dashed = no answer yet
       </div>
 
-      <ProgressBar value={daysTouched / 7} label={`${daysTouched} of 7 days`} className="mb-1" />
+      <ProgressBar value={answeredDays / 7} label={`${answeredDays} of 7 days`} className="mb-1" />
 
       {editable ? (
         <button
@@ -504,9 +573,57 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
         </button>
       </div>
 
+      {/* Submit guard — a fully-blank day would otherwise submit silently as
+          can't-work. Rendered inside StaffScreen so Modal (not a portal) picks
+          up the .cp-staff palette; its fade/scale + reduced-motion come from the
+          shared .cp-overlay classes. */}
+      <Modal
+        open={guardOpen}
+        onClose={() => setGuardOpen(false)}
+        title={blankDayLabels.length === 7 ? "You haven't marked any days" : "Some days are still blank"}
+      >
+        <p className="mb-1.5 text-[14px] leading-[1.5] text-ink-muted">
+          {blankDayLabels.length === 7 ? (
+            <>You haven&apos;t answered any day yet. </>
+          ) : (
+            <>
+              You haven&apos;t answered{" "}
+              <span className="text-ink">{joinLabels(blankDayLabels)}</span>.{" "}
+            </>
+          )}
+          <span className="text-ink">Blank counts as can&apos;t-work</span> — you won&apos;t be offered
+          shifts on {blankDayLabels.length === 1 ? "that day" : "those days"}.
+        </p>
+        <p className="mb-5 text-[14px] leading-[1.5] text-ink-muted">
+          Mark them, or confirm you&apos;re only telling us about part of the week.
+        </p>
+        <div className="flex gap-2.5">
+          <button
+            onClick={() => setGuardOpen(false)}
+            className="flex-1 rounded-cp-slot bg-cp-icon py-3 text-[13px] font-medium text-ink-muted transition-transform duration-150 active:scale-[0.98]"
+          >
+            Go back &amp; mark them
+          </button>
+          <button
+            onClick={() => void doSubmit()}
+            disabled={submitting}
+            className="flex-1 rounded-cp-slot bg-accent py-3 text-[13px] font-medium text-white transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
+          >
+            {submitting ? "Submitting…" : "Submit anyway"}
+          </button>
+        </div>
+      </Modal>
+
       <Toast message={toast} />
     </StaffScreen>
   );
+}
+
+// "Mon" · "Mon & Tue" · "Mon, Tue & Wed" — Oxford-free, matches the app's copy.
+function joinLabels(labels: string[]): string {
+  if (labels.length <= 1) return labels[0] ?? "";
+  if (labels.length === 2) return `${labels[0]} & ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")} & ${labels[labels.length - 1]}`;
 }
 
 function LegendItem({ swatch, label }: { swatch: string; label: string }) {

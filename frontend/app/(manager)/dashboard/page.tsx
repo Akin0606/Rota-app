@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import LoadingScreen from "@/components/loading-screen";
+import ManagerIcon from "@/components/manager/icon";
 import Modal from "@/components/modal";
 import StatusBanner from "@/components/status-banner";
 import TeamStatusCard from "@/components/team-status-card";
@@ -208,7 +209,10 @@ export default function DashboardPage() {
     );
   }
 
-  const activeStaff = staff.filter((s) => s.is_active);
+  // Self-registered members awaiting approval aren't part of the team yet —
+  // keep them out of the availability/team counts and surface them separately.
+  const pendingApprovals = staff.filter((s) => s.pending);
+  const activeStaff = staff.filter((s) => s.is_active && !s.pending);
   const submittedCount = activeStaff.filter((s) => s.submitted).length;
   const totalCount = activeStaff.length;
   const pendingCount = totalCount - submittedCount;
@@ -240,6 +244,33 @@ export default function DashboardPage() {
         <div className="mb-6">
           <StatusBanner status={period.status} />
         </div>
+      )}
+
+      {pendingApprovals.length > 0 && (
+        <Link
+          href="/team"
+          className="mb-6 flex items-center gap-3 rounded-panel border border-cp-amber-soft bg-surface-card px-5 py-4"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cp-amber-soft text-cp-amber">
+            <ManagerIcon name="users" size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-bold text-ink">
+              {pendingApprovals.length} {pendingApprovals.length === 1 ? "person wants" : "people want"} to
+              join
+            </div>
+            <div className="mt-0.5 truncate text-xs text-ink-muted">
+              {pendingApprovals
+                .slice(0, 3)
+                .map((s) => s.name.split(" ")[0])
+                .join(", ")}
+              {pendingApprovals.length > 3 ? ` +${pendingApprovals.length - 3}` : ""} · tap to review
+            </div>
+          </div>
+          <span className="shrink-0 rounded-full bg-cp-amber-soft px-3 py-1.5 text-[12px] font-semibold text-cp-amber">
+            Review
+          </span>
+        </Link>
       )}
 
       {!period ? (

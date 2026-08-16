@@ -720,6 +720,10 @@ def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
         .select("id, name, is_under_18")
         .eq("venue_id", venue["id"])
         .eq("is_active", True)
+        # Self-registered members awaiting approval are never scheduled — an
+        # unconfirmed under-18 must not be assignable. This is the hard safety
+        # gate for §3; the matrix/manual-add paths guard separately.
+        .eq("pending", False)
         .execute()
         .data
     )
@@ -863,6 +867,7 @@ def copy_previous(period_id: str, manager: dict = Depends(get_current_manager)):
         .select("id")
         .eq("venue_id", venue["id"])
         .eq("is_active", True)
+        .eq("pending", False)
         .execute()
         .data
     }
@@ -940,7 +945,7 @@ def edit_assignment(
     # never be assignable, and must never even reveal whether it exists.
     staff_res = (
         supabase.table("staff_members")
-        .select("id, name, is_under_18")
+        .select("id, name, is_under_18, pending")
         .eq("id", payload.staff_id)
         .eq("venue_id", venue["id"])
         .limit(1)
@@ -949,6 +954,10 @@ def edit_assignment(
     if not staff_res.data:
         raise HTTPException(status_code=404, detail="Staff member not found")
     staff = staff_res.data[0]
+    # A pending self-registrant can't be manually assigned either — approve them
+    # first. Defends the manual-add path the same way the solver query is guarded.
+    if staff.get("pending"):
+        raise HTTPException(status_code=400, detail="Approve this person before adding them to the rota")
 
     shifts_by_id = {
         s["id"]: s for s in supabase.table("shifts").select("*").eq("venue_id", venue["id"]).execute().data

@@ -8,13 +8,14 @@ from database import get_supabase
 from models.schemas import (
     RemindRequest,
     RemindResponse,
+    StaffApproveRequest,
     StaffCreateRequest,
     StaffManagerOut,
     StaffUpdateRequest,
 )
 from services import email_service, notice_window, schedule_windows
 from services.auth_service import get_current_manager, get_manager_venue
-from services.pin_service import generate_pin
+from services.pin_service import generate_unique_pin
 
 router = APIRouter(prefix="/api/staff", tags=["staff"])
 
@@ -89,20 +90,7 @@ def _read_role_ids(staff_id: str) -> list[str]:
 
 
 def _generate_unique_pin(venue_id: str) -> str:
-    supabase = get_supabase()
-    for _ in range(10):
-        candidate = generate_pin()
-        clash = (
-            supabase.table("staff_members")
-            .select("id")
-            .eq("venue_id", venue_id)
-            .eq("pin", candidate)
-            .limit(1)
-            .execute()
-        )
-        if not clash.data:
-            return candidate
-    raise HTTPException(status_code=500, detail="Could not generate a unique PIN, please try again")
+    return generate_unique_pin(get_supabase(), venue_id)
 
 
 @router.get("", response_model=list[StaffManagerOut])
@@ -199,6 +187,80 @@ def create_staff(payload: StaffCreateRequest, manager: dict = Depends(get_curren
     staff["submitted"] = None
     staff["role_ids"] = _read_role_ids(staff["id"])
     return staff
+
+
+@router.post("/{staff_id}/approve", response_model=StaffManagerOut)
+def approve_staff(
+    staff_id: str,
+    payload: StaffApproveRequest,
+    manager: dict = Depends(get_current_manager),
+):
+    """Confirm a self-registered member: set their real role + U18 (defaults
+    were pre-filled from the join), fold in eligible roles, and activate them —
+    one tap flips pending=false so the solver can now schedule them."""
+    venue = get_manager_venue(manager["id"])
+    existing = _get_staff_or_404(venue["id"], staff_id)
+    if not existing.get("pending"):
+        raise HTTPException(status_code=400, detail="This person has already been approved")
+    supabase = get_supabase()
+
+    staff = (
+        supabase.table("staff_members")
+        .update(
+            {
+                "role": payload.role,
+                "is_under_18": payload.is_under_18,
+                "pending": False,
+                "is_active": True,
+            }
+        )
+        .eq("id", staff_id)
+        .execute()
+        .data[0]
+    )
+
+    _sync_staff_roles(venue["id"], staff_id, payload.role, payload.role_ids)
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": staff_id,
+            "action": "staff_approved",
+            "detail": f"{staff['name']} was approved and added to the team",
+        }
+    ).execute()
+
+    staff["submitted"] = None
+    staff["role_ids"] = _read_role_ids(staff_id)
+    return staff
+
+
+@router.post("/{staff_id}/reject")
+def reject_staff(staff_id: str, manager: dict = Depends(get_current_manager)):
+    """Discard a pending self-registration. Soft-delete (is_active=false) so the
+    PIN stops working and the row leaves every roster; pending is cleared so it
+    can never resurface in the approvals surface. Their availability rows, if
+    any, are harmless — the solver already ignores inactive members."""
+    venue = get_manager_venue(manager["id"])
+    existing = _get_staff_or_404(venue["id"], staff_id)
+    if not existing.get("pending"):
+        raise HTTPException(status_code=400, detail="This person isn't awaiting approval")
+    supabase = get_supabase()
+
+    supabase.table("staff_members").update({"is_active": False, "pending": False}).eq(
+        "id", staff_id
+    ).execute()
+
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "staff_id": staff_id,
+            "action": "staff_rejected",
+            "detail": f"{existing['name']}'s join request was declined",
+        }
+    ).execute()
+
+    return {"status": "ok"}
 
 
 @router.put("/{staff_id}", response_model=StaffManagerOut)

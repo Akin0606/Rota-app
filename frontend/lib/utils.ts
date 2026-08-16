@@ -250,6 +250,15 @@ export function pinStorageKey(venueToken: string): string {
   return `rota_pin_${venueToken}`;
 }
 
+// Per-device "remember me" token (§3). We persist the staff PIN itself, scoped
+// to the venue, so a returning staffer on the same phone skips PIN entry and
+// the PIN becomes recovery-only. localStorage (survives app closes), unlike the
+// sessionStorage key above which dies with the tab. A new device has no entry
+// and falls back to PIN; a 401 anywhere clears it (see the entry page).
+export function deviceKey(venueToken: string): string {
+  return `rota_device_${venueToken}`;
+}
+
 function parseClock(text: string): { h: number; m: number; suffix: string } | null {
   const match = text.trim().toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/);
   if (!match) return null;

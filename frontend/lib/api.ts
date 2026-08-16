@@ -214,6 +214,23 @@ export function authenticatePin(
   );
 }
 
+export type JoinResult = {
+  staff_id: string;
+  name: string;
+  pin: string;
+  venue_name: string;
+};
+
+// Self-registration (§3). Gated by the venue's join code; returns the new PIN
+// once. A wrong code is a 401, a rate-limited caller a 429 (same as PIN auth),
+// and a venue with joining disabled a 403 — all surfaced by the caller.
+export function joinTeam(venueToken: string, joinPin: string, name: string): Promise<JoinResult> {
+  return request(`/api/availability/${venueToken}/join`, {
+    method: "POST",
+    body: JSON.stringify({ join_pin: joinPin, name }),
+  });
+}
+
 export function submitAvailability(
   venueToken: string,
   pin: string,
@@ -475,6 +492,8 @@ export type Venue = {
   link_token: string;
   created_at: string;
   is_active: boolean;
+  // Self-registration code (§3). null = joining disabled.
+  join_pin: string | null;
 };
 
 export type Period = {
@@ -492,6 +511,8 @@ export type StaffManager = {
   pin: string;
   is_active: boolean;
   is_under_18: boolean;
+  // Self-registered, awaiting approval (§3). Orthogonal to is_active.
+  pending: boolean;
   submitted: boolean | null;
   working_days_per_week: number;
   // null means "prorate the venue's full-time figure by working_days_per_week".
@@ -760,6 +781,31 @@ export function deleteStaff(id: string): Promise<{ status: string }> {
 
 export function resetStaffPin(id: string): Promise<StaffManager> {
   return authedRequest(`/api/staff/${id}/reset-pin`, { method: "POST" });
+}
+
+// Approve a pending self-registration — sets role + U18 and activates (§3).
+export function approveStaff(
+  id: string,
+  body: { role: string; is_under_18: boolean; role_ids: string[] },
+): Promise<StaffManager> {
+  return authedRequest(`/api/staff/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function rejectStaff(id: string): Promise<{ status: string }> {
+  return authedRequest(`/api/staff/${id}/reject`, { method: "POST" });
+}
+
+// Generate/reset the venue's self-registration code. POST enables or rotates it;
+// DELETE turns joining off.
+export function rotateJoinCode(): Promise<{ join_pin: string | null }> {
+  return authedRequest(`/api/venue/join-code`, { method: "POST" });
+}
+
+export function disableJoinCode(): Promise<{ join_pin: string | null }> {
+  return authedRequest(`/api/venue/join-code`, { method: "DELETE" });
 }
 
 export function remindStaff(params: {

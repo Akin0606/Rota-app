@@ -19,6 +19,9 @@ class StaffOut(BaseModel):
     name: str
     role: str
     auto_submit_availability: bool = False
+    # A self-registered member awaiting manager approval. They can PIN-auth and
+    # submit availability immediately, but the solver ignores them until confirmed.
+    pending: bool = False
 
 
 class PeriodOut(BaseModel):
@@ -160,10 +163,39 @@ class VenueOut(BaseModel):
     link_token: str
     created_at: str
     is_active: bool = True
+    # The rotatable join code that gates self-registration. None = joining is
+    # disabled for this venue (a forwarded link can't register anyone).
+    join_pin: Optional[str] = None
 
 
 class VenueCreateRequest(BaseModel):
     name: str = Field(min_length=1)
+
+
+class JoinCodeOut(BaseModel):
+    join_pin: Optional[str] = None
+
+
+class StaffJoinRequest(BaseModel):
+    # Gates registration on the venue's shared link. Same 4-digit shape as a
+    # staff PIN so the entry UI is identical.
+    join_pin: str = Field(pattern=r"^\d{4}$")
+    name: str = Field(min_length=1, max_length=80)
+
+
+class StaffJoinResponse(BaseModel):
+    staff_id: str
+    name: str
+    pin: str
+    venue_name: str
+
+
+class StaffApproveRequest(BaseModel):
+    # Manager confirms role + U18 (defaults pre-filled from the join) and
+    # activates the member.
+    role: str = Field(min_length=1)
+    is_under_18: bool = False
+    role_ids: list[str] = []
 
 
 class VenueUpdateRequest(BaseModel):
@@ -210,6 +242,8 @@ class StaffManagerOut(BaseModel):
     pin: str
     is_active: bool
     is_under_18: bool = False
+    # Self-registered, awaiting manager approval (§3). Orthogonal to is_active.
+    pending: bool = False
     submitted: Optional[bool] = None
     working_days_per_week: float = 5
     # None means "prorate the venue's full-time figure by working_days_per_week".

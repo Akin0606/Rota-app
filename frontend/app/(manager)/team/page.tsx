@@ -15,15 +15,19 @@ import {
   StaffManager,
   Venue,
   VenueLeaveSettings,
+  approveStaff,
   createStaff,
   deleteStaff,
+  disableJoinCode,
   getVenue,
   getVenueLeaveSettings,
   listPeriods,
   listRoles,
   listStaff,
+  rejectStaff,
   remindStaff,
   resetStaffPin,
+  rotateJoinCode,
   updateStaff,
 } from "@/lib/api";
 import type { ManagerIconName } from "@/components/manager/icon";
@@ -76,13 +80,14 @@ export default function TeamPage() {
   const [reloadToken, setReloadToken] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
 
-  const [sheetMode, setSheetMode] = useState<"add" | "edit" | null>(null);
+  const [sheetMode, setSheetMode] = useState<"add" | "edit" | "approve" | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<StaffManager | null>(null);
   const [removing, setRemoving] = useState(false);
   const [pendingOnly, setPendingOnly] = useState(false);
+  const [joinBusy, setJoinBusy] = useState(false);
   // Only needed for the pro-rata placeholder in the edit sheet, so a failure
   // here just falls back to the statutory 28.
   const [leaveSettings, setLeaveSettings] = useState<VenueLeaveSettings | null>(null);
@@ -167,9 +172,82 @@ export default function TeamPage() {
     setSheetMode("edit");
   }
 
+  // Confirm & set role (§3). Pre-fills the role the join defaulted to + U18 off,
+  // so the common case is one tap.
+  function openApprove(member: StaffManager) {
+    setEditingId(member.id);
+    const primaryId = roleIdByName(member.role);
+    setForm({
+      name: member.name,
+      email: member.email ?? "",
+      phone: member.phone ?? "",
+      role: roles.some((r) => r.name === member.role) ? member.role : roles[0]?.name ?? member.role,
+      roleIds: member.role_ids.filter((id) => id !== primaryId),
+      isUnder18: member.is_under_18,
+      workingDays: String(member.working_days_per_week ?? 5),
+      leaveDays: member.annual_leave_days === null ? "" : String(member.annual_leave_days),
+    });
+    setSheetMode("approve");
+  }
+
   function closeSheet() {
     setSheetMode(null);
     setEditingId(null);
+  }
+
+  async function handleApprove() {
+    if (!editingId) return;
+    setSaving(true);
+    try {
+      const updated = await approveStaff(editingId, {
+        role: form.role,
+        is_under_18: form.isUnder18,
+        role_ids: form.roleIds,
+      });
+      setStaff((prev) => prev.map((m) => (m.id === editingId ? { ...m, ...updated } : m)));
+      showToast(`${updated.name.split(" ")[0]} approved — added to the team`);
+      closeSheet();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not approve");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleReject() {
+    if (!editingId) return;
+    const member = staff.find((m) => m.id === editingId);
+    setSaving(true);
+    try {
+      await rejectStaff(editingId);
+      setStaff((prev) => prev.filter((m) => m.id !== editingId));
+      showToast(`${member?.name.split(" ")[0] ?? "Join request"} declined`);
+      closeSheet();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not decline");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleJoinCode(action: "rotate" | "disable") {
+    if (!venue) return;
+    setJoinBusy(true);
+    try {
+      const res = action === "rotate" ? await rotateJoinCode() : await disableJoinCode();
+      setVenue({ ...venue, join_pin: res.join_pin });
+      showToast(
+        action === "disable"
+          ? "Joining turned off"
+          : venue.join_pin
+            ? `New join code: ${res.join_pin}`
+            : `Joining is on — code ${res.join_pin}`,
+      );
+    } catch {
+      showToast("Could not update the join code");
+    } finally {
+      setJoinBusy(false);
+    }
   }
 
   const editingMember = editingId ? staff.find((m) => m.id === editingId) ?? null : null;
@@ -309,6 +387,92 @@ export default function TeamPage() {
         </div>
       </div>
 
+      {/* Join code — self-registration gate (§3). Show the current code + reset
+          (same one-tap pattern as reset-PIN), or turn joining on/off. */}
+      {venue && (
+        <div className="mb-5 flex flex-wrap items-center gap-3 rounded-panel border border-hairline bg-surface-card px-4 py-3.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-light text-accent">
+            <ManagerIcon name="link" size={16} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium text-ink">Team join code</div>
+            <div className="mt-0.5 text-xs text-ink-muted">
+              {venue.join_pin
+                ? "Share the team link + this code so people can join themselves."
+                : "Turn on joining to let people register with the team link + a code."}
+            </div>
+          </div>
+          {venue.join_pin ? (
+            <div className="flex items-center gap-2.5">
+              <span className="rounded-lg bg-surface-subtle px-3 py-2 text-[15px] font-bold tracking-[0.24em] text-ink">
+                {venue.join_pin}
+              </span>
+              <button
+                onClick={() => handleJoinCode("rotate")}
+                disabled={joinBusy}
+                className="text-xs font-semibold text-accent disabled:opacity-60"
+              >
+                Reset
+              </button>
+              <button
+                onClick={() => handleJoinCode("disable")}
+                disabled={joinBusy}
+                className="text-xs font-semibold text-ink-muted disabled:opacity-60"
+              >
+                Turn off
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => handleJoinCode("rotate")}
+              disabled={joinBusy}
+              className="shrink-0 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-60"
+            >
+              Turn on joining
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Pending approvals — self-registered members not yet confirmed. The
+          solver ignores them until approved, so this is the surface that clears
+          them into the team. */}
+      {(() => {
+        const pendingApprovals = staff.filter((m) => m.pending);
+        if (pendingApprovals.length === 0) return null;
+        return (
+          <div className="mb-5">
+            <div className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-ink">
+              Pending approvals
+              <span className="rounded-full bg-cp-amber-soft px-2 py-0.5 text-[11px] font-semibold text-cp-amber">
+                {pendingApprovals.length}
+              </span>
+            </div>
+            <div className="overflow-hidden rounded-panel border border-cp-amber-soft bg-surface-card">
+              {pendingApprovals.map((member) => (
+                <button
+                  key={member.id}
+                  onClick={() => openApprove(member)}
+                  className="flex w-full items-center gap-3 border-b border-hairline px-4 py-3.5 text-left last:border-0"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cp-amber-soft text-xs font-medium text-cp-amber">
+                    {initials(member.name)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-ink">{member.name}</div>
+                    <div className="text-xs text-ink-faint">Joined via team link · tap to confirm</div>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-cp-amber-soft px-2.5 py-1 text-[11px] font-medium text-cp-amber">
+                    Review
+                  </span>
+                  <ManagerIcon name="chevron-right" size={16} className="shrink-0 text-ink-faint" />
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {pendingOnly && (
         <div className="mb-4 flex items-center gap-2 text-[13px] text-ink-muted">
           <span className="rounded-full bg-cp-amber-soft px-2.5 py-1 text-[11px] font-semibold text-cp-amber">
@@ -321,10 +485,13 @@ export default function TeamPage() {
       )}
 
       {(() => {
+        // Join-pending members live in their own approvals section above, never
+        // the main roster.
+        const roster = staff.filter((m) => !m.pending);
         const visible = pendingOnly
-          ? staff.filter((m) => m.is_active && !m.submitted)
-          : staff;
-        if (staff.length === 0) {
+          ? roster.filter((m) => m.is_active && !m.submitted)
+          : roster;
+        if (roster.length === 0) {
           return (
             <div className="rounded-panel border border-hairline bg-surface-card p-10 text-center text-sm text-ink-faint">
               No team members yet.
@@ -385,26 +552,62 @@ export default function TeamPage() {
       <BottomSheet
         open={sheetMode !== null}
         onClose={closeSheet}
-        title={sheetMode === "edit" ? editingMember?.name ?? "Edit team member" : "Add team member"}
-        subtitle={sheetMode === "edit" && editingMember ? `PIN ${editingMember.pin}` : undefined}
-        avatarLabel={sheetMode === "edit" && editingMember ? initials(editingMember.name) : undefined}
+        title={
+          sheetMode === "add"
+            ? "Add team member"
+            : sheetMode === "approve"
+              ? editingMember?.name ?? "Approve join request"
+              : editingMember?.name ?? "Edit team member"
+        }
+        subtitle={
+          sheetMode === "approve"
+            ? "Set their role to add them to the team"
+            : sheetMode === "edit" && editingMember
+              ? `PIN ${editingMember.pin}`
+              : undefined
+        }
+        avatarLabel={
+          (sheetMode === "edit" || sheetMode === "approve") && editingMember
+            ? initials(editingMember.name)
+            : undefined
+        }
         footer={
-          <>
-            <button
-              onClick={closeSheet}
-              className="flex-1 rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle py-3.5 text-center text-sm font-medium text-ink-muted"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
-            >
-              <ManagerIcon name="check" size={15} />
-              {saving ? "Saving…" : sheetMode === "add" ? "Add to team" : "Save changes"}
-            </button>
-          </>
+          sheetMode === "approve" ? (
+            <>
+              <button
+                onClick={handleReject}
+                disabled={saving}
+                className="flex-1 rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle py-3.5 text-center text-sm font-medium text-cp-red disabled:opacity-60"
+              >
+                Decline
+              </button>
+              <button
+                onClick={handleApprove}
+                disabled={saving}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
+              >
+                <ManagerIcon name="check" size={15} />
+                {saving ? "Saving…" : "Approve & add"}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={closeSheet}
+                className="flex-1 rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle py-3.5 text-center text-sm font-medium text-ink-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
+              >
+                <ManagerIcon name="check" size={15} />
+                {saving ? "Saving…" : sheetMode === "add" ? "Add to team" : "Save changes"}
+              </button>
+            </>
+          )
         }
       >
         {sheetMode === "edit" && editingMember && (

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from database import get_supabase
 from models.schemas import (
+    JoinCodeOut,
     VenueCreateRequest,
     VenueLeaveSettingsOut,
     VenueLeaveSettingsRequest,
@@ -12,7 +13,7 @@ from models.schemas import (
 )
 from services import cron_scheduler, schedule_windows
 from services.auth_service import get_current_manager, get_manager_venue
-from services.pin_service import generate_venue_token
+from services.pin_service import generate_pin, generate_venue_token
 
 router = APIRouter(prefix="/api/venue", tags=["venue"])
 
@@ -97,6 +98,26 @@ def update_venue(payload: VenueUpdateRequest, manager: dict = Depends(get_curren
         .execute()
         .data[0]
     )
+
+
+@router.post("/join-code", response_model=JoinCodeOut)
+def rotate_join_code(manager: dict = Depends(get_current_manager)):
+    """Generate (or reset, for a leak) the venue's self-registration code. The
+    first call enables joining; a later call rotates it, invalidating the old
+    one. Same one-tap pattern as reset-PIN."""
+    venue = get_manager_venue(manager["id"])
+    new_code = generate_pin()
+    get_supabase().table("venues").update({"join_pin": new_code}).eq("id", venue["id"]).execute()
+    return JoinCodeOut(join_pin=new_code)
+
+
+@router.delete("/join-code", response_model=JoinCodeOut)
+def disable_join_code(manager: dict = Depends(get_current_manager)):
+    """Turn self-registration off — clears the code so a forwarded link can't
+    register anyone until the manager generates a new one."""
+    venue = get_manager_venue(manager["id"])
+    get_supabase().table("venues").update({"join_pin": None}).eq("id", venue["id"]).execute()
+    return JoinCodeOut(join_pin=None)
 
 
 @router.get("/leave-settings", response_model=VenueLeaveSettingsOut)
