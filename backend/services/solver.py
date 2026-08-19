@@ -8,6 +8,8 @@ minimum rest, preference weighting, hour fairness) is implemented.
 
 from ortools.sat.python import cp_model
 
+from services import shift_bounds
+
 AVAILABLE = 1
 UNAVAILABLE = 2
 PREFERRED = 3
@@ -25,44 +27,28 @@ UNDER18_NIGHT_SAFE_START = 6.0  # 6am — shifts may not start before this
 UNDER18_NIGHT_SAFE_END = 22.0  # 10pm — shifts may not run past this
 
 
-def _parse_hour(time_str: str) -> float:
-    """Parse '7:00am' / '2:00pm' / 'close' into a 24h float hour."""
-    t = time_str.strip().lower()
-    if t == "close":
-        return 23.0
-    t = t.replace(" ", "")
-    period = t[-2:]
-    clock = t[:-2]
-    h_str, _, m_str = clock.partition(":")
-    h = int(h_str)
-    m = int(m_str) if m_str else 0
-    if period == "am":
-        if h == 12:
-            h = 0
-    else:
-        if h != 12:
-            h += 12
-    return h + m / 60
+# Time math lives in services.shift_bounds now — the single module allowed to
+# read a shift's raw start/end. These thin wrappers keep the solver's existing
+# (shift-dict) call sites and the characterization tests working unchanged. They
+# read through the accessor at day 0 with no index, which falls back to the
+# shift-level times (identical for every day after the Batch 1 backfill) — so no
+# start_time/end_time is read directly outside shift_bounds. Batch 3 re-keys the
+# solver's per-shift duration/night maps to (shift, day) via the accessor.
+_parse_hour = shift_bounds.parse_hour
 
 
 def _shift_bounds(shift: dict) -> tuple[float, float]:
     """(start, end) as 24h floats, end pushed past 24 if the shift crosses midnight."""
-    start = _parse_hour(shift["start_time"])
-    end = _parse_hour(shift["end_time"])
-    if end <= start:
-        end += 24
-    return start, end
+    return shift_bounds.bounds(*shift_bounds.bounds_for(shift, 0))
 
 
 def shift_duration_hours(shift: dict) -> float:
-    start, end = _shift_bounds(shift)
-    return end - start
+    return shift_bounds.duration_for(shift, 0)
 
 
 def _shift_touches_night_hours(shift: dict) -> bool:
     """True if any part of the shift falls between 22:00 and 06:00."""
-    start, end = _shift_bounds(shift)
-    return not (start >= UNDER18_NIGHT_SAFE_START and end <= UNDER18_NIGHT_SAFE_END)
+    return shift_bounds.touches_night_for(shift, 0)
 
 
 def _rest_gap_hours(shift_a: dict, shift_b: dict) -> float:
@@ -71,7 +57,7 @@ def _rest_gap_hours(shift_a: dict, shift_b: dict) -> float:
     crosses midnight (e.g. 18:00-02:00, unrolled end 26.0) is measured from its
     true end rather than the raw clock time it wraps back to."""
     _, end_a = _shift_bounds(shift_a)
-    start_b = _parse_hour(shift_b["start_time"])
+    start_b = shift_bounds.parse_hour(shift_bounds.bounds_for(shift_b, 0)[0])
     return (24 + start_b) - end_a
 
 
@@ -83,6 +69,7 @@ def check_manual_assignment(
     shifts_by_id: dict,
     rules: dict,
     on_leave: bool = False,
+    shift_days_by_key: dict | None = None,
 ) -> dict:
     """Validates a single proposed manual "add" against the same rules
     generate_rota enforces, so the one-off manual-edit path can't bypass them.
@@ -96,6 +83,9 @@ def check_manual_assignment(
     shifts_by_id: all of the venue's shifts, keyed by id
     rules: {max_hours_per_week, min_rest_hours, require_day_off}
     on_leave: True if this staff member has approved leave covering day_index
+    shift_days_by_key: optional {(shift_id, day_index): row} index so every
+        hours/night/rest read is per-day (Batch 3). None falls back to the
+        shift-level times — identical to the old single-time behaviour.
 
     Judges the proposed add against the POST-add state of the staff member's
     week (their other assignments plus this one) so an adjacent-day rest gap
@@ -115,6 +105,18 @@ def check_manual_assignment(
     }
     days_worked[day_index] = shift["id"]
 
+    def _gap_between(earlier_shift, earlier_day, later_shift, later_day):
+        """Rest hours between the end of earlier_shift (its day) and the start of
+        later_shift (its day), each read at its own day. Assumes the two days are
+        adjacent, which is all _neighbor_gap ever passes."""
+        _, end_a = shift_bounds.bounds(
+            *shift_bounds.bounds_for(earlier_shift, earlier_day, shift_days_by_key)
+        )
+        start_b = shift_bounds.parse_hour(
+            shift_bounds.bounds_for(later_shift, later_day, shift_days_by_key)[0]
+        )
+        return (24 + start_b) - end_a
+
     def _neighbor_gap(neighbor_day: int):
         if neighbor_day < 0 or neighbor_day > 6 or neighbor_day not in days_worked:
             return None
@@ -122,11 +124,14 @@ def check_manual_assignment(
         if not neighbor_shift:
             return None
         if neighbor_day < day_index:
-            return _rest_gap_hours(neighbor_shift, shift)
-        return _rest_gap_hours(shift, neighbor_shift)
+            return _gap_between(neighbor_shift, neighbor_day, shift, day_index)
+        return _gap_between(shift, day_index, neighbor_shift, neighbor_day)
+
+    def _duration_on(shid: str, d: int) -> float:
+        return shift_bounds.duration_for(shifts_by_id[shid], d, shift_days_by_key)
 
     if under18:
-        duration = shift_duration_hours(shift)
+        duration = shift_bounds.duration_for(shift, day_index, shift_days_by_key)
         if duration > UNDER18_MAX_HOURS_PER_DAY:
             return {
                 "severity": "block",
@@ -135,7 +140,7 @@ def check_manual_assignment(
                     f"{UNDER18_MAX_HOURS_PER_DAY:.0f}h daily limit for under-18s."
                 ),
             }
-        if _shift_touches_night_hours(shift):
+        if shift_bounds.touches_night_for(shift, day_index, shift_days_by_key):
             return {
                 "severity": "block",
                 "reason": (
@@ -146,8 +151,8 @@ def check_manual_assignment(
 
         weekly_cap = min(rules.get("max_hours_per_week", 48), UNDER18_MAX_HOURS_PER_WEEK)
         total_hours = sum(
-            shift_duration_hours(shifts_by_id[shid])
-            for shid in days_worked.values()
+            _duration_on(shid, d)
+            for d, shid in days_worked.items()
             if shid in shifts_by_id
         )
         if total_hours > weekly_cap + 1e-6:
@@ -197,8 +202,8 @@ def check_manual_assignment(
 
     max_hours = rules.get("max_hours_per_week", 48)
     total_hours = sum(
-        shift_duration_hours(shifts_by_id[shid])
-        for shid in days_worked.values()
+        _duration_on(shid, d)
+        for d, shid in days_worked.items()
         if shid in shifts_by_id
     )
     if total_hours > max_hours + 1e-6:
@@ -237,6 +242,7 @@ def generate_rota(
     submissions: list[dict],
     rules: dict,
     leave_days: dict[str, set[int]] | None = None,
+    shift_days_by_key: dict | None = None,
 ) -> dict:
     """
     staff: [{id, name, is_under_18, ...}] active staff members
@@ -247,6 +253,11 @@ def generate_rota(
     leave_days: {staff_id: {day_index, ...}} approved-leave days this week —
         no shift variable is created for that staff member on that day at
         all, same as if they'd marked themselves UNAVAILABLE all day.
+    shift_days_by_key: {(shift_id, day_index): row} index of the venue's
+        `shift_days` rows (Batch 3). Every shift's hours/night/staffing is read
+        per-day through it, and a (shift, day) with no row is a closed day —
+        no variable, no demand. None falls back to the shift-level times with
+        every day identical, i.e. the old single-time behaviour.
 
     Returns {
         "assignments": [{"staff_id", "day_index", "shift_id"}],
@@ -261,15 +272,55 @@ def generate_rota(
     require_day_off = rules.get("require_day_off", True)
     leave_days = leave_days or {}
 
+    warnings: list[str] = []
+    info: list[str] = []
+
     shifts_by_id = {sh["id"]: sh for sh in shifts}
-    duration = {shid: shift_duration_hours(sh) for shid, sh in shifts_by_id.items()}
-    touches_night = {shid: _shift_touches_night_hours(sh) for shid, sh in shifts_by_id.items()}
 
-    def _min_staff(shid) -> int:
-        return max(0, int(shifts_by_id[shid].get("min_staff", 1) or 0))
+    def _exists(shid, d) -> bool:
+        return shift_bounds.exists_on_day(shifts_by_id[shid], d, shift_days_by_key)
 
-    def _max_staff(shid) -> int:
-        return max(1, int(shifts_by_id[shid].get("max_staff", 99) or 1))
+    # Per-(shift, day) duration / night, computed only for the days a shift
+    # actually runs. Membership of these maps IS the existence gate — a closed
+    # day (no shift_days row) simply has no entry, so no variable and no demand
+    # is ever built for it. A shift-day whose stored time won't parse (G5) is
+    # dropped with a warning rather than crashing the whole solve.
+    duration: dict[tuple, float] = {}
+    touches_night: dict[tuple, bool] = {}
+    unreadable: set = set()
+    for shid, sh in shifts_by_id.items():
+        for d in DAYS:
+            if not _exists(shid, d):
+                continue
+            try:
+                duration[(shid, d)] = shift_bounds.duration_for(sh, d, shift_days_by_key)
+                touches_night[(shid, d)] = shift_bounds.touches_night_for(sh, d, shift_days_by_key)
+            except ValueError:
+                if shid not in unreadable:
+                    warnings.append(
+                        f"'{sh.get('name') or 'A shift'}' has an unreadable time and was "
+                        f"skipped — check its hours."
+                    )
+                    unreadable.add(shid)
+
+    def _min_staff(shid, d) -> int:
+        src = shift_bounds.staffing_source(shifts_by_id[shid], d, shift_days_by_key)
+        return max(0, int(src.get("min_staff", 1) or 0))
+
+    def _max_staff(shid, d) -> int:
+        src = shift_bounds.staffing_source(shifts_by_id[shid], d, shift_days_by_key)
+        return max(1, int(src.get("max_staff", 99) or 1))
+
+    def _rest_gap(shid_a, d_a, shid_b, d_b) -> float:
+        """Rest hours between shid_a on day d_a and shid_b on day d_b (adjacent),
+        each read at its own day."""
+        _, end_a = shift_bounds.bounds(
+            *shift_bounds.bounds_for(shifts_by_id[shid_a], d_a, shift_days_by_key)
+        )
+        start_b = shift_bounds.parse_hour(
+            shift_bounds.bounds_for(shifts_by_id[shid_b], d_b, shift_days_by_key)[0]
+        )
+        return (24 + start_b) - end_a
 
     is_under18 = {s["id"]: bool(s.get("is_under_18")) for s in staff}
     names = {s["id"]: s.get("name") or "Staff member" for s in staff}
@@ -285,12 +336,11 @@ def generate_rota(
 
     model = cp_model.CpModel()
 
-    warnings: list[str] = []
-    info: list[str] = []
-
-    # Build the assignable-variable set. For under-18 staff, shifts that are
-    # illegal for them outright (too long, or touching night hours) never get
-    # a variable at all — same effect as an availability filter, and it means
+    # Build the assignable-variable set. A (shift, day) with no entry in the
+    # duration map doesn't run that day (closed day or unreadable time) — the
+    # existence gate — so it gets no variable. For under-18 staff, shifts that
+    # are illegal for them outright (too long, or touching night hours) also
+    # never get a variable — same effect as an availability filter, and it means
     # the solver literally cannot assign them there.
     x: dict[tuple, cp_model.IntVar] = {}
     for sid in staff_ids:
@@ -300,17 +350,19 @@ def generate_rota(
             if d in blocked_days:
                 continue
             for shid in shift_ids:
+                if (shid, d) not in duration:
+                    continue  # closed day / unreadable time — no shift here
                 if availability.get((sid, d, shid), 0) not in (AVAILABLE, PREFERRED):
                     continue
                 shift = shifts_by_id[shid]
-                if under18 and duration[shid] > UNDER18_MAX_HOURS_PER_DAY:
+                if under18 and duration[(shid, d)] > UNDER18_MAX_HOURS_PER_DAY:
                     warnings.append(
                         f"{names[sid]} (under 18): available for '{shift['name']}' on {DAY_NAMES[d]} "
-                        f"({duration[shid]:.1f}h) — over the {UNDER18_MAX_HOURS_PER_DAY:.0f}h daily limit "
+                        f"({duration[(shid, d)]:.1f}h) — over the {UNDER18_MAX_HOURS_PER_DAY:.0f}h daily limit "
                         f"for under-18s, so this slot can't be used for them."
                     )
                     continue
-                if under18 and touches_night[shid]:
+                if under18 and touches_night[(shid, d)]:
                     warnings.append(
                         f"{names[sid]} (under 18): available for '{shift['name']}' on {DAY_NAMES[d]}, which "
                         f"falls between 10pm and 6am — under-18s can't work night hours, so this slot can't "
@@ -344,7 +396,9 @@ def generate_rota(
         # Best-case hours if they worked their longest eligible option every
         # eligible day — a true upper bound, so exceeding the weekly cap here
         # is a certainty, not a maybe.
-        max_possible_hours = sum(max(duration[shid] for shid in shids) for shids in eligible_by_day.values())
+        max_possible_hours = sum(
+            max(duration[(shid, d)] for shid in shids) for d, shids in eligible_by_day.items()
+        )
         weekly_cap = min(max_hours, UNDER18_MAX_HOURS_PER_WEEK)
         if max_possible_hours > weekly_cap:
             info.append(
@@ -406,7 +460,7 @@ def generate_rota(
 
     # Hard: never assign more than max_staff to a single shift on a day.
     for (d, shid), vars_here in slot_vars.items():
-        model.Add(sum(vars_here) <= _max_staff(shid))
+        model.Add(sum(vars_here) <= _max_staff(shid, d))
 
     max_hours_scaled = int(round(max_hours * 10))
 
@@ -416,7 +470,7 @@ def generate_rota(
     total_hours_vars = []
     for sid in staff_ids:
         terms = [
-            int(round(duration[shid] * 10)) * x[(sid, d, shid)]
+            int(round(duration[(shid, d)] * 10)) * x[(sid, d, shid)]
             for d in DAYS
             for shid in shift_ids
             if (sid, d, shid) in x
@@ -440,7 +494,7 @@ def generate_rota(
                 for shid_b in shift_ids:
                     if (sid, d + 1, shid_b) not in x:
                         continue
-                    gap = _rest_gap_hours(shifts_by_id[shid_a], shifts_by_id[shid_b])
+                    gap = _rest_gap(shid_a, d, shid_b, d + 1)
                     if gap < threshold:
                         model.Add(x[(sid, d, shid_a)] + x[(sid, d + 1, shid_b)] <= 1)
                         if under18:
@@ -457,7 +511,7 @@ def generate_rota(
     # flagged as under-covered conflicts after solving instead.
     coverage_terms = []
     for (d, shid), vars_here in slot_vars.items():
-        target = min(_min_staff(shid), len(vars_here))
+        target = min(_min_staff(shid, d), len(vars_here))
         if target <= 0:
             continue
         covered = model.NewIntVar(0, target, f"cov_{d}_{shid}")
@@ -498,9 +552,24 @@ def generate_rota(
     else:
         warnings.append("Solver could not find a solution — check availability data.")
 
-    demand_slots = {
-        (d, shid) for (_, d, shid), st in availability.items() if st in (AVAILABLE, PREFERRED)
+    # Demand (G6): a slot is demanded if the venue's shift definition asks for
+    # staff there (an existing shift-day with min_staff > 0), OR if someone put
+    # themselves forward for it — not from submissions alone, so a shift nobody
+    # happened to answer for still shows as uncovered rather than silently
+    # vanishing. Both are gated on the shift actually running that day (a slot
+    # with no shift-day entry doesn't exist and can't be uncovered).
+    demanded_from_shifts = {
+        (d, shid)
+        for shid in shift_ids
+        for d in DAYS
+        if (shid, d) in duration and _min_staff(shid, d) > 0
     }
+    demanded_from_avail = {
+        (d, shid)
+        for (_, d, shid), st in availability.items()
+        if st in (AVAILABLE, PREFERRED) and (shid, d) in duration
+    }
+    demand_slots = demanded_from_shifts | demanded_from_avail
     assigned_slots = {(a["day_index"], a["shift_id"]) for a in assignments}
     uncovered = [
         {"day_index": d, "shift_id": shid} for (d, shid) in sorted(demand_slots - assigned_slots)

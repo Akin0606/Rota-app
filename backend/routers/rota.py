@@ -22,7 +22,7 @@ from models.schemas import (
     SwapApproveRequest,
     SwapOut,
 )
-from services import email_service, leave, notice_window, rota_export, schedule_windows, swap_guard
+from services import email_service, leave, notice_window, rota_export, schedule_windows, shift_bounds, swap_guard
 from services.auth_service import get_current_manager, get_manager_venue
 from services.solver import (
     AVAILABLE,
@@ -30,8 +30,24 @@ from services.solver import (
     PREFERRED,
     check_manual_assignment,
     generate_rota,
-    shift_duration_hours,
 )
+
+
+def _load_shift_days_index(shift_ids: list[str]) -> dict[tuple[str, int], dict]:
+    """Fetch the shift_days rows for these shifts and index them by
+    (shift_id, day_index). The single place per request that reads the per-day
+    table; every hours/staffing read then goes through services.shift_bounds."""
+    if not shift_ids:
+        return {}
+    rows = (
+        get_supabase()
+        .table("shift_days")
+        .select("shift_id, day_index, start_time, end_time, min_staff, max_staff")
+        .in_("shift_id", shift_ids)
+        .execute()
+        .data
+    )
+    return shift_bounds.index_shift_days(rows)
 
 router = APIRouter(prefix="/api/rota", tags=["rota"])
 
@@ -40,11 +56,12 @@ VALID_ORIENTATIONS = ("staff-rows", "day-rows")
 
 def _gather_export_data(
     venue_id: str, period_id: str, week_start: str
-) -> tuple[list[dict], list[dict], list[dict], dict[str, set[int]]]:
+) -> tuple[list[dict], list[dict], list[dict], dict[str, set[int]], dict[tuple[str, int], dict]]:
     """Shifts (by sort_order), active staff (by name, with role + under-18 for
-    the export's role grouping and U18 tag), assignments, and the same
-    leave-blocked-days map the rota matrix uses — the shared input for
-    PDF/Excel export, the on-screen Image view, and the rota emails."""
+    the export's role grouping and U18 tag), assignments, the same
+    leave-blocked-days map the rota matrix uses, and the per-day shift_days
+    index — the shared input for PDF/Excel export, the on-screen Image view, and
+    the rota emails."""
     supabase = get_supabase()
     shifts = sorted(
         supabase.table("shifts").select("*").eq("venue_id", venue_id).execute().data,
@@ -67,7 +84,8 @@ def _gather_export_data(
         .data
     )
     leave_days = leave.blocked_days_for_week(supabase, venue_id, week_start)
-    return shifts, staff, assignments, leave_days
+    shift_days_idx = _load_shift_days_index([s["id"] for s in shifts])
+    return shifts, staff, assignments, leave_days, shift_days_idx
 
 
 def _get_period_or_404(venue_id: str, period_id: str) -> dict:
@@ -95,6 +113,7 @@ def _build_summary(
 
     shifts = supabase.table("shifts").select("*").eq("venue_id", venue_id).execute().data
     shifts_by_id = {s["id"]: s for s in shifts}
+    shift_days_idx = _load_shift_days_index([s["id"] for s in shifts])
 
     assignments = (
         supabase.table("rota_assignments")
@@ -113,7 +132,7 @@ def _build_summary(
     )
 
     total_hours = sum(
-        shift_duration_hours(shifts_by_id[a["shift_id"]])
+        shift_bounds.duration_for(shifts_by_id[a["shift_id"]], a["day_index"], shift_days_idx)
         for a in assignments
         if a["shift_id"] in shifts_by_id and a["staff_id"]
     )
@@ -145,7 +164,10 @@ def _build_summary(
     under_covered = []
     for (d, shid) in sorted(demand_slots):
         count = assigned_count.get((d, shid), 0)
-        required = int((shifts_by_id.get(shid) or {}).get("min_staff", 1) or 0)
+        shift = shifts_by_id.get(shid)
+        # Missing shift (e.g. deleted after a submission) keeps the old default
+        # of 1, so under-cover maths stays byte-identical to the pre-accessor code.
+        required = shift_bounds.staffing_for(shift, d, shift_days_idx)[0] if shift else 1
         if count == 0:
             uncovered.append({"day_index": d, "shift_id": shid})
         elif count < required:
@@ -379,7 +401,10 @@ def approve_claim(
         "require_day_off": True,
     }
 
-    check = check_manual_assignment(claimant, assignment["day_index"], shift, other_assignments, shifts_by_id, rules)
+    check = check_manual_assignment(
+        claimant, assignment["day_index"], shift, other_assignments, shifts_by_id, rules,
+        shift_days_by_key=_load_shift_days_index(list(shifts_by_id)),
+    )
 
     if check["severity"] == "block":
         raise HTTPException(status_code=400, detail=check["reason"])
@@ -624,11 +649,14 @@ def approve_swap(
         "require_day_off": True,
     }
 
+    _swap_shift_days = _load_shift_days_index(list(shifts_by_id))
     check_a = check_manual_assignment(
-        initiator, recipient_assignment["day_index"], recipient_shift, initiator_other, shifts_by_id, rules
+        initiator, recipient_assignment["day_index"], recipient_shift, initiator_other, shifts_by_id, rules,
+        shift_days_by_key=_swap_shift_days,
     )
     check_b = check_manual_assignment(
-        recipient, initiator_assignment["day_index"], initiator_shift, recipient_other, shifts_by_id, rules
+        recipient, initiator_assignment["day_index"], initiator_shift, recipient_other, shifts_by_id, rules,
+        shift_days_by_key=_swap_shift_days,
     )
 
     block_reasons = [c["reason"] for c in (check_a, check_b) if c["severity"] == "block"]
@@ -763,7 +791,10 @@ def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
     }
 
     leave_blocked = leave.blocked_days_for_week(supabase, venue["id"], str(period["week_start"]))
-    result = generate_rota(staff, shifts, submissions, rules, leave_days=leave_blocked)
+    shift_days_idx = _load_shift_days_index([s["id"] for s in shifts])
+    result = generate_rota(
+        staff, shifts, submissions, rules, leave_days=leave_blocked, shift_days_by_key=shift_days_idx
+    )
 
     # Replace solver-generated assignments, but preserve any manager overrides
     # from a previous manual-edit pass on this period.
@@ -996,7 +1027,8 @@ def edit_assignment(
     on_leave = payload.day_index in leave_blocked.get(payload.staff_id, set())
 
     check = check_manual_assignment(
-        staff, payload.day_index, shift, other_assignments, shifts_by_id, rules, on_leave=on_leave
+        staff, payload.day_index, shift, other_assignments, shifts_by_id, rules, on_leave=on_leave,
+        shift_days_by_key=_load_shift_days_index(list(shifts_by_id)),
     )
 
     # Under-18 violations are a hard block — no override, regardless of confirm.
@@ -1153,6 +1185,7 @@ def _send_published_rota_emails(
 
     shifts = supabase.table("shifts").select("*").eq("venue_id", venue["id"]).execute().data
     shifts_by_id = {s["id"]: s for s in shifts}
+    shift_days_idx = _load_shift_days_index([s["id"] for s in shifts])
 
     staff_ids = list({a["staff_id"] for a in assignments})
     staff = (
@@ -1184,12 +1217,13 @@ def _send_published_rota_emails(
             if not shift:
                 continue
             day_date = week_start + timedelta(days=a["day_index"])
+            start_time, end_time = shift_bounds.bounds_for(shift, a["day_index"], shift_days_idx)
             shift_rows.append(
                 {
                     "day_label": f"{email_service.DAY_NAMES[a['day_index']]} {day_date.strftime('%d %b')}",
                     "shift_name": shift["name"],
-                    "start_time": shift["start_time"],
-                    "end_time": shift["end_time"],
+                    "start_time": start_time,
+                    "end_time": end_time,
                 }
             )
         if not shift_rows:
@@ -1386,7 +1420,7 @@ def export_pdf(
 ):
     venue = get_manager_venue(manager["id"])
     period = _get_period_or_404(venue["id"], period_id)
-    shifts, staff, assignments, leave_days = _gather_export_data(
+    shifts, staff, assignments, leave_days, shift_days_idx = _gather_export_data(
         venue["id"], period_id, str(period["week_start"])
     )
     pdf = rota_export.build_rota_pdf(
@@ -1396,6 +1430,7 @@ def export_pdf(
         staff=staff,
         assignments=assignments,
         leave=leave_days,
+        shift_days=shift_days_idx,
         orientation=_normalise_orientation(orientation),
     )
     filename = _export_filename(venue, period, "pdf")
@@ -1414,7 +1449,7 @@ def export_xlsx(
 ):
     venue = get_manager_venue(manager["id"])
     period = _get_period_or_404(venue["id"], period_id)
-    shifts, staff, assignments, leave_days = _gather_export_data(
+    shifts, staff, assignments, leave_days, shift_days_idx = _gather_export_data(
         venue["id"], period_id, str(period["week_start"])
     )
     xlsx = rota_export.build_rota_xlsx(
@@ -1424,6 +1459,7 @@ def export_xlsx(
         staff=staff,
         assignments=assignments,
         leave=leave_days,
+        shift_days=shift_days_idx,
         orientation=_normalise_orientation(orientation),
     )
     filename = _export_filename(venue, period, "xlsx")
@@ -1447,7 +1483,7 @@ def email_rota(
     period = _get_period_or_404(venue["id"], period_id)
     settings = get_settings()
 
-    shifts, staff, assignments, leave_days = _gather_export_data(
+    shifts, staff, assignments, leave_days, shift_days_idx = _gather_export_data(
         venue["id"], period_id, str(period["week_start"])
     )
     orientation = _normalise_orientation(payload.orientation)
@@ -1459,6 +1495,7 @@ def email_rota(
         staff=staff,
         assignments=assignments,
         leave=leave_days,
+        shift_days=shift_days_idx,
         orientation=orientation,
     )
     attachment = email_service.pdf_attachment(_export_filename(venue, period, "pdf"), pdf)

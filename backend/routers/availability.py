@@ -30,6 +30,7 @@ from services import email_service, notice_window, rate_limit, swap_guard
 from services.auth_service import INACTIVE_VENUE_MESSAGE
 from services.pin_service import generate_unique_pin
 from services.solver import UNAVAILABLE, check_manual_assignment
+from routers.rota import _load_shift_days_index
 
 # PIN auth: block a venue_token + IP after this many wrong PINs in the window.
 PIN_MAX_ATTEMPTS = 5
@@ -939,7 +940,10 @@ def claim_shift(venue_token: str, payload: AvailabilityClaimRequest):
         .data
     )
     rules = _get_rules_for_solver(venue["id"])
-    check = check_manual_assignment(claimant, assignment["day_index"], shift, other_assignments, shifts_by_id, rules)
+    check = check_manual_assignment(
+        claimant, assignment["day_index"], shift, other_assignments, shifts_by_id, rules,
+        shift_days_by_key=_load_shift_days_index(list(shifts_by_id)),
+    )
 
     # Under-18 legal violations are a hard block — can never be claimed at
     # all, not even into a pending state.
@@ -1196,7 +1200,10 @@ def accept_give(venue_token: str, payload: AvailabilityGiveActionRequest):
         .data
     )
     rules = _get_rules_for_solver(venue["id"])
-    check = check_manual_assignment(recipient, assignment["day_index"], shift, other_assignments, shifts_by_id, rules)
+    check = check_manual_assignment(
+        recipient, assignment["day_index"], shift, other_assignments, shifts_by_id, rules,
+        shift_days_by_key=_load_shift_days_index(list(shifts_by_id)),
+    )
 
     if check["severity"] == "block":
         raise HTTPException(status_code=400, detail=check["reason"])
@@ -1550,11 +1557,14 @@ def accept_swap(venue_token: str, payload: AvailabilitySwapActionRequest):
     rules = _get_rules_for_solver(venue["id"])
     # Initiator moving into the recipient's old slot; recipient moving into
     # the initiator's old slot.
+    _swap_shift_days = _load_shift_days_index(list(shifts_by_id))
     check_a = check_manual_assignment(
-        initiator, recipient_assignment["day_index"], recipient_shift, initiator_other, shifts_by_id, rules
+        initiator, recipient_assignment["day_index"], recipient_shift, initiator_other, shifts_by_id, rules,
+        shift_days_by_key=_swap_shift_days,
     )
     check_b = check_manual_assignment(
-        recipient, initiator_assignment["day_index"], initiator_shift, recipient_other, shifts_by_id, rules
+        recipient, initiator_assignment["day_index"], initiator_shift, recipient_other, shifts_by_id, rules,
+        shift_days_by_key=_swap_shift_days,
     )
 
     block_reasons = [c["reason"] for c in (check_a, check_b) if c["severity"] == "block"]

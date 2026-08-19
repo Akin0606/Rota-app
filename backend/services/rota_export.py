@@ -18,6 +18,8 @@ from datetime import date, timedelta
 
 from fpdf import FPDF
 
+from services import shift_bounds
+
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -63,10 +65,11 @@ def compact_time_range(start: str, end: str) -> str:
     return f"{_label(sh, sm, ss)}{ss}–{_label(eh, em, es)}{es}"
 
 
-def _cell_text(shift: dict | None) -> str:
+def _cell_text(shift: dict | None, day_index: int, shift_days_idx: dict | None) -> str:
     if not shift:
         return ""
-    return f"{shift['name']} {compact_time_range(shift['start_time'], shift['end_time'])}".strip()
+    start, end = shift_bounds.bounds_for(shift, day_index, shift_days_idx)
+    return f"{shift['name']} {compact_time_range(start, end)}".strip()
 
 
 # fpdf2's core fonts are latin-1 only, so map the handful of unicode
@@ -88,14 +91,23 @@ def _week_range_label(week_start: date) -> str:
     return f"{week_start.strftime('%d %b')} – {end.strftime('%d %b %Y')}"
 
 
-def _build_matrix(shifts: list[dict], assignments: list[dict]):
-    """Returns lookup (staff_id, day_index) -> shift dict."""
+def _build_matrix(shifts: list[dict], assignments: list[dict], shift_days_idx: dict | None = None):
+    """Returns lookup (staff_id, day_index) -> {"shift", "text"}.
+
+    Per-day times are resolved here, where the day_index is known, so the
+    orientation-agnostic draw code never needs the day. `text` is the resolved
+    cell label; `shift` is kept for the colour fill.
+    """
     shifts_by_id = {s["id"]: s for s in shifts}
     cell: dict[tuple[str, int], dict] = {}
     for a in assignments:
         shift = shifts_by_id.get(a.get("shift_id"))
         if shift is not None:
-            cell[(a["staff_id"], a["day_index"])] = shift
+            day = a["day_index"]
+            cell[(a["staff_id"], day)] = {
+                "shift": shift,
+                "text": _cell_text(shift, day, shift_days_idx),
+            }
     return cell
 
 
@@ -154,10 +166,11 @@ def build_rota_pdf(
     assignments: list[dict],
     leave: dict[str, set[int]] | None = None,
     orientation: str = "staff-rows",
+    shift_days: dict | None = None,
 ) -> bytes:
     leave = leave or {}
     week_label = _week_range_label(week_start)
-    cell = _build_matrix(shifts, assignments)
+    cell = _build_matrix(shifts, assignments, shift_days)
 
     pdf = _RotaPDF(venue_name, week_label)
     pdf.add_page()
@@ -236,11 +249,11 @@ def _draw_table(pdf: _RotaPDF, row_headers, col_headers, lookup, is_leave=None) 
         pdf.cell(label_w, cell_h, _truncate(pdf, rh, label_w - 2), border=1)
         pdf.set_font("Helvetica", "", 8)
         for c in range(len(col_headers)):
-            shift = lookup(r, c)
+            entry = lookup(r, c)
             x = pdf.get_x()
             y = pdf.get_y()
-            if shift:
-                rr, gg, bb = _hex_to_rgb(shift.get("color"))
+            if entry:
+                rr, gg, bb = _hex_to_rgb(entry["shift"].get("color"))
                 pdf.set_fill_color(rr, gg, bb)
                 pdf.set_text_color(*INK)
                 pdf.rect(x, y, col_w, cell_h)
@@ -248,7 +261,7 @@ def _draw_table(pdf: _RotaPDF, row_headers, col_headers, lookup, is_leave=None) 
                 pdf.multi_cell(
                     col_w - 2,
                     3.6,
-                    _pdf_safe(_cell_text(shift)),
+                    _pdf_safe(entry["text"]),
                     border=0,
                     align="C",
                     fill=True,
@@ -313,13 +326,14 @@ def build_rota_xlsx(
     assignments: list[dict],
     leave: dict[str, set[int]] | None = None,
     orientation: str = "staff-rows",
+    shift_days: dict | None = None,
 ) -> bytes:
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
     leave = leave or {}
-    cell = _build_matrix(shifts, assignments)
+    cell = _build_matrix(shifts, assignments, shift_days)
     wb = Workbook()
     ws = wb.active
     ws.title = "Rota"
@@ -389,14 +403,15 @@ def build_rota_xlsx(
                 # day-rows passes the day index as row_key via lookup(r, c);
                 # staff-rows passes the staff id — both lookup/is_leave accept
                 # whichever key this orientation produced.
-                shift = lookup(row_key, c)
+                entry = lookup(row_key, c)
                 on_leave = is_leave(row_key, c)
-                cref = ws.cell(row=row, column=c + 2, value=_cell_text(shift) or ("Leave" if on_leave and not shift else ""))
+                text = entry["text"] if entry else ""
+                cref = ws.cell(row=row, column=c + 2, value=text or ("Leave" if on_leave and not entry else ""))
                 cref.border = border
                 cref.alignment = center
-                if shift:
+                if entry:
                     cref.font = Font(size=9, color="111827")
-                    fill_hex = _tint_hex(shift.get("color"))
+                    fill_hex = _tint_hex(entry["shift"].get("color"))
                     cref.fill = PatternFill("solid", fgColor=fill_hex)
                 elif on_leave:
                     cref.font = Font(size=9, italic=True, color="9CA3AF")
