@@ -20,6 +20,12 @@ the product. We are NOT competing with Deputy/Rotaready.
 - Never touch the auth flow (OTP / PIN) without flagging it first.
 - Format Claude Code prompts in markdown (headers, code blocks, hr).
 - Explain alongside implementation — this is a learning project.
+- **Keep this file honest (self-maintenance).** At the end of every batch,
+  reconcile the living sections (Current state, Near-term, Before go-live,
+  Security) with what actually changed, and append one Learnings entry. A
+  resolved issue moves to Learnings — it does not linger as an open item.
+  Verify any claim against the code before trusting it here; this doc has been
+  wrong before, so treat it as a hypothesis until the source agrees.
 
 ## Brand
 - Wordmark: `crewplan.` lowercase, orange dot
@@ -27,7 +33,10 @@ the product. We are NOT competing with Deputy/Rotaready.
 - Type: Space Grotesk (headings) + IBM Plex Sans (body)
 
 ## UI & Design
-Before building or modifying any frontend component, read /mnt/skills/public/frontend-design/SKILL.md and follow it.
+The **Design language** below is the operative rulebook (the old
+`/mnt/skills/public/frontend-design/SKILL.md` path does not exist in this
+environment — do not try to read it). For deeper UI passes the `ui-ux-pro-max`
+skill is available.
 
 Design language for Crewplan:
 - Dark-mode first: #0D0D0D background, #FF4D00 orange accent, white/off-white text
@@ -38,67 +47,62 @@ Design language for Crewplan:
 - Motion: subtle only — short transitions on hover/toggle, nothing decorative
 - Every design decision should feel intentional, not templated
 
-## Current priority
-Staff-side UI rebuild against `crewplan-staff-reference.html` — **all six
-batches built and verified** on branch `staff-ui-rebuild`, not yet merged to
-main or pushed. Next decision is the merge, and the "Blocking-ish" issues
-below are the ones worth settling first. The manager app and admin console
-are unaffected by this rebuild (the palette is scoped to `.cp-staff`).
+## Current state (living — keep accurate)
+Staff PWA, manager app, admin console, and the drop / give / swap / leave
+systems are all **built, merged to `main`, and deployed**. The six-batch staff
+UI rebuild (`crewplan-staff-reference.html`) is merged — `staff-ui-rebuild` is a
+**stale branch**, `main` is ahead of it. The **8-step onboarding wizard**
+(activation token → wizard → live venue; migrations `024`/`025`) is built and
+live.
 
-## Roadmap after B2b
-Staff hub restructure (done) → shift drop + claim (done: auto-approve
-like-for-like, else manager approval queue) → give shift (done: targeted
-1:1 offer) → swap shift (done: two-sided trade, own shift_swaps table,
-worse-case-governs approval) → admin console controls (done: manager
-creation, venue toggle, delete, rota view) → holiday requests (done phase 1:
-request/approve/reject/cancel, solver + manual-add integration, rota grid
-tag — see Learnings) → full aesthetic pass last (staff side done: six-batch
-rebuild against the reference; manager app + admin console were redesigned
-in earlier sessions).
+**Uncommitted right now:** the onboarding **"Refined Dark" remodel batch 1** — a
+revertible CSS elevation layer in `globals.css` (~+105 lines) plus the nested-
+component focus-bug fix in `app/onboarding/page.tsx`. Done and verified, not yet
+committed (top Learnings entry). Commit it (or continue the remodel) before
+starting unrelated work.
 
-Future (not scheduled): a real notification system (email/push) for shift
-claims and approvals — right now managers only see these via activity_log
-("Recent Activity" on the dashboard), and claimers/droppers only find out
-by reopening the app.
+## Near-term vision — real per-day shift model (committed, not yet built)
+The one committed architectural change. Move the solver off the hardcoded
+two-daypart model (Day / Evening split at 17:00) to **real per-day, per-venue
+shift definitions** from actual open/close times: 3+ arbitrary shifts, a shift
+that runs different hours — or not at all — on different days, post-midnight
+closes first-class, and **`"close"` eliminated** in favour of stored real times.
+Full audit + target design: `SOLVER_AUDIT_PROMPT.md`. Sequenced build plan:
+`SHIFT_MODEL_BUILD_PROMPT.md`. This also unblocks 12.07%-of-hours leave accrual.
+The bridge to replace: `onboarding/page.tsx persistShifts()` (fakes Day/Evening)
+and the solver's `_parse_hour` (`"close" → 23.0`, lossy).
+
+## Roadmap
+Done: staff hub restructure · shift drop+claim (auto-approve like-for-like,
+else manager queue) · give shift (1:1 offer) · swap shift (two-sided, own
+`shift_swaps` table, worse-case governs) · admin console (manager create, venue
+toggle/delete, rota view) · holiday requests phase 1 (request/approve/reject/
+cancel + solver / manual-add / grid integration) · staff self-registration (join
+link + venue PIN + pending state) · full aesthetic pass (staff + manager +
+admin) · 8-step onboarding wizard + activation loop · availability §2/§6
+(four-state colours, prefill echo, auto-submit).
+Next: **per-day shift model** (above) → 12.07% hours accrual → notification
+system (email/push) for claims & approvals (today: `activity_log` only, so
+managers only see them on the dashboard and staff only by reopening the app).
 
 ## Known bugs / open issues
-Running list — nothing here is fixed. Grouped by what it blocks.
+Running list. Grouped by what it blocks. Resolved items move to Learnings.
 
-### Blocking-ish (decide before the rebuild merges to main)
-- ~~**Staff-to-staff navigation does full document loads.**~~ — **disproven and
-  closed.** All ten hub↔sub-screen hops are soft navigations in dev and in a
-  production build (probe survival + `performance.timeOrigin` + navigation-entry
-  count, all three agreeing), as are `rota → /drop?assignment=…` and
-  `submitted → hub`. Batch 4's finding was one real defect plus two measurement
-  artifacts — see Learnings. The real cost behind the symptom (refetch on every
-  hop) is fixed; a lint rule now guards the defect that *was* real.
-- ~~**Manager-side availability grid will show explicit "unavailable" cells
-  where it used to show blanks**~~ — **premise disproven, real issue fixed.**
-  Explicit `2`s predate the rebuild by a week (the old code sent anything with
-  `status > 0`, and 2 > 0), so the grid always showed them. The real damage was
-  a **colour and vocabulary swap** between the two sides, now corrected — see
-  Learnings. Residual, deliberately accepted: submissions made *before* batch 3
-  were entered under the old wording (`1` = "Available", `3` = "Preferred") and
-  the grid now labels `1` as "If needed", so historical weeks read slightly
-  differently than what that staff member was shown at the time. Unavoidable
-  without storing the wording alongside the weight, and solver behaviour is
-  untouched.
-- ~~**Leave allowance counts calendar days, and assumes a Jan–Dec leave year.**~~
-  — **fixed** by migration `021`, which adds the fields that were missing:
-  `venues.leave_year_start_month`, `venues.full_time_leave_days`,
-  `staff_members.working_days_per_week` and a nullable
-  `staff_members.annual_leave_days` override. A range now costs working days,
-  not calendar days, so a fortnight costs a five-day worker 10 rather than 14.
-  See Learnings. **Not yet verified live on the manager side** — the Team and
-  Settings controls are typechecked and lint-clean but never clicked, because
-  the OTP login is off-limits.
-- **Hours-based accrual (12.07%) is the legally correct model for
-  irregular-hours staff and is blocked by free-text shift ends.** Since April
-  2024 UK statutory leave for irregular-hours and part-year workers accrues as
-  12.07% of hours worked. This app already knows hours worked — except a shift
-  ending at `"close"` has no measurable duration, so an accrual computed from
-  it would silently under-report. Fixing shift end times is the prerequisite;
-  the days-based model shipped in `021` is the honest interim.
+### Near-term / in-flight
+- **Hours-based accrual (12.07%) is blocked by free-text shift ends.** Since
+  April 2024 UK statutory leave for irregular-hours staff accrues at 12.07% of
+  hours worked. The app already knows hours worked — except a shift ending
+  `"close"` has no measurable duration, so an accrual off it under-reports.
+  **The per-day shift model resolves this** (stored real times); the days-based
+  model in migration `021` is the honest interim.
+- **Manager-side leave controls unverified live** — the Team modal holiday
+  fields and Settings holiday panel (migration `021`) are typechecked and
+  lint-clean but never clicked, because OTP login is off-limits. First real
+  manager session should exercise them.
+
+(Three items once flagged here — staff-nav full-loads, the availability-grid
+colour/vocabulary swap, and calendar-day leave allowance — are **resolved**;
+details in Learnings.)
 
 ### Unverified, not known-broken
 - **Keyboard `:focus-visible` has never been tested with a real Tab press** —
@@ -127,9 +131,10 @@ Running list — nothing here is fixed. Grouped by what it blocks.
 - **The manual-add risk popup title is generic** ("This assignment breaks a rest
   rule") but is now reused for three different confirm reasons (rest-gap,
   day-off-in-7, max-hours). Should say which rule actually fired.
-- **Week 17 Aug is stuck in `generated`** — there's still no in-app path from
-  `generated` back to `collecting`, so real availability collection for that
-  week is blocked until someone runs the SQL by hand.
+- ~~**No in-app path from `generated` back to `collecting`**~~ — **fixed.**
+  `reopen_availability` (`generated → collecting`) and `unpublish`
+  (`published/confirmed → generated`) now exist in `rota.py`; any stuck week
+  (e.g. the old 17 Aug) reopens without hand-run SQL.
 - **No notification system** for shift claims/approvals — managers only see them
   via `activity_log`, and claimers/droppers only find out by reopening the app.
 - Activity-feed oddities deliberately left alone: a `detail` that mentions the
@@ -137,7 +142,46 @@ Running list — nothing here is fixed. Grouped by what it blocks.
   name label, and renamed staff show their *old* name in historical rows (that
   one is correct — audit logs freeze historical fact).
 
+## Before go-live (blockers & gaps)
+- **Email deliverability (hard blocker).** Resend is in sandbox — staff rota /
+  reminder emails only deliver to the account owner until a Resend domain is
+  verified and `RESEND_FROM_EMAIL` is set on Render. Manager login OTP goes via
+  Supabase's built-in email, unreliable until custom SMTP is configured (this
+  also gates return-login for onboarding session 2+).
+- **No automated tests anywhere** (backend or frontend) — the app is verified by
+  hand against one live venue. Before the shift-model change lands, add solver
+  unit tests (duration / night-hours / rest-gap / midnight-cross / `"close"`):
+  it's the highest-risk, compliance-bearing code and currently has zero coverage.
+- **PIN brute-force protection is best-effort only** — see Security posture.
+- **Free-text shift ends (`"close"`)** under-report hours & pay and defeat the
+  solver's max-hours cap until the per-day shift model ships.
+
+## Security posture (audited — mitigations & known weaknesses)
+Sound where it counts, with two known-weak areas flagged in-code:
+- **Tenant isolation is manual and load-bearing.** The backend uses the Supabase
+  **service-role key (RLS bypassed)**, so every staff / shift / period / rota
+  lookup must be explicitly venue- or period-scoped. Any new query that isn't
+  leaks cross-tenant — there is no second net. RLS policies (migration `001`)
+  exist only as defense-in-depth for direct/anon access.
+- **PIN auth is weak but mitigated.** 4-digit PINs (10k space); rate-limited
+  per-IP (5/15min) plus an IP-independent venue-wide backstop (30/15min). But
+  the store is an **in-memory dict** (`services/rate_limit.py`) — it **resets on
+  every Render deploy and is per-instance**, so protection is ineffective if
+  Render ever scales past one instance. Proper fix: shared store (Redis) +
+  longer PINs. Tracked in-code.
+- **Admin console:** every route gated by `X-Admin-Secret` vs `ADMIN_SECRET`
+  (`require_admin`). Plain `!=` compare (not constant-time — low-sev timing nit).
+- **Credential hygiene:** PINs travel in POST bodies, never URLs; forgot-PIN and
+  join are enumeration-safe (generic responses, rate-limited). Claim / give /
+  swap writes are atomic (guarded status flip) against double-assign races.
+- `.env` / `.env.local` are gitignored, no secrets tracked; CORS uses a
+  configured origin allowlist (not `*`) with credentials.
+- **Never touch the OTP / PIN auth flow without flagging first** (working rule).
+
 ## Learnings (append after each session — most recent first)
+- **Onboarding remodel batch 1 — "Refined Dark" art direction + a real focus bug fixed.** The user reported the cursor leaving the input after every keystroke on the onboarding wizard (name/venue *and* the shift-time fields). **Root cause: the step screens (`StepWelcome`…`StepDefaults`) were defined as functions nested inside `OnboardingWizard` and mounted as `<StepWelcome />`.** A closure recreated every parent render gets a new type identity each keystroke → React remounts the whole subtree → the `<input>` is destroyed and focus/cursor lost. **Fix: call them as render functions (`StepWelcome()`) instead of mounting them as elements** — inlines their JSX so inputs reconcile in place. They hold no hooks, so a plain call is safe. Proved live with a node-identity test: type `T→Te→Tes→Test`, the *same* DOM node stays `isConnected`+`activeElement` with caret at end every keystroke (before the fix it would remount → `isConnected:false`, focus → body). Same test passed on the `type="time"` shift-time input. **This is a general React trap: never define components inside a render body and mount them as elements — either lift them out (props) or call them as functions.**
+- **The remodel is a clean, revertible CSS *elevation layer* appended after the base `.ob-*` rules in `globals.css`** (same selectors, later cascade — base port untouched). Direction chosen from a 3-way art-direction board (`onboarding-directions.html`, kept in repo): A Refined Dark (picked), B Warm Hospitality (light/Playfair), C Bold Editorial. A = the existing #0D0D0D/#FF4D00 identity pushed premium: inset top-highlight on surfaces, gradient progress rail + bloom, accent-ring/soft-tint selected card, gradient+glow CTA. Also closed two ui-ux-pro-max CRITICAL gaps the original port missed: keyboard `:focus-visible` rings on every control, and ≥40px touch targets on the back button + coverage steppers (were 30px). All static or short state transitions; the existing reduced-motion block still governs the animations it names.
+- **Fonts render as Times New Roman in this local sandbox — environment-wide, not a bug.** `--font-display`/`--font-body` (next/font/google, self-hosted, `lib/fonts.ts`) come back **empty** because the tool sandbox can't fetch Google fonts at compile time, so `<body>` itself computes to Times New Roman — the whole app, not just onboarding. My heading rule (`font-family: var(--font-display), "Space Grotesk", sans-serif`) matches the app's own Tailwind `display` stack, so production (Vercel build fetches the fonts) renders Space Grotesk. Can verify the *wiring* locally but not *see* the typeface — same class of limit as motion not compositing in the Browser pane. Verified everything else live at 375px (gradient rail/CTA/segmented, input inset-highlight, 40px back button, no horizontal overflow); `next build` clean.
 - **UX_BUILD_PROMPT Batch 4 (§6) — prefill provenance echo + auto-submit safety. All four spec sections (§1/§2/§3/§6) are now built.** §6a: carried-over (prefilled) cells render as a **lighter echo** of their real colour (`rgba(·,0.05)` fill / `0.2` border) until the **first touch commits the whole grid to solid** (`0.12`/`0.4`) — a provenance cue, *not* a per-cell confirm gate, so a no-change week stays one tap. The echo stays distinct from §2's untouched (dashed hollow, no fill): three legible tiers — echo < solid, and hollow is its own thing. Implemented with a `committed` flag (`= !prefilled` on week load; any of `cycleSlot`/`setAllDay`/`setCantWorkWeek` flips it true) and an `echo` variant on each `SLOT_STYLE` entry; the existing named-property slot transition carries the echo→solid settle for free (no `transition:all`, reduced-motion already covered globally). The "this is what you sent last time" banner now shows only while uncommitted — its disappearance on first touch *is* the "you're editing this week now" signal.
 - **§6b — auto-submit is never silent.** Migration `025` adds `availability_submissions.auto_submitted` (bool). The cron (`_auto_submit_for_new_period`) now stamps `auto_submitted=True` on the rows it copies forward **and** sends a heads-up email (`send_auto_submit_email`, "We submitted your usual availability for w/c … — tap to change it"). Both `/week` and `/auth` compute+expose `auto_submitted` (any flagged saved row, gated to `editable`/`collecting`), driving an in-app banner on **both** the availability screen and the hub. **The flag clears itself**: a manual re-submit re-inserts the rows *without* it (the submit endpoint never sets it), so the banner vanishes the moment they actually edit — no separate acknowledge step. Verified live end-to-end by crafting 14 auto-flagged rows for David on the collecting week: `/week`→`auto_submitted:true, prefilled:false`, `/auth`→`true`, both banners rendered (availability + hub, the hub one after the cold-pool `/auth` fetch landed), echo banner correctly absent; then deleted the rows (DB back to 0 auto rows). **Push notification is future work — flagged in `cron.py` (comment) and here, deliberately not built** (auto-submit is opt-in, so the email+banner are a courtesy backstop, not a hard guard).
 - **The auto-submit cron query also picked up the §3 `pending` exclusion in passing** (`.eq("pending", False)`) — a pending self-registrant with auto-submit somehow on must not get machine-submitted into a schedulable-looking state before approval. Cheap consistency with every other assignable-roster query.
