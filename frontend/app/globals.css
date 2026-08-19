@@ -657,3 +657,108 @@ a:hover {
   .ob-fill { transition: transform 0.2s ease; }
   .ob-sw::after, .ob-coach { transition: opacity 0.2s !important; transform: none !important; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REFINED DARK — onboarding elevation layer (art-direction A)
+   Layered on top of the base .ob-* rules above (same selectors, later cascade)
+   so the working port stays intact and this pass is a clean revert unit.
+   Adds: depth (inset highlight + accent glow), display-font headings, a richer
+   selected-card treatment, keyboard :focus-visible rings, and ≥40px touch
+   targets on the small controls. All static or short state transitions —
+   nothing here adds delight-tier motion, and the reduced-motion block above
+   still governs the animations it names.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cp-onboarding {
+  --ob-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --ob-accent-2: #ff7a3d;
+  --ob-accent-glow: 0 10px 30px -10px rgba(255, 77, 0, 0.5);
+}
+
+/* Progress rail — gradient + faint bloom instead of a flat bar */
+.ob-fill {
+  background: linear-gradient(90deg, var(--accent), var(--ob-accent-2));
+  box-shadow: 0 0 8px -1px rgba(255, 77, 0, 0.55);
+}
+
+/* Typography — headings and object names in the display face, tighter */
+.ob-h {
+  font-family: var(--font-display), "Space Grotesk", sans-serif;
+  font-size: 24px;
+  letter-spacing: -0.6px;
+  line-height: 1.12;
+  text-wrap: balance;
+}
+.ob-cn,
+.ob-coach .ch { font-family: var(--font-display), "Space Grotesk", sans-serif; }
+
+/* Text inputs — inset highlight + a proper focus ring */
+.ob-in {
+  box-shadow: var(--ob-highlight);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.ob-in:focus,
+.ob-in:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--ob-highlight), 0 0 0 3px var(--accent-soft);
+}
+
+/* Venue cards — hairline + depth; selected gets an accent ring, a soft tint
+   gradient, a glow, and a tinted (not solid) icon tile — reads premium, and
+   the check badge still makes selection unmistakable. */
+.ob-card {
+  border-width: 1px;
+  border-radius: 15px;
+  box-shadow: var(--ob-highlight);
+  transition: transform 0.14s var(--ease-out), border-color 0.18s, background 0.18s, box-shadow 0.18s;
+}
+.ob-card.sel {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(255, 77, 0, 0.06), var(--card));
+  box-shadow: var(--ob-highlight), 0 0 0 1px var(--accent), 0 10px 26px -14px rgba(255, 77, 0, 0.6);
+}
+.ob-card.sel .ob-cic { background: var(--accent-soft); color: var(--accent); }
+.ob-cic { box-shadow: var(--ob-highlight); }
+
+/* Segmented control — active segment picks up the CTA gradient + highlight */
+.ob-so.on {
+  background: linear-gradient(180deg, #ff5c14, var(--accent));
+  box-shadow: var(--ob-highlight);
+}
+
+/* Join card + summary card — same depth language */
+.ob-join {
+  background: linear-gradient(180deg, rgba(255, 77, 0, 0.11), rgba(255, 77, 0, 0.05));
+  box-shadow: var(--ob-highlight);
+}
+.ob-sum { box-shadow: var(--ob-highlight); }
+
+/* Solver ring — soft coloured bloom, green on completion */
+.ob-ring { box-shadow: var(--ob-highlight), 0 0 42px -12px rgba(255, 77, 0, 0.45); }
+.ob-ring.done { box-shadow: var(--ob-highlight), 0 0 42px -12px rgba(46, 204, 113, 0.5); }
+
+/* Coach-mark — lift it off the scrim */
+.ob-coach { box-shadow: 0 22px 50px -14px rgba(0, 0, 0, 0.65); }
+
+/* Primary CTA — subtle vertical gradient + accent glow */
+.ob-btn {
+  background: linear-gradient(180deg, #ff5c14, var(--accent));
+  box-shadow: var(--ob-accent-glow);
+}
+.ob-btn.ghost { background: transparent; box-shadow: none; }
+
+/* Touch targets — bump the small controls to a comfortable ≥40px (ui-ux-pro-max
+   §2). Back button and the coverage steppers were 30px. */
+.ob-back { width: 40px; height: 40px; border-radius: 11px; }
+.ob-mb { width: 40px; height: 40px; border-radius: 11px; font-size: 18px; }
+
+/* Keyboard focus — visible rings on every interactive control (ui-ux-pro-max
+   §1, the CRITICAL gap in the current port). :focus-visible so it never shows
+   on pointer taps. */
+.cp-onboarding button:focus-visible,
+.cp-onboarding a:focus-visible,
+.ob-card:focus-visible,
+.ob-sw:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.cp-onboarding button:focus { outline: none; }

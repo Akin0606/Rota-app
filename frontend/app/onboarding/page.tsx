@@ -414,13 +414,19 @@ function OnboardingWizard() {
         <div className="ob-wrap">
           {si < 7 && (
             <div className={`ob-step ${anim}`}>
-              {si === 0 && <StepWelcome />}
-              {si === 1 && <StepVenue />}
-              {si === 2 && <StepRoles />}
-              {si === 3 && <StepHours />}
-              {si === 4 && <StepTeam />}
-              {si === 5 && <StepCoverage />}
-              {si === 6 && <StepDefaults />}
+              {/* Called as render functions, NOT mounted as <Components/>: these
+                  closures are recreated every parent render, so mounting them as
+                  elements gave each a new type identity on every keystroke →
+                  React remounted the subtree → inputs lost focus/cursor. Calling
+                  them inlines their JSX so inputs reconcile in place. (They hold
+                  no hooks, so a plain call is safe.) */}
+              {si === 0 && StepWelcome()}
+              {si === 1 && StepVenue()}
+              {si === 2 && StepRoles()}
+              {si === 3 && StepHours()}
+              {si === 4 && StepTeam()}
+              {si === 5 && StepCoverage()}
+              {si === 6 && StepDefaults()}
             </div>
           )}
           {si === 7 && <StepSolve onOpen={finishOnboarding} onGenerate={handleGenerate} />}
