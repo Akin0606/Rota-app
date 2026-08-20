@@ -47,13 +47,17 @@ export default function RotaDayView({ shifts, staff, assignments, onAdd, onRemov
         const assigned = assignedFor(shift.id);
         const isAdding = addingShift === shift.id;
         const options = availableFor();
+        // Prefer this day's real per-day hours (carried on the assignment) over
+        // the shift-level representative for a per-day shift.
+        const dayStart = assigned[0]?.start_time ?? shift.start_time;
+        const dayEnd = assigned[0]?.end_time ?? shift.end_time;
         return (
           <div key={shift.id} className="mb-4">
             <div className="mb-2 flex items-center gap-2">
               <span className="h-3.5 w-1 rounded-sm" style={{ background: shift.color }} />
               <span className="text-[13px] font-semibold text-ink-label">{shift.name}</span>
               <span className="text-[11px] text-ink-faint">
-                {shift.start_time} – {shift.end_time}
+                {dayStart} – {dayEnd}
               </span>
             </div>
             <div className="flex flex-col gap-1.5">

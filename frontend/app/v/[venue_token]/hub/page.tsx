@@ -202,6 +202,14 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
   const pendingSwap = rota?.pending_swaps.find((s) => s.role === "recipient" && s.status === "pending_response");
   const swapTheirShift = pendingSwap ? rota?.shifts.find((s) => s.id === pendingSwap.their_shift.shift_id) : null;
   const swapMyShift = pendingSwap ? rota?.shifts.find((s) => s.id === pendingSwap.my_shift.shift_id) : null;
+  // Per-day times for the offered shifts, resolved from the matching assignment
+  // so a per-day shift shows the right hours in the give/swap banner.
+  const giveTimes = pendingGive
+    ? rota?.assignments.find((a) => a.shift_id === pendingGive.shift_id && a.day_index === pendingGive.day_index)
+    : null;
+  const swapTheirTimes = pendingSwap
+    ? rota?.assignments.find((a) => a.id === pendingSwap.their_shift.assignment_id)
+    : null;
 
   // ---- Tile badges ----
   const hasRota = Boolean(rota?.period);
@@ -211,7 +219,14 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
 
   const shiftsById = new Map((rota?.shifts ?? []).map((s) => [s.id, s]));
   const myShifts = myAssignments
-    .map((a) => (a.shift_id ? shiftsById.get(a.shift_id) : undefined))
+    // Resolve each shift's real per-day hours so the hours badge is correct for
+    // a per-day shift, not the shift-level representative.
+    .map((a) => {
+      const base = a.shift_id ? shiftsById.get(a.shift_id) : undefined;
+      return base
+        ? { ...base, start_time: a.start_time ?? base.start_time, end_time: a.end_time ?? base.end_time }
+        : undefined;
+    })
     .filter((s): s is NonNullable<typeof s> => Boolean(s));
   const { hours, unmeasured } = sumShiftHours(myShifts);
   const hoursBadge = `${formatHoursTotal(hours, unmeasured, "")} hrs`;
@@ -334,7 +349,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
       {pendingGive && giveShift && giverName && (
         <ActionBanner
           title={`${giverName} wants to give you a shift`}
-          desc={`${DAY_NAMES[pendingGive.day_index]} · ${giveShift.name} · ${giveShift.start_time} – ${giveShift.end_time}`}
+          desc={`${DAY_NAMES[pendingGive.day_index]} · ${giveShift.name} · ${giveTimes?.start_time ?? giveShift.start_time} – ${giveTimes?.end_time ?? giveShift.end_time}`}
           busy={resolving}
           onAccept={() => setAcceptTarget(pendingGive)}
           onDecline={() => handleDecline(pendingGive)}
@@ -344,7 +359,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
       {pendingSwap && swapTheirShift && swapMyShift && (
         <ActionBanner
           title={`${pendingSwap.counterpart_name} wants to swap with you`}
-          desc={`You'd take ${DAY_NAMES[pendingSwap.their_shift.day_index]} ${swapTheirShift.start_time} – ${swapTheirShift.end_time}, they'd take your ${DAY_NAMES[pendingSwap.my_shift.day_index]} ${swapMyShift.name}`}
+          desc={`You'd take ${DAY_NAMES[pendingSwap.their_shift.day_index]} ${swapTheirTimes?.start_time ?? swapTheirShift.start_time} – ${swapTheirTimes?.end_time ?? swapTheirShift.end_time}, they'd take your ${DAY_NAMES[pendingSwap.my_shift.day_index]} ${swapMyShift.name}`}
           busy={resolvingSwap}
           onAccept={() => setAcceptSwapTarget(pendingSwap)}
           onDecline={() => handleDeclineSwap(pendingSwap)}

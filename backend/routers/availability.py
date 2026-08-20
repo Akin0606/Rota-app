@@ -26,7 +26,7 @@ from models.schemas import (
     WeekAvailabilityOut,
     WeekAvailabilityRequest,
 )
-from services import email_service, notice_window, rate_limit, swap_guard
+from services import email_service, notice_window, rate_limit, shift_bounds, swap_guard
 from services.auth_service import INACTIVE_VENUE_MESSAGE
 from services.pin_service import generate_unique_pin
 from services.solver import UNAVAILABLE, check_manual_assignment
@@ -713,6 +713,17 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
     )
     assignments_by_id = {a["id"]: a for a in assignments}
 
+    # Resolve each assignment's real per-day hours (via shift_days) so a staffer
+    # sees the actual time of the shift they're on — not the shift-level
+    # representative — when a shift runs different hours on different days.
+    venue_shifts = _get_shifts(venue["id"])
+    shifts_by_id = {s["id"]: s for s in venue_shifts}
+    shift_days_idx = _load_shift_days_index([s["id"] for s in venue_shifts])
+    for a in assignments:
+        shift = shifts_by_id.get(a["shift_id"])
+        if shift:
+            a["start_time"], a["end_time"] = shift_bounds.bounds_for(shift, a["day_index"], shift_days_idx)
+
     # A manager-posted open shift has no owner yet — exclude the None before
     # looking up team members, or the .in_() lookup chokes on it.
     staff_ids = list({a["staff_id"] for a in assignments if a["staff_id"]})
@@ -757,7 +768,7 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
         "venue_name": venue["name"],
         "staff_id": staff_id,
         "period": {"id": period["id"], "week_start": str(period["week_start"]), "status": period["status"]},
-        "shifts": _get_shifts(venue["id"]),
+        "shifts": venue_shifts,
         "assignments": assignments,
         "team": team,
         "venue_staff": venue_staff,

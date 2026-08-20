@@ -122,6 +122,12 @@ def _build_summary(
         .execute()
         .data
     )
+    # Resolve each assignment's real per-day hours so every consumer (the grid,
+    # day-view, image export) shows the correct time for a per-day shift.
+    for a in assignments:
+        shift = shifts_by_id.get(a["shift_id"])
+        if shift:
+            a["start_time"], a["end_time"] = shift_bounds.bounds_for(shift, a["day_index"], shift_days_idx)
 
     submissions = (
         supabase.table("availability_submissions")
@@ -137,14 +143,34 @@ def _build_summary(
         if a["shift_id"] in shifts_by_id and a["staff_id"]
     )
 
-    # A slot is "demanded" if at least one person marked themselves
-    # available/preferred for it — that's the only signal we have for which
-    # (day, shift) combinations the venue actually needs covering.
-    demand_slots = {
+    # A slot is "demanded" if the venue's shift definition asks for staff there
+    # (an OPEN shift-day with min_staff > 0), OR if at least one person marked
+    # themselves available/preferred for it. Keying off the shift definition —
+    # not submissions alone — is the per-day model's point: a day the venue opens
+    # but nobody answered for is a real coverage gap, not an invisible non-slot.
+    #
+    # BUT only for shifts with a *real* per-day pattern — at least one closed day.
+    # The Batch 1 backfill made every existing shift run all 7 days as a
+    # PLACEHOLDER, not a statement that the venue opens 7 days; trusting that as
+    # demand would show phantom uncovered slots for days a venue actually shuts.
+    # So a shift still open every day falls back to submissions-only demand
+    # (byte-identical to the pre-per-day behaviour), and a shift only starts
+    # driving demand off its definition once a manager marks a closed day via the
+    # per-day editor (PUT /shifts/{id}/days) — i.e. once the pattern is real.
+    demanded_from_shifts: set[tuple[int, str]] = set()
+    for s in shifts:
+        open_days = [d for d in range(7) if shift_bounds.exists_on_day(s, d, shift_days_idx)]
+        if len(open_days) == 7:
+            continue  # placeholder / unmigrated — don't assert demand from it
+        for d in open_days:
+            if shift_bounds.staffing_for(s, d, shift_days_idx)[0] > 0:
+                demanded_from_shifts.add((d, s["id"]))
+    demanded_from_avail = {
         (s["day_index"], s["shift_id"])
         for s in submissions
         if s["shift_id"] and s["status"] in (AVAILABLE, PREFERRED)
     }
+    demand_slots = demanded_from_shifts | demanded_from_avail
     # A manager-posted open shift (staff_id null) hasn't actually been picked
     # up by anyone yet, so it doesn't count as real coverage — otherwise it'd
     # vanish from uncovered/under-covered the instant it's posted, instead of

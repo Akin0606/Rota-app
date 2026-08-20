@@ -174,6 +174,11 @@ class VenueOut(BaseModel):
     # Onboarding save-and-resume (§1). {"step": N} while in-flight,
     # {"completed": true} when done, None on a legacy/already-onboarded venue.
     setup_state: Optional[dict] = None
+    # True for venues the per-day migration backfilled from a free-text 'close'
+    # (a safe '11:00pm' placeholder). Prompts the manager to enter the real
+    # close times via the per-day editor; cleared the moment they save a
+    # per-day schedule (PUT /shifts/{id}/days).
+    needs_shift_recapture: bool = False
 
 
 class OnboardingActivateRequest(BaseModel):
@@ -343,6 +348,38 @@ class ShiftUpdateRequest(BaseModel):
     max_staff: Optional[int] = Field(default=None, ge=1)
 
 
+class ShiftDayIn(BaseModel):
+    """One OPEN day of a shift's per-day schedule. Days not listed in a
+    ShiftScheduleUpdateRequest are closed (no shift_days row)."""
+    day_index: int = Field(ge=0, le=6)
+    start_time: str
+    end_time: str
+    min_staff: int = Field(default=1, ge=0)
+    max_staff: int = Field(default=2, ge=1)
+
+
+class ShiftScheduleUpdateRequest(BaseModel):
+    # Only the OPEN days. Any day_index 0-6 absent from this list is a closed
+    # day for the shift. Must contain at least one day — a shift closed every
+    # day would never be schedulable.
+    days: list[ShiftDayIn]
+
+
+class ShiftDayOut(BaseModel):
+    day_index: int
+    open: bool
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    min_staff: int = 1
+    max_staff: int = 2
+
+
+class ShiftScheduleOut(BaseModel):
+    shift_id: str
+    # Always 7 entries, day_index 0 (Monday) .. 6 (Sunday), in order.
+    days: list[ShiftDayOut]
+
+
 class SchedulingRulesUpdateRequest(BaseModel):
     max_hours_per_week: Optional[int] = Field(default=None, ge=1)
     min_rest_hours: Optional[int] = Field(default=None, ge=0)
@@ -421,6 +458,12 @@ class AssignmentOut(BaseModel):
     shift_id: Optional[str] = None
     manually_assigned: bool
     required_role: Optional[str] = None
+    # The shift's real hours for THIS assignment's day, resolved through
+    # shift_days. Present so a per-day (e.g. later weekend close) shift shows the
+    # correct time here rather than the shift-level representative. Falls back to
+    # the shift-level time when there's no per-day row.
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
 
 
 class OpenShiftCreateRequest(BaseModel):
@@ -592,6 +635,11 @@ class StaffRotaAssignmentOut(BaseModel):
     claim_staff_id: Optional[str] = None
     target_staff_id: Optional[str] = None
     required_role: Optional[str] = None
+    # The shift's real hours for THIS assignment's day (per-day, via shift_days),
+    # so a staffer sees the actual time of the shift they're on, not the
+    # shift-level representative. Falls back to shift-level when no per-day row.
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
 
 
 class StaffRotaTeamMemberOut(BaseModel):

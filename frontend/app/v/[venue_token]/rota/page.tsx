@@ -75,8 +75,8 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
         return {
           date: addDays(weekStart, a.day_index),
           name: shift.name,
-          startTime: shift.start_time,
-          endTime: shift.end_time,
+          startTime: a.start_time ?? shift.start_time,
+          endTime: a.end_time ?? shift.end_time,
         };
       })
       .filter((s): s is NonNullable<typeof s> => s !== null)
@@ -214,7 +214,10 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
                 .filter((m): m is NonNullable<typeof m> => Boolean(m))
             : [];
 
-          const duration = shift ? shiftDurationHours(shift.start_time, shift.end_time) : null;
+          // Prefer the assignment's per-day hours over the shift-level time.
+          const startTime = assignment?.start_time ?? shift?.start_time;
+          const endTime = assignment?.end_time ?? shift?.end_time;
+          const duration = shift && startTime && endTime ? shiftDurationHours(startTime, endTime) : null;
           // A shift that's already been dropped, given or claimed can't be
           // acted on again — it shows its state instead of a tap affordance.
           const inFlight = Boolean(assignment?.drop_status);
@@ -239,7 +242,7 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
                   href={
                     isPast || inFlight ? null : `/v/${venue_token}/drop?assignment=${assignment!.id}`
                   }
-                  time={`${shift.start_time} – ${shift.end_time}`}
+                  time={`${startTime} – ${endTime}`}
                   name={shift.name}
                   colleagues={colleagues}
                   duration={duration}

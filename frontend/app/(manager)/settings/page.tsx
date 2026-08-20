@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import ManagerIcon, { type ManagerIconName } from "@/components/manager/icon";
 import RoleSheet from "@/components/manager/role-sheet";
+import ShiftDayEditor from "@/components/manager/shift-day-editor";
 import LoadingScreen from "@/components/loading-screen";
 import Modal from "@/components/modal";
 import StatusBanner from "@/components/status-banner";
@@ -77,6 +78,7 @@ export default function SettingsPage() {
 
   const [venueName, setVenueName] = useState("");
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
+  const [scheduleShift, setScheduleShift] = useState<Shift | null>(null);
   const [unpublishTarget, setUnpublishTarget] = useState<Period | null>(null);
   const [unpublishing, setUnpublishing] = useState(false);
 
@@ -370,8 +372,20 @@ export default function SettingsPage() {
         {/* Shifts */}
         <div className="rounded-panel border border-hairline bg-surface-card p-6 md:col-span-2">
           <div className="mb-1 text-base font-bold text-ink">Shift Types</div>
+          {venue?.needs_shift_recapture && (
+            <div className="mb-4 flex items-start gap-2.5 rounded-input border border-accent-border bg-accent-light px-3.5 py-3 text-[13px] text-accent">
+              <ManagerIcon name="info-circle" size={16} />
+              <span>
+                We set your evening shifts to a placeholder <span className="font-semibold">11pm</span> close.
+                Tap <span className="font-semibold">Hours</span> on each shift to enter the real closing time
+                (a 1am or 2:30am close is fine) — this clears once you save.
+              </span>
+            </div>
+          )}
           <div className="mb-4 text-[13px] text-ink-faint">
-            Name and timing live here. Adjust min/max staff per shift, max hours/week and min rest in{" "}
+            Name and default time live here. Use <span className="font-semibold text-ink">Hours</span> to set
+            which days a shift runs and different hours per day (e.g. a later close on weekends). Max
+            hours/week and min rest live in{" "}
             <a href="/scheduler" className="font-semibold text-accent">
               Scheduler
             </a>
@@ -432,6 +446,12 @@ export default function SettingsPage() {
                     className="rounded-lg px-3 py-2 text-[13px] font-medium text-accent"
                   >
                     Edit
+                  </button>
+                  <button
+                    onClick={() => setScheduleShift(sh)}
+                    className="rounded-lg px-3 py-2 text-[13px] font-medium text-accent"
+                  >
+                    Hours
                   </button>
                   <button
                     onClick={() => handleDeleteShift(sh)}
@@ -636,6 +656,13 @@ export default function SettingsPage() {
           showToast("Role deleted");
         }}
         onError={showToast}
+      />
+
+      <ShiftDayEditor
+        shift={scheduleShift}
+        onClose={() => setScheduleShift(null)}
+        onSaved={() => setReloadToken((n) => n + 1)}
+        showToast={showToast}
       />
 
       <Toast message={toast} />

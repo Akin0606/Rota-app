@@ -131,7 +131,18 @@ export default function StaffHoursPage({ params }: { params: { venue_token: stri
 
   const myShifts = data.assignments
     .filter((a) => a.staff_id === data.staff_id && a.shift_id)
-    .map((a) => ({ assignment: a, shift: shiftsById.get(a.shift_id!) }))
+    // Resolve each assignment's real per-day hours into the shift object once,
+    // so the hours total, pay, and every row below use the right time for a
+    // per-day shift (a later weekend close, etc.).
+    .map((a) => {
+      const base = shiftsById.get(a.shift_id!);
+      return {
+        assignment: a,
+        shift: base
+          ? { ...base, start_time: a.start_time ?? base.start_time, end_time: a.end_time ?? base.end_time }
+          : undefined,
+      };
+    })
     .filter((x): x is { assignment: (typeof x)["assignment"]; shift: NonNullable<(typeof x)["shift"]> } =>
       Boolean(x.shift),
     )

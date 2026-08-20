@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import OIcon, { OIconName } from "@/components/onboarding/icon";
+import TimeWheel from "@/components/onboarding/time-wheel";
 import {
   ApiError,
   Period,
@@ -12,6 +13,7 @@ import {
   createShift,
   createStaff,
   createVenue,
+  deleteShift,
   generateRota,
   getVenue,
   listPeriods,
@@ -20,6 +22,7 @@ import {
   listStaff,
   rotateJoinCode,
   saveSetupState,
+  setShiftSchedule,
   updateRules,
   updateScheduler,
   updateShift,
@@ -53,13 +56,37 @@ function fmtTime(t: string): string {
 }
 
 type Team = { name: string; u18: boolean };
+
+// Per-day opening hours (times as "HH:MM" 24h). The default screen edits these
+// in three pub-rhythm groups; the per-day sheet edits individual days. The
+// solver's per-day model consumes `days`; `open`/`close` stay as the
+// representative weekday pair the current shift bridge still needs.
+type DayHours = { open: string; close: string; closed: boolean };
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const HOUR_GROUPS: { label: string; sub: string; days: number[]; wknd?: boolean }[] = [
+  { label: "Mon–Thu", sub: "the usual", days: [0, 1, 2, 3] },
+  { label: "Fri–Sat", sub: "later close", days: [4, 5], wknd: true },
+  { label: "Sunday", sub: "Sunday hours", days: [6], wknd: true },
+];
+function defaultDays(o: string, c: string): DayHours[] {
+  return DAY_NAMES.map(() => ({ open: o, close: c, closed: false }));
+}
+function groupSummary(days: DayHours[], idxs: number[]) {
+  const ds = idxs.map((i) => days[i]);
+  if (ds.every((d) => d.closed)) return { closed: true, varies: false, open: "", close: "" };
+  const anyClosed = ds.some((d) => d.closed);
+  const openSame = ds.every((d) => d.open === ds[0].open);
+  const closeSame = ds.every((d) => d.close === ds[0].close);
+  return { closed: false, varies: anyClosed || !openSame || !closeSame, open: ds[0].open, close: ds[0].close };
+}
+
 type WizState = {
   step: number;
   name: string;
   venue: VenueKey | null;
   foh: string[];
   boh: string[];
-  hoursMode: "same" | "vary";
+  days: DayHours[];
   open: string;
   close: string;
   coverage: Record<string, number>;
@@ -81,9 +108,11 @@ function OnboardingWizard() {
   const [venue, setVenue] = useState<VenueKey | null>(null);
   const [foh, setFoh] = useState<string[]>([]);
   const [boh, setBoh] = useState<string[]>([]);
-  const [hoursMode, setHoursMode] = useState<"same" | "vary">("same");
   const [open, setOpen] = useState("11:00");
   const [close, setClose] = useState("23:00");
+  const [days, setDays] = useState<DayHours[]>(() => defaultDays("11:00", "23:00"));
+  const [picker, setPicker] = useState<{ target: number[]; field: "open" | "close"; value: string; label: string } | null>(null);
+  const [daySheet, setDaySheet] = useState(false);
   const [team, setTeam] = useState<Team[]>([]);
   const [coverage, setCoverage] = useState<Record<string, number>>({});
   const [rest, setRest] = useState(true);
@@ -167,9 +196,9 @@ function OnboardingWizard() {
         setVenue((st.venue as VenueKey) ?? null);
         setFoh(st.foh ?? []);
         setBoh(st.boh ?? []);
-        setHoursMode(st.hoursMode ?? "same");
         setOpen(st.open ?? "11:00");
         setClose(st.close ?? "23:00");
+        setDays(st.days ?? defaultDays(st.open ?? "11:00", st.close ?? "23:00"));
         setCoverage(st.coverage ?? {});
         setRest(st.rest ?? true);
         const savedTeam = await listStaff().catch(() => []);
@@ -192,7 +221,7 @@ function OnboardingWizard() {
       venue,
       foh,
       boh,
-      hoursMode,
+      days,
       open,
       close,
       coverage,
@@ -288,13 +317,67 @@ function OnboardingWizard() {
     }
   }
 
-  // Two default shifts (Day / Evening) split at 17:00, from the entered hours —
-  // the app schedules named shifts, not raw opening hours. Idempotent.
+  // Two named shifts (Day / Evening) split at 17:00 — the app schedules named
+  // shifts, not raw opening hours — but their real per-day hours + closed days
+  // come from the captured `days` and land in `shift_days` (the per-day model),
+  // not a single hardcoded weekday pair. A closed day emits no row (the solver's
+  // existence gate then never schedules it). Idempotent.
   async function persistShifts() {
     const existing = await listShifts().catch(() => []);
     if (existing.length > 0) return;
-    await createShift({ name: "Day", start_time: fmtTime(open), end_time: "5:00pm", color: SHIFT_COLORS[0], sort_order: 0 });
-    await createShift({ name: "Evening", start_time: "5:00pm", end_time: fmtTime(close), color: SHIFT_COLORS[2], sort_order: 1 });
+
+    const SPLIT = "17:00"; // Day/Evening boundary, 5pm
+    const toMin = (t: string) => {
+      const [h, m] = t.split(":").map(Number);
+      return h * 60 + (m || 0);
+    };
+    const splitMin = toMin(SPLIT);
+
+    type Row = { day_index: number; start_time: string; end_time: string; min_staff: number; max_staff: number };
+    const dayRows: Row[] = [];
+    const eveRows: Row[] = [];
+    days.forEach((d, i) => {
+      if (d.closed) return;
+      const openMin = toMin(d.open);
+      const closeMin = toMin(d.close);
+      const crossesMidnight = closeMin <= openMin; // e.g. close 01:00 after open 11:00
+      const closesAfterSplit = crossesMidnight || closeMin > splitMin;
+      // Day band: open .. 17:00 (or the real early close), when the venue opens
+      // before 5pm.
+      if (openMin < splitMin) {
+        dayRows.push({
+          day_index: i,
+          start_time: fmtTime(d.open),
+          end_time: fmtTime(closesAfterSplit ? SPLIT : d.close),
+          min_staff: 1,
+          max_staff: 2,
+        });
+      }
+      // Evening band: 17:00 (or a later open) .. close, when the venue is open
+      // past 5pm.
+      if (closesAfterSplit) {
+        eveRows.push({
+          day_index: i,
+          start_time: fmtTime(openMin >= splitMin ? d.open : SPLIT),
+          end_time: fmtTime(d.close),
+          min_staff: 1,
+          max_staff: 2,
+        });
+      }
+    });
+
+    // Representative shift-level times (setShiftSchedule mirrors the first open
+    // day onto shifts.* anyway; these are just sensible creation defaults).
+    const rep = days.find((x) => !x.closed) ?? days[0];
+    const dayShift = await createShift({ name: "Day", start_time: fmtTime(rep.open), end_time: fmtTime(SPLIT), color: SHIFT_COLORS[0], sort_order: 0 });
+    const eveShift = await createShift({ name: "Evening", start_time: fmtTime(SPLIT), end_time: fmtTime(rep.close), color: SHIFT_COLORS[2], sort_order: 1 });
+
+    // Write the real per-day schedule; drop a band no open day uses (e.g. an
+    // evening-only venue keeps just Evening). At least one always survives.
+    if (dayRows.length > 0) await setShiftSchedule(dayShift.id, dayRows);
+    else await deleteShift(dayShift.id).catch(() => {});
+    if (eveRows.length > 0) await setShiftSchedule(eveShift.id, eveRows);
+    else await deleteShift(eveShift.id).catch(() => {});
   }
 
   async function handleRolesContinue() {
@@ -313,13 +396,19 @@ function OnboardingWizard() {
   async function handleHoursContinue() {
     setSaving(true);
     try {
+      // persistShifts writes the real per-day schedule (incl. closed days) into
+      // shift_days. Keep a representative open/close in state + setup_state for
+      // resume and the coverage-step copy.
+      const rep = days.find((d) => !d.closed) ?? days[0];
+      setOpen(rep.open);
+      setClose(rep.close);
       await persistShifts();
       // Seed coverage defaults for the first three roles now that we're leaving.
       const base = [3, 2, 2];
       const cov: Record<string, number> = {};
       roles.slice(0, 3).forEach((r, i) => (cov[r] = coverage[r] ?? base[i] ?? 1));
       setCoverage(cov);
-      persist(4, { coverage: cov });
+      persist(4, { coverage: cov, open: rep.open, close: rep.close });
       set(4);
     } catch {
       showToast("Could not save your hours");
@@ -441,6 +530,58 @@ function OnboardingWizard() {
           </div>
         </div>
       )}
+
+      {/* Hours overlays — rendered at the root (outside the transformed .ob-step)
+          so their fixed positioning is relative to the viewport, not the step. */}
+      <div className={`ob-vscrim ${daySheet ? "open" : ""}`} onClick={() => setDaySheet(false)} />
+      <div className={`ob-daysheet ${daySheet ? "open" : ""}`} role="dialog" aria-label="Set each day">
+        <div className="ob-grab" />
+        <div className="ob-dshead">
+          <div>
+            <div className="st">Set each day</div>
+            <div className="ss">Overrides the group hours for that day</div>
+          </div>
+          <button className="ob-dsclose" onClick={() => setDaySheet(false)} aria-label="Close"><OIcon name="x" size={15} /></button>
+        </div>
+        <div className="ob-dsbody">
+          {DAY_NAMES.map((dn, i) => {
+            const d = days[i];
+            return (
+              <div key={dn} className={`ob-drow ${d.closed ? "closed" : ""} ${i >= 4 ? "wknd" : ""}`}>
+                <div className="ob-dname">{dn}</div>
+                {!d.closed && (
+                  <div className="ob-dtimes">
+                    <button className="ob-tpill" onClick={() => openTimePicker([i], "open", `${dn} — opens`)}>{fmtTime(d.open)}</button>
+                    <span className="ob-tdash">to</span>
+                    <button className="ob-tpill" onClick={() => openTimePicker([i], "close", `${dn} — closes`)}>{fmtTime(d.close)}</button>
+                  </div>
+                )}
+                <div className="ob-dclosed">
+                  <span>Closed</span>
+                  <button
+                    className={`ob-sw ${d.closed ? "on" : ""}`}
+                    aria-label={`${dn} closed`}
+                    onClick={() => setDays((prev) => prev.map((x, j) => (j === i ? { ...x, closed: !x.closed } : x)))}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="ob-dsfoot"><button className="ob-btn" onClick={() => setDaySheet(false)}>Done</button></div>
+      </div>
+
+      <TimeWheel
+        open={!!picker}
+        value={picker?.value ?? "11:00"}
+        label={picker?.label ?? ""}
+        onClose={() => setPicker(null)}
+        onSet={(v) => {
+          const p = picker;
+          if (p) setDays((prev) => prev.map((d, i) => (p.target.includes(i) ? { ...d, [p.field]: v, closed: false } : d)));
+          setPicker(null);
+        }}
+      />
     </div>
   );
 
@@ -574,32 +715,50 @@ function OnboardingWizard() {
     );
   }
 
+  function openTimePicker(target: number[], field: "open" | "close", label: string) {
+    const ref = days[target[0]];
+    setPicker({ target, field, value: field === "open" ? ref.open : ref.close, label });
+  }
+
   function StepHours() {
     return (
       <div>
         <div className="ob-eyebrow">Opening hours</div>
         <div className="ob-h">When are you open?</div>
-        <div className="ob-p">Most places keep the same hours most days. Switch to &quot;varies&quot; only if you need to.</div>
-        <div className="ob-seg">
-          <button className={`ob-so ${hoursMode === "same" ? "on" : ""}`} onClick={() => setHoursMode("same")}>Same every day</button>
-          <button className={`ob-so ${hoursMode === "vary" ? "on" : ""}`} onClick={() => setHoursMode("vary")}>Varies by day</button>
-        </div>
-        <div className="ob-timerow">
-          <div className="ob-timecard"><label>Open</label><input type="time" className="ob-time" value={open} onChange={(e) => setOpen(e.target.value)} /></div>
-          <div className="ob-timecard"><label>Close</label><input type="time" className="ob-time" value={close} onChange={(e) => setClose(e.target.value)} /></div>
-        </div>
-        <div className="ob-hint"><OIcon name="info-circle" size={12} /> You can change opening hours anytime in Settings.</div>
-        <div className={`ob-reveal ${hoursMode === "vary" ? "open" : ""}`}>
-          <div className="ob-group">Fri – Sat</div>
-          <div className="ob-timerow">
-            <div className="ob-timecard"><label>Open</label><input type="time" className="ob-time" defaultValue="11:00" /></div>
-            <div className="ob-timecard"><label>Close</label><input type="time" className="ob-time" defaultValue="01:00" /></div>
-          </div>
-          <div className="ob-group">Sunday</div>
-          <div className="ob-timerow">
-            <div className="ob-timecard"><label>Open</label><input type="time" className="ob-time" defaultValue="12:00" /></div>
-            <div className="ob-timecard"><label>Close</label><input type="time" className="ob-time" defaultValue="22:30" /></div>
-          </div>
+        <div className="ob-p">Most pubs run on three rhythms. Set each — you can fine-tune any single day below.</div>
+        {HOUR_GROUPS.map((g) => {
+          const s = groupSummary(days, g.days);
+          return (
+            <div key={g.label} className={`ob-grp ${g.wknd ? "wknd" : ""}`}>
+              <div>
+                <div className="ob-glabel">{g.label}</div>
+                <div className="ob-gsub">
+                  {g.sub}
+                  {s.varies && <span className="diff"> · varies</span>}
+                </div>
+              </div>
+              {s.closed ? (
+                <button className="ob-tpill" onClick={() => setDaySheet(true)}>Closed</button>
+              ) : (
+                <div className="ob-gtimes">
+                  <button className="ob-tpill" onClick={() => openTimePicker(g.days, "open", `${g.label} — opens`)}>{fmtTime(s.open)}</button>
+                  <span className="ob-tdash">to</span>
+                  <button className="ob-tpill" onClick={() => openTimePicker(g.days, "close", `${g.label} — closes`)}>{fmtTime(s.close)}</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <button className="ob-note" onClick={() => setDaySheet(true)}>
+          <span className="ob-nic"><OIcon name="calendar" size={15} /></span>
+          <span className="ob-ntxt">
+            <span className="ob-nt">Different hours on a certain day?</span>
+            <span className="ob-ns">Set each day individually</span>
+          </span>
+          <span className="ob-nchev"><OIcon name="arrow-right" size={16} /></span>
+        </button>
+        <div className="ob-hint">
+          <OIcon name="info-circle" size={12} /> Closing after midnight is fine — set 1:00am or 2:30am. Change hours anytime in Settings.
         </div>
       </div>
     );

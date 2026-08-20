@@ -262,11 +262,12 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
     if (key === "swap") openSwap(selected);
   }
 
-  function shiftLine(shiftId: string | null): { time: string; role: string } | null {
-    const shift = shiftId ? shiftsById.get(shiftId) : null;
+  function shiftLine(a: StaffRotaAssignment): { time: string; role: string } | null {
+    const shift = a.shift_id ? shiftsById.get(a.shift_id) : null;
     if (!shift) return null;
     return {
-      time: `${shift.start_time} – ${shift.end_time}`,
+      // Prefer the assignment's real per-day hours over the shift-level time.
+      time: `${a.start_time ?? shift.start_time} – ${a.end_time ?? shift.end_time}`,
       role: myRole ? `${myRole} · ${shift.name.toLowerCase()}` : shift.name,
     };
   }
@@ -290,7 +291,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
       ) : (
         <div className="flex flex-col gap-[9px]">
           {myUpcomingShifts.map((a) => {
-            const line = shiftLine(a.shift_id);
+            const line = shiftLine(a);
             if (!line) return null;
             const dayDate = addDays(weekStart, a.day_index);
             const badge = inFlightBadge(a);
@@ -458,7 +459,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                   <CalendarBlock dayIndex={a.day_index} dateNumber={dayDate.getUTCDate()} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[14px] font-medium text-ink">
-                      {shift.start_time} – {shift.end_time}
+                      {a.start_time ?? shift.start_time} – {a.end_time ?? shift.end_time}
                     </div>
                     <div className="truncate text-[12px] text-ink-muted transition-colors duration-[350ms]">
                       {who}
@@ -620,7 +621,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                         >
                           {DAY_NAMES[a.day_index]} {dayDate.getUTCDate()} · {shift.name}
                           <span className="text-[11px] font-normal text-ink-faint">
-                            {shift.start_time}–{shift.end_time}
+                            {a.start_time ?? shift.start_time}–{a.end_time ?? shift.end_time}
                           </span>
                         </button>
                       );

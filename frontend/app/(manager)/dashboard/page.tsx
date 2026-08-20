@@ -414,7 +414,17 @@ function StaffModal({
   const shiftsById = new Map(shifts.map((s) => [s.id, s]));
   const mine = assignments
     .filter((a) => a.staff_id === member.id && a.shift_id)
-    .map((a) => ({ day: a.day_index, shift: shiftsById.get(a.shift_id as string) }))
+    // Resolve each assignment's real per-day hours so the times + total are
+    // right for a per-day shift.
+    .map((a) => {
+      const base = shiftsById.get(a.shift_id as string);
+      return {
+        day: a.day_index,
+        shift: base
+          ? { ...base, start_time: a.start_time ?? base.start_time, end_time: a.end_time ?? base.end_time }
+          : undefined,
+      };
+    })
     .filter((x): x is { day: number; shift: Shift } => Boolean(x.shift))
     .sort((a, b) => a.day - b.day);
 

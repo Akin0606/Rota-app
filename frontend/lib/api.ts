@@ -293,6 +293,10 @@ export type StaffRotaAssignment = {
   claim_staff_id: string | null;
   target_staff_id: string | null;
   required_role: string | null;
+  // Real per-day hours for this assignment's day (via shift_days); prefer over
+  // the shift-level time so a per-day shift shows the right time.
+  start_time?: string | null;
+  end_time?: string | null;
 };
 
 export type StaffRotaTeamMember = {
@@ -532,6 +536,9 @@ export type Venue = {
   // Onboarding save-and-resume (§1). {step} while in-flight, {completed} when
   // done, null on a legacy/already-onboarded venue.
   setup_state: SetupState | null;
+  // True for venues backfilled from a free-text 'close' — prompt the manager to
+  // enter real per-day close times. Cleared when they save any per-day schedule.
+  needs_shift_recapture?: boolean;
 };
 
 export type SetupState = { step?: number; completed?: boolean } | null;
@@ -795,6 +802,38 @@ export function deleteShift(id: string): Promise<{ status: string }> {
   return authedRequest(`/api/shifts/${id}`, { method: "DELETE" });
 }
 
+export type ShiftDay = {
+  day_index: number;
+  open: boolean;
+  start_time: string | null;
+  end_time: string | null;
+  min_staff: number;
+  max_staff: number;
+};
+
+export type ShiftSchedule = { shift_id: string; days: ShiftDay[] };
+
+export function getShiftSchedule(id: string): Promise<ShiftSchedule> {
+  return authedRequest(`/api/shifts/${id}/days`);
+}
+
+// Only OPEN days are sent; any day 0-6 omitted is a closed day for the shift.
+export function setShiftSchedule(
+  id: string,
+  days: {
+    day_index: number;
+    start_time: string;
+    end_time: string;
+    min_staff: number;
+    max_staff: number;
+  }[],
+): Promise<ShiftSchedule> {
+  return authedRequest(`/api/shifts/${id}/days`, {
+    method: "PUT",
+    body: JSON.stringify({ days }),
+  });
+}
+
 export function updateStaff(
   id: string,
   staff: Partial<{
@@ -871,6 +910,10 @@ export type AssignmentOut = {
   shift_id: string | null;
   manually_assigned: boolean;
   required_role: string | null;
+  // Real per-day hours for this assignment's day (via shift_days); prefer over
+  // the shift-level time so a per-day shift shows the right time.
+  start_time?: string | null;
+  end_time?: string | null;
 };
 
 export type EmailDelivery = {

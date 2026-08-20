@@ -762,3 +762,79 @@ a:hover {
   outline-offset: 2px;
 }
 .cp-onboarding button:focus { outline: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HOURS STEP — day-groups, per-day sheet, and the custom wheel time picker
+   (replaces the native OS time popup). Overlays are position:fixed and rendered
+   at the wizard root so they cover the viewport, not the animated step.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.ob-grp { display: flex; align-items: center; gap: 11px; padding: 13px 14px; border-radius: 13px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--ob-highlight); margin-bottom: 9px; }
+.ob-grp.wknd { border-color: rgba(255, 77, 0, 0.28); background: linear-gradient(180deg, rgba(255, 77, 0, 0.05), var(--card)); }
+.ob-glabel { font-size: 14px; font-weight: 500; font-family: var(--font-display), "Space Grotesk", sans-serif; color: var(--text); }
+.ob-gsub { font-size: 10.5px; color: var(--dim); margin-top: 1px; }
+.ob-gsub .diff { color: var(--accent); }
+.ob-gtimes { display: flex; align-items: center; gap: 7px; margin-left: auto; }
+.ob-tpill { background: var(--bg); border: 0.5px solid var(--border); border-radius: 9px; padding: 7px 11px; font-size: 13.5px; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; cursor: pointer; font-family: inherit; transition: border-color 0.15s, transform 0.12s; }
+.ob-tpill:hover { border-color: var(--accent-line); }
+.ob-tpill:active { transform: scale(0.97); }
+.ob-tdash { color: var(--faint); font-size: 12px; }
+.ob-note { display: flex; align-items: center; gap: 9px; width: 100%; margin: 6px 0 2px; padding: 12px 13px; border-radius: 12px; background: transparent; border: 0.5px dashed var(--border); cursor: pointer; font-family: inherit; text-align: left; transition: border-color 0.15s, transform 0.12s; }
+.ob-note:hover { border-color: var(--accent-line); }
+.ob-note:active { transform: scale(0.99); }
+.ob-nic { width: 30px; height: 30px; border-radius: 9px; background: var(--icon-bg); display: flex; align-items: center; justify-content: center; color: var(--accent); flex-shrink: 0; }
+.ob-ntxt { display: flex; flex-direction: column; }
+.ob-nt { font-size: 12.5px; font-weight: 500; color: var(--text); }
+.ob-ns { font-size: 11px; color: var(--dim); margin-top: 1px; }
+.ob-nchev { margin-left: auto; color: var(--faint); display: inline-flex; }
+
+.ob-vscrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.62); opacity: 0; pointer-events: none; transition: opacity 0.28s var(--ease-out); z-index: 40; }
+.ob-vscrim.open { opacity: 1; pointer-events: auto; }
+.ob-vscrim-tw { z-index: 50; }
+
+.ob-daysheet { position: fixed; left: 50%; bottom: 0; width: 100%; max-width: 440px; transform: translate(-50%, 100%); background: var(--card); border-top-left-radius: 22px; border-top-right-radius: 22px; border-top: 0.5px solid var(--border); box-shadow: 0 -20px 50px -14px rgba(0, 0, 0, 0.7); transition: transform 0.34s var(--ease-out); z-index: 41; max-height: 86vh; display: flex; flex-direction: column; }
+.ob-daysheet.open { transform: translate(-50%, 0); }
+.ob-grab { width: 36px; height: 4px; border-radius: 2px; background: var(--track); margin: 10px auto 4px; flex-shrink: 0; }
+.ob-dshead { display: flex; align-items: center; justify-content: space-between; padding: 6px 18px 12px; border-bottom: 0.5px solid var(--border); }
+.ob-dshead .st { font-family: var(--font-display), "Space Grotesk", sans-serif; font-weight: 500; font-size: 17px; color: var(--text); }
+.ob-dshead .ss { font-size: 11px; color: var(--dim); margin-top: 2px; }
+.ob-dsclose { width: 32px; height: 32px; border-radius: 9px; background: var(--icon-bg); border: 0.5px solid var(--border); color: var(--dim); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.ob-dsbody { padding: 6px 16px; overflow-y: auto; }
+.ob-drow { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 0.5px solid var(--border); }
+.ob-drow:last-child { border-bottom: none; }
+.ob-dname { font-size: 13.5px; font-weight: 500; font-family: var(--font-display), "Space Grotesk", sans-serif; width: 40px; flex-shrink: 0; color: var(--text); }
+.ob-drow.wknd .ob-dname { color: var(--accent); }
+.ob-drow.closed .ob-dname { color: var(--faint); }
+.ob-dtimes { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.ob-dclosed { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); flex-shrink: 0; }
+.ob-drow.closed .ob-dclosed { margin-left: auto; }
+.ob-dsfoot { padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); border-top: 0.5px solid var(--border); }
+
+.ob-tw { position: fixed; left: 50%; bottom: 0; width: 100%; max-width: 440px; transform: translate(-50%, 100%); background: var(--card); border-top-left-radius: 24px; border-top-right-radius: 24px; border-top: 0.5px solid var(--border); box-shadow: 0 -22px 55px -14px rgba(0, 0, 0, 0.75); transition: transform 0.38s var(--ease-out); z-index: 51; }
+.ob-tw.open { transform: translate(-50%, 0); }
+.ob-twhead { text-align: center; padding: 6px 18px 4px; }
+.ob-twhead .lbl { font-size: 12px; color: var(--dim); letter-spacing: 0.04em; }
+.ob-twhead .readout { font-family: var(--font-display), "Space Grotesk", sans-serif; font-weight: 500; font-size: 32px; letter-spacing: -1px; font-variant-numeric: tabular-nums; margin-top: 3px; color: var(--text); }
+.ob-twhead .readout .ap { color: var(--accent); font-size: 19px; margin-left: 4px; }
+.ob-presets { display: flex; gap: 7px; overflow-x: auto; padding: 10px 18px; scrollbar-width: none; }
+.ob-presets::-webkit-scrollbar { display: none; }
+.ob-preset { flex-shrink: 0; padding: 8px 13px; border-radius: 999px; background: var(--icon-bg); border: 0.5px solid var(--border); color: var(--dim); font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap; font-family: inherit; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+.ob-preset.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.ob-wheels { position: relative; display: flex; justify-content: center; gap: 4px; padding: 2px 18px 6px; }
+.ob-wband { position: absolute; left: 18px; right: 18px; top: 50%; height: 44px; transform: translateY(-50%); border-radius: 12px; background: rgba(255, 77, 0, 0.08); border-top: 0.5px solid rgba(255, 77, 0, 0.35); border-bottom: 0.5px solid rgba(255, 77, 0, 0.35); pointer-events: none; }
+.ob-wcol { height: 220px; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; -webkit-mask: linear-gradient(180deg, transparent, #000 28%, #000 72%, transparent); mask: linear-gradient(180deg, transparent, #000 28%, #000 72%, transparent); padding-block: 88px; }
+.ob-wcol::-webkit-scrollbar { display: none; }
+.ob-wcol.narrow { width: 64px; }
+.ob-wcol.wide { width: 76px; }
+.ob-wit { height: 44px; scroll-snap-align: center; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 500; font-family: var(--font-display), "Space Grotesk", sans-serif; font-variant-numeric: tabular-nums; color: var(--faint); transition: color 0.18s var(--ease-out), transform 0.18s var(--ease-out); }
+.ob-wit.sel { color: var(--text); transform: scale(1.06); }
+.ob-wit.near { color: var(--dim); }
+.ob-wcolon { display: flex; align-items: center; font-size: 22px; font-weight: 500; color: var(--faint); font-family: var(--font-display), "Space Grotesk", sans-serif; padding-bottom: 2px; }
+.ob-twfoot { display: flex; gap: 10px; padding: 8px 18px calc(18px + env(safe-area-inset-bottom)); }
+.ob-twfoot .ob-btn { flex: 1; }
+.ob-twfoot .ob-btn.ghost { flex: 0 0 100px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-vscrim, .ob-daysheet, .ob-tw, .ob-wit { transition: opacity 0.15s ease !important; }
+  .ob-wcol { scroll-behavior: auto; }
+  .ob-wit.sel { transform: none; }
+}
