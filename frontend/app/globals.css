@@ -838,3 +838,18 @@ a:hover {
   .ob-wcol { scroll-behavior: auto; }
   .ob-wit.sel { transform: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INVITE-FIRST landing (step 7) — the honest payoff: share the join link + PIN
+   so staff submit availability (the only thing that makes the next rota real).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.ob-joincard { border-radius: 18px; background: linear-gradient(180deg, rgba(255, 77, 0, 0.1), rgba(255, 77, 0, 0.04)); border: 1px solid var(--accent-line); box-shadow: var(--ob-highlight); padding: 18px; margin: 4px 0 16px; }
+.ob-jclabel { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+.ob-pinrow { display: flex; gap: 8px; margin-bottom: 12px; }
+.ob-pindig { flex: 1; height: 54px; border-radius: 12px; background: var(--bg); border: 0.5px solid var(--border); display: grid; place-items: center; font-family: var(--font-display), "Space Grotesk", sans-serif; font-weight: 500; font-size: 26px; color: var(--text); font-variant-numeric: tabular-nums; }
+.ob-linkrow { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-radius: 11px; background: var(--bg); border: 0.5px solid var(--border); margin-bottom: 14px; }
+.ob-lk { font-size: 12.5px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.ob-lkic { color: var(--faint); display: inline-flex; flex-shrink: 0; }
+.ob-copybtn { width: 100%; padding: 14px; border-radius: 12px; background: linear-gradient(180deg, #ff5c14, var(--accent)); box-shadow: 0 8px 24px -10px rgba(255, 77, 0, 0.5); color: #fff; font-family: var(--font-display), "Space Grotesk", sans-serif; font-weight: 500; font-size: 14.5px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; border: none; transition: background 0.2s; }
+.ob-copybtn:active { transform: scale(0.99); }
+.ob-copybtn.done { background: linear-gradient(180deg, #2ecc71, #25a85d); box-shadow: 0 8px 24px -10px rgba(46, 204, 113, 0.5); }

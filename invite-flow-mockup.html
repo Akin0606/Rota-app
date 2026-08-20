@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Invite-first flow — Refined Dark</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&family=Archivo:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --ease-out: cubic-bezier(.23,1,.32,1); --ease-pop: cubic-bezier(.34,1.4,.64,1); }
+  body { background: #0e0e10; color: #e8e8ea; font-family: 'IBM Plex Sans', system-ui, sans-serif; padding: 40px 24px 80px; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 900px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; justify-content: center; }
+  .head { width: 100%; text-align: center; margin-bottom: 6px; }
+  .head h1 { font-family: 'Archivo'; font-weight: 800; font-size: 26px; letter-spacing: -0.02em; }
+  .head p { color: #9a9aa2; font-size: 14px; margin-top: 8px; max-width: 640px; margin-inline: auto; line-height: 1.55; }
+  .lane { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .lane .cap { font-size: 12.5px; color: #8a8a92; }
+  .lane .cap b { color: #d8d8d2; }
+
+  .phone { width: 360px; height: 740px; border-radius: 44px; padding: 10px; background: #1b1b1f; box-shadow: 0 30px 60px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.05); }
+  .screen { position: relative; width: 100%; height: 100%; border-radius: 34px; overflow: hidden; display: flex; flex-direction: column; background: #0D0D0D; color: #F0EFE9; }
+  .rail { height: 3px; background: #1e1e1e; }
+  .rail > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg,#FF4D00,#ff7a3d); box-shadow: 0 0 8px -1px rgba(255,77,0,.55); }
+  .body { flex: 1; padding: 26px 22px 0; display: flex; flex-direction: column; }
+  .eyebrow { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #FF4D00; margin-bottom: 10px; }
+  .h { font-family: 'Space Grotesk'; font-weight: 500; font-size: 25px; letter-spacing: -.6px; line-height: 1.12; margin-bottom: 8px; }
+  .sub { font-size: 13.5px; color: #8f8f88; line-height: 1.5; margin-bottom: 22px; }
+  .cta { padding: 14px 22px 22px; }
+  .btn { width: 100%; padding: 15px; border-radius: 13px; background: linear-gradient(180deg,#ff5c14,#FF4D00); box-shadow: 0 10px 30px -10px rgba(255,77,0,.5); color: #fff; font-family: 'Space Grotesk'; font-weight: 500; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; border: none; }
+  .btn svg { width: 17px; height: 17px; }
+  .btn.ghost { background: transparent; box-shadow: none; color: #8f8f88; font-size: 13px; padding: 12px; }
+
+  /* Confirm beat */
+  .confirm { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding-bottom: 40px; }
+  .ring { width: 76px; height: 76px; border-radius: 22px; background: rgba(46,204,113,.14); display: grid; place-items: center; color: #2ECC71; margin-bottom: 22px; box-shadow: inset 0 1px 0 rgba(255,255,255,.045), 0 0 42px -12px rgba(46,204,113,.5); animation: pop .5s var(--ease-pop) both; }
+  .ring svg { width: 34px; height: 34px; }
+  @keyframes pop { from { opacity:0; transform: scale(.4);} to {opacity:1; transform: scale(1);} }
+  .confirm .h { font-size: 24px; }
+  .checklist { margin-top: 22px; width: 100%; text-align: left; }
+  .cl { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 13px; color: #c4c4ca; }
+  .cl .ic { width: 20px; height: 20px; border-radius: 50%; background: #2ECC71; color: #0D0D0D; display: grid; place-items: center; flex-shrink: 0; }
+  .cl .ic svg { width: 12px; height: 12px; }
+
+  /* Share hero */
+  .joincard { border-radius: 18px; background: linear-gradient(180deg, rgba(255,77,0,.10), rgba(255,77,0,.04)); border: 1px solid rgba(255,77,0,.28); box-shadow: inset 0 1px 0 rgba(255,255,255,.045); padding: 18px; margin-bottom: 16px; }
+  .jc-label { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #ff8752; margin-bottom: 12px; }
+  .pinrow { display: flex; gap: 8px; margin-bottom: 12px; }
+  .pindig { flex: 1; height: 54px; border-radius: 12px; background: #0D0D0D; border: .5px solid rgba(255,255,255,.12); display: grid; place-items: center; font-family: 'Space Grotesk'; font-weight: 500; font-size: 26px; color: #F0EFE9; font-variant-numeric: tabular-nums; }
+  .linkrow { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-radius: 11px; background: #0D0D0D; border: .5px solid rgba(255,255,255,.1); margin-bottom: 14px; }
+  .linkrow .lk { font-size: 12.5px; color: #b7b7b1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; font-variant-numeric: tabular-nums; }
+  .linkrow .lkic { color: #7A7A75; display: inline-flex; }
+  .linkrow .lkic svg { width: 15px; height: 15px; }
+  .copybtn { width: 100%; padding: 14px; border-radius: 12px; background: linear-gradient(180deg,#ff5c14,#FF4D00); box-shadow: 0 8px 24px -10px rgba(255,77,0,.5); color: #fff; font-family: 'Space Grotesk'; font-weight: 500; font-size: 14.5px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; border: none; transition: background .2s; }
+  .copybtn.done { background: linear-gradient(180deg,#2ECC71,#25a85d); box-shadow: 0 8px 24px -10px rgba(46,204,113,.5); }
+  .copybtn svg { width: 16px; height: 16px; }
+
+  .why { display: flex; gap: 9px; padding: 12px 13px; background: #141414; border: .5px solid rgba(255,255,255,.07); border-radius: 12px; margin-bottom: 16px; }
+  .why .ic { color: #E5A800; flex-shrink: 0; margin-top: 1px; display: inline-flex; }
+  .why .ic svg { width: 15px; height: 15px; }
+  .why span { font-size: 12px; color: #c4c4ca; line-height: 1.5; }
+
+  .teamlabel { font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #55554f; margin-bottom: 10px; }
+  .tm { display: flex; align-items: center; gap: 11px; padding: 9px 0; }
+  .av { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,77,0,.12); color: #FF4D00; display: grid; place-items: center; font-size: 13px; font-weight: 500; flex-shrink: 0; }
+  .tm .nm { font-size: 13px; font-weight: 500; color: #F0EFE9; }
+  .tm .u18 { font-size: 9px; font-weight: 600; color: #FF4D00; background: rgba(255,77,0,.12); padding: 1px 5px; border-radius: 4px; margin-left: 6px; }
+  .tm .rt { font-size: 11px; color: #7A7A75; margin-top: 1px; }
+  .toast { position: absolute; left: 22px; right: 22px; bottom: 92px; background: #141414; border: .5px solid rgba(255,255,255,.1); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: #F0EFE9; box-shadow: 0 12px 40px rgba(0,0,0,.5); opacity: 0; transform: translateY(8px); transition: opacity .25s var(--ease-out), transform .25s var(--ease-out); pointer-events: none; display: flex; align-items: center; gap: 8px; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast .ic { color: #2ECC71; display: inline-flex; } .toast .ic svg { width: 15px; height: 15px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <h1>Invite-first payoff (Option B)</h1>
+      <p>No fake rota, no forced tour. The honest confirm beat, then the one screen that matters: share the join link + PIN so staff submit availability — the only thing that makes the next rota real. <b>Tap “Copy link &amp; PIN”.</b></p>
+    </div>
+
+    <!-- Lane 1: confirm beat -->
+    <div class="lane">
+      <div class="phone"><div class="screen">
+        <div class="rail"><i></i></div>
+        <div class="body">
+          <div class="confirm">
+            <div class="ring" id="ring1"></div>
+            <div class="h">Your venue’s ready</div>
+            <div class="sub" style="margin-bottom:0">Roles, hours, coverage and safe rules are all set.</div>
+            <div class="checklist">
+              <div class="cl"><span class="ic" data-ic="check"></span> 4 roles across front & back of house</div>
+              <div class="cl"><span class="ic" data-ic="check"></span> Opening hours &amp; shifts</div>
+              <div class="cl"><span class="ic" data-ic="check"></span> Coverage + working-time rules</div>
+            </div>
+          </div>
+        </div>
+        <div class="cta"><div class="btn">Bring in my team <span data-ic="arrow"></span></div></div>
+      </div></div>
+      <div class="cap"><b>1 · Setup saved</b> — honest, not “your rota is ready”</div>
+    </div>
+
+    <!-- Lane 2: share hero -->
+    <div class="lane">
+      <div class="phone"><div class="screen">
+        <div class="rail"><i></i></div>
+        <div class="body" style="overflow-y:auto; padding-bottom:8px">
+          <div class="eyebrow">You’re all set</div>
+          <div class="h">Bring in your crew</div>
+          <div class="sub">Your first real rota fills up the moment your team shares when they can work. Send them this.</div>
+
+          <div class="joincard">
+            <div class="jc-label">Join link + venue PIN</div>
+            <div class="pinrow">
+              <div class="pindig">4</div><div class="pindig">2</div><div class="pindig">7</div><div class="pindig">8</div>
+            </div>
+            <div class="linkrow">
+              <span class="lk">crewplan.app/v/the-anchor-9f3</span>
+              <span class="lkic" data-ic="link"></span>
+            </div>
+            <button class="copybtn" id="copy"><span data-ic="share"></span> Copy link &amp; PIN</button>
+          </div>
+
+          <div class="why">
+            <span class="ic" data-ic="bulb"></span>
+            <span>Staff open the link, enter the PIN, and tell you when they’re free. Then your first rota is one tap from great.</span>
+          </div>
+
+          <div class="teamlabel">You’ve added 2 — invite the rest</div>
+          <div class="tm"><div class="av">S</div><div><div class="nm">Sam <span class="u18">U18</span></div><div class="rt">will join with the link above</div></div></div>
+          <div class="tm"><div class="av">P</div><div><div class="nm">Priya</div><div class="rt">will join with the link above</div></div></div>
+        </div>
+        <div class="cta" style="padding-top:6px"><div class="btn ghost">Go to my dashboard →</div></div>
+        <div class="toast" id="toast"><span class="ic" data-ic="check"></span> Link &amp; PIN copied — paste it to your team</div>
+      </div></div>
+      <div class="cap"><b>2 · Share screen</b> — real link + PIN, real copy, real team</div>
+    </div>
+  </div>
+
+  <script>
+    const IC = {
+      check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 12l5 5L19 7"/></svg>',
+      arrow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+      link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>',
+      share:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M16 6l-4-4-4 4M12 2v13"/></svg>',
+      bulb:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12c.5.5 1 1.5 1 2h6c0-.5.5-1.5 1-2a7 7 0 0 0-4-12z"/></svg>',
+    };
+    document.querySelectorAll('[data-ic]').forEach(el => el.innerHTML = IC[el.dataset.ic]);
+    document.getElementById('ring1').innerHTML = IC.check;
+
+    const copy = document.getElementById('copy'), toast = document.getElementById('toast');
+    copy.addEventListener('click', () => {
+      copy.classList.add('done');
+      copy.innerHTML = IC.check + ' Copied';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2200);
+    });
+  </script>
+</body>
+</html>

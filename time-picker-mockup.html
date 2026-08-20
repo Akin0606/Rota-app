@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Time picker — Refined Dark</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&family=Archivo:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --ease-out: cubic-bezier(.23,1,.32,1); }
+  body { background: #0e0e10; color: #e8e8ea; font-family: 'IBM Plex Sans', system-ui, sans-serif; padding: 40px 24px 80px; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 820px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 34px; align-items: flex-start; justify-content: center; }
+  .head { width: 100%; text-align: center; margin-bottom: 4px; }
+  .head h1 { font-family: 'Archivo'; font-weight: 800; font-size: 26px; letter-spacing: -0.02em; }
+  .head p { color: #9a9aa2; font-size: 14px; margin-top: 8px; max-width: 600px; margin-inline: auto; line-height: 1.55; }
+
+  .phone { width: 360px; height: 760px; border-radius: 44px; padding: 10px; background: #1b1b1f; box-shadow: 0 30px 60px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.05); }
+  .screen { position: relative; width: 100%; height: 100%; border-radius: 34px; overflow: hidden; display: flex; flex-direction: column; background: #0D0D0D; color: #F0EFE9; }
+  .rail { height: 3px; background: #1e1e1e; }
+  .rail > i { display: block; height: 100%; width: 50%; background: linear-gradient(90deg,#FF4D00,#ff7a3d); box-shadow: 0 0 8px -1px rgba(255,77,0,.55); }
+  .top { display: flex; align-items: center; gap: 10px; padding: 16px 20px 4px; }
+  .back { width: 30px; height: 30px; border-radius: 9px; background: #161616; border: .5px solid rgba(255,255,255,.09); display: grid; place-items: center; color: #b7b7b1; font-size: 15px; }
+  .stepn { font-size: 11px; color: #7A7A75; letter-spacing: .04em; }
+  .body { flex: 1; padding: 10px 20px; }
+  .eyebrow { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #FF4D00; margin-bottom: 10px; }
+  .h { font-family: 'Space Grotesk'; font-weight: 500; font-size: 24px; letter-spacing: -.6px; margin-bottom: 8px; }
+  .sub { font-size: 13px; color: #8f8f88; line-height: 1.5; margin-bottom: 20px; }
+
+  /* The tappable time field (what opens the picker) */
+  .field { display: flex; align-items: center; gap: 12px; padding: 15px; border-radius: 14px; background: #141414; border: 1px solid rgba(255,255,255,.07); box-shadow: inset 0 1px 0 rgba(255,255,255,.045); cursor: pointer; margin-bottom: 11px; width: 100%; font-family: inherit; text-align: left; }
+  .field:active { transform: scale(.99); }
+  .field .fic { width: 40px; height: 40px; border-radius: 11px; background: #1E1E1E; display: grid; place-items: center; color: #FF4D00; flex-shrink: 0; }
+  .field .fic svg { width: 19px; height: 19px; }
+  .field .fl { font-size: 11px; color: #7A7A75; }
+  .field .fv { font-size: 18px; font-weight: 500; font-family: 'Space Grotesk'; font-variant-numeric: tabular-nums; margin-top: 1px; }
+  .field .clock { margin-left: auto; color: #FF4D00; opacity: .9; }
+  .field .clock svg { width: 20px; height: 20px; }
+
+  /* Picker sheet */
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.62); opacity: 0; pointer-events: none; transition: opacity .28s var(--ease-out); z-index: 20; }
+  .scrim.open { opacity: 1; pointer-events: auto; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #151515; border-top-left-radius: 24px; border-top-right-radius: 24px; border-top: .5px solid rgba(255,255,255,.09); box-shadow: 0 -22px 55px -14px rgba(0,0,0,.75); transform: translateY(100%); transition: transform .38s var(--ease-out); z-index: 21; }
+  .sheet.open { transform: translateY(0); }
+  .grab { width: 36px; height: 4px; border-radius: 2px; background: #333; margin: 10px auto 2px; }
+  .shead { text-align: center; padding: 6px 18px 8px; }
+  .shead .st { font-size: 12px; color: #7A7A75; letter-spacing: .06em; text-transform: uppercase; }
+  .readout { font-family: 'Space Grotesk'; font-weight: 500; font-size: 34px; letter-spacing: -1px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .readout .ap { color: #FF4D00; font-size: 20px; margin-left: 4px; }
+
+  /* Preset chips */
+  .presets { display: flex; gap: 7px; overflow-x: auto; padding: 12px 18px; scrollbar-width: none; }
+  .presets::-webkit-scrollbar { display: none; }
+  .chip { flex-shrink: 0; padding: 8px 13px; border-radius: 999px; background: #1c1c1c; border: .5px solid rgba(255,255,255,.09); color: #c9c9c2; font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums; cursor: pointer; transition: background .15s, color .15s, border-color .15s; white-space: nowrap; }
+  .chip.on { background: rgba(255,77,0,.14); border-color: #FF4D00; color: #ff8752; }
+
+  /* Wheels */
+  .wheels { position: relative; display: flex; justify-content: center; gap: 4px; padding: 4px 18px 6px; }
+  .band { position: absolute; left: 18px; right: 18px; top: 50%; height: 46px; transform: translateY(-50%); border-radius: 12px; background: rgba(255,77,0,.08); border-top: .5px solid rgba(255,77,0,.35); border-bottom: .5px solid rgba(255,77,0,.35); pointer-events: none; }
+  .col { height: 230px; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; -webkit-mask: linear-gradient(180deg, transparent, #000 28%, #000 72%, transparent); mask: linear-gradient(180deg, transparent, #000 28%, #000 72%, transparent); padding-block: 92px; }
+  .col::-webkit-scrollbar { display: none; }
+  .col.narrow { width: 66px; } .col.wide { width: 78px; }
+  .it { height: 46px; scroll-snap-align: center; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 500; font-family: 'Space Grotesk'; font-variant-numeric: tabular-nums; color: #55554f; transition: color .18s var(--ease-out), transform .18s var(--ease-out), opacity .18s var(--ease-out); }
+  .it.sel { color: #F0EFE9; transform: scale(1.06); }
+  .it.near { color: #8f8f88; }
+  .colon { display: flex; align-items: center; font-size: 22px; font-weight: 500; color: #55554f; font-family: 'Space Grotesk'; padding-bottom: 2px; }
+
+  .sfoot { display: flex; gap: 10px; padding: 8px 18px 20px; }
+  .sbtn { flex: 1; padding: 14px; border-radius: 13px; font-family: 'Space Grotesk'; font-weight: 500; font-size: 15px; cursor: pointer; border: none; }
+  .sbtn.ghost { background: #1c1c1c; color: #b7b7b1; border: .5px solid rgba(255,255,255,.08); flex: 0 0 96px; }
+  .sbtn.primary { background: linear-gradient(180deg,#ff5c14,#FF4D00); box-shadow: 0 10px 30px -12px rgba(255,77,0,.5); color: #fff; }
+
+  .cap { width: 340px; background: #17171b; border: 1px solid rgba(255,255,255,.07); border-radius: 16px; padding: 18px; }
+  .cap .name { font-family: 'Archivo'; font-weight: 700; font-size: 16px; margin-bottom: 8px; }
+  .cap ul { margin: 0; padding-left: 16px; } .cap li { font-size: 12.5px; line-height: 1.6; color: #c0c0c6; margin-bottom: 5px; }
+  .cap li b { color: #eaeaee; } .cap li .o { color: #FF4D00; font-weight: 600; }
+  .tryhint { text-align: center; font-size: 12px; color: #7A7A75; margin-top: 12px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scrim, .sheet, .it { transition: opacity .15s ease !important; }
+    .col { scroll-behavior: auto; }
+    .it.sel { transform: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <h1>Custom time picker</h1>
+      <p>Replaces the native OS clock popup so it stays in the Refined Dark language. Wheel + pub presets, real scroll-snap momentum. <b>Tap a time field in the phone to open it, then spin the wheels.</b></p>
+    </div>
+
+    <div class="phone"><div class="screen">
+      <div class="rail"><i></i></div>
+      <div class="top"><div class="back">‹</div><div class="stepn">Friday hours</div></div>
+      <div class="body">
+        <div class="eyebrow">Opening hours</div>
+        <div class="h">Friday</div>
+        <div class="sub">Tap a time to change it. Closing after midnight is fine.</div>
+
+        <button class="field" data-field="Open" data-h="11" data-m="0" data-p="AM">
+          <span class="fic" data-ic="sun"></span>
+          <span><span class="fl">Opens</span><span class="fv" id="fvOpen">11:00 am</span></span>
+          <span class="clock" data-ic="clock"></span>
+        </button>
+        <button class="field" data-field="Close" data-h="1" data-m="0" data-p="AM">
+          <span class="fic" data-ic="moon"></span>
+          <span><span class="fl">Closes</span><span class="fv" id="fvClose">1:00 am</span></span>
+          <span class="clock" data-ic="clock"></span>
+        </button>
+      </div>
+
+      <!-- Picker -->
+      <div class="scrim" id="scrim"></div>
+      <div class="sheet" id="sheet">
+        <div class="grab"></div>
+        <div class="shead"><div class="st" id="pkLabel">Set open time</div><div class="readout" id="readout">11:00<span class="ap" id="apOut">am</span></div></div>
+        <div class="presets" id="presets"></div>
+        <div class="wheels">
+          <div class="band"></div>
+          <div class="col narrow" id="colH"></div>
+          <div class="colon">:</div>
+          <div class="col narrow" id="colM"></div>
+          <div class="col wide" id="colP"></div>
+        </div>
+        <div class="sfoot">
+          <button class="sbtn ghost" id="pkCancel">Cancel</button>
+          <button class="sbtn primary" id="pkSet">Set time</button>
+        </div>
+      </div>
+    </div></div>
+
+    <div class="cap">
+      <div class="name">Design & motion notes</div>
+      <ul>
+        <li><b>Wheel over dial</b> — pub times cluster on the hour/half-hour; a wheel is faster on a phone than a clock face.</li>
+        <li><b>Real physics</b> — built on native <span class="o">scroll-snap</span> momentum, so flicks feel right and cost nothing on the main thread.</li>
+        <li><b>Live readout + accent band</b> — the centred selection is always framed; the big time updates as you spin.</li>
+        <li><b>Pub presets</b> — one tap for 11am / 11pm / 1am; the wheel is there for anything else.</li>
+        <li><b>Post-midnight native</b> — am/pm wheel reaches 1–2am cleanly; feeds the solver a real time.</li>
+        <li><b>Reduced-motion</b> — snaps instantly, drops the scale/opacity flourishes.</li>
+      </ul>
+      <div class="tryhint">Interactive — tap “Opens 11:00 am”.</div>
+    </div>
+  </div>
+
+  <script>
+    const IC = {
+      sun:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>',
+      moon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+      clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    };
+    document.querySelectorAll('[data-ic]').forEach(el => el.innerHTML = IC[el.dataset.ic]);
+
+    const HOURS = Array.from({length:12}, (_,i)=> i+1);          // 1..12
+    const MINS  = Array.from({length:12}, (_,i)=> i*5);          // 0,5,..55
+    const PERIODS = ['AM','PM'];
+    const ITEM = 46;
+
+    function fill(col, values, fmt){ col.innerHTML = values.map(v=>`<div class="it">${fmt(v)}</div>`).join(''); }
+    fill(colH, HOURS, v=>v);
+    fill(colM, MINS, v=>String(v).padStart(2,'0'));
+    fill(colP, PERIODS, v=>v);
+
+    function idxFromScroll(col){ return Math.round(col.scrollTop / ITEM); }
+    function scrollToIdx(col, i, smooth){ col.scrollTo({ top: i*ITEM, behavior: smooth ? 'smooth' : 'auto' }); }
+
+    function paint(col){
+      const sel = idxFromScroll(col);
+      [...col.children].forEach((el,i)=>{
+        el.classList.toggle('sel', i===sel);
+        el.classList.toggle('near', Math.abs(i-sel)===1);
+      });
+    }
+    function current(){
+      return { h: HOURS[idxFromScroll(colH)], m: MINS[idxFromScroll(colM)], p: PERIODS[idxFromScroll(colP)] };
+    }
+    function fmt12({h,m,p}){ return `${h}:${String(m).padStart(2,'0')} ${p.toLowerCase()}`; }
+    function updateReadout(){
+      const c = current();
+      readout.childNodes[0].nodeValue = `${c.h}:${String(c.m).padStart(2,'0')}`;
+      apOut.textContent = c.p.toLowerCase();
+      syncPresets(c);
+    }
+
+    // Update selection + readout synchronously on scroll — reliable even where
+    // requestAnimationFrame is throttled (e.g. a backgrounded tab).
+    [colH,colM,colP].forEach(col => col.addEventListener('scroll', ()=>{
+      paint(col);
+      updateReadout();
+    }));
+
+    // Presets (pub-relevant)
+    const PRESETS = [
+      {label:'9:00 am', h:9,m:0,p:'AM'}, {label:'11:00 am', h:11,m:0,p:'AM'},
+      {label:'12:00 pm', h:12,m:0,p:'PM'}, {label:'5:00 pm', h:5,m:0,p:'PM'},
+      {label:'11:00 pm', h:11,m:0,p:'PM'}, {label:'12:00 am', h:12,m:0,p:'AM'},
+      {label:'1:00 am', h:1,m:0,p:'AM'}, {label:'2:00 am', h:2,m:0,p:'AM'},
+    ];
+    presets.innerHTML = PRESETS.map((p,i)=>`<button class="chip" data-p="${i}">${p.label}</button>`).join('');
+    presets.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', ()=>{
+      const p = PRESETS[chip.dataset.p];
+      set(p.h, p.m, p.p, true);
+    }));
+    function syncPresets(c){
+      presets.querySelectorAll('.chip').forEach(chip=>{
+        const p = PRESETS[chip.dataset.p];
+        chip.classList.toggle('on', p.h===c.h && p.m===c.m && p.p===c.p);
+      });
+    }
+
+    function set(h,m,p,smooth){
+      scrollToIdx(colH, HOURS.indexOf(h), smooth);
+      scrollToIdx(colM, MINS.indexOf(m - (m%5)), smooth);
+      scrollToIdx(colP, PERIODS.indexOf(p), smooth);
+      setTimeout(()=>{ paint(colH); paint(colM); paint(colP); updateReadout(); }, smooth?260:0);
+    }
+
+    // Open / close
+    let activeField = null;
+    function openPicker(field){
+      activeField = field;
+      pkLabel.textContent = `Set ${field.dataset.field.toLowerCase()} time`;
+      set(+field.dataset.h, +field.dataset.m, field.dataset.p, false);
+      requestAnimationFrame(()=>{ scrim.classList.add('open'); sheet.classList.add('open'); });
+    }
+    function closePicker(){ scrim.classList.remove('open'); sheet.classList.remove('open'); }
+
+    document.querySelectorAll('.field').forEach(f => f.addEventListener('click', ()=>openPicker(f)));
+    scrim.addEventListener('click', closePicker);
+    pkCancel.addEventListener('click', closePicker);
+    pkSet.addEventListener('click', ()=>{
+      const c = current();
+      activeField.dataset.h = c.h; activeField.dataset.m = c.m; activeField.dataset.p = c.p;
+      activeField.querySelector('.fv').textContent = fmt12(c);
+      closePicker();
+    });
+  </script>
+</body>
+</html>

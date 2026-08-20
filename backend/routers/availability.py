@@ -397,13 +397,35 @@ def join_team(venue_token: str, payload: StaffJoinRequest, request: Request):
     rate_limit.clear(lock_key)
 
     supabase = get_supabase()
+
+    # Case-insensitive per-venue name uniqueness, same rule as manager-create —
+    # but a public-safe message (never echo the existing name / expose the roster
+    # to an unauthenticated joiner). Only runs after the correct join code.
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Enter your name")
+    roster = (
+        supabase.table("staff_members")
+        .select("name")
+        .eq("venue_id", venue["id"])
+        .eq("is_active", True)
+        .execute()
+        .data
+        or []
+    )
+    if any((r.get("name") or "").strip().lower() == name.lower() for r in roster):
+        raise HTTPException(
+            status_code=409,
+            detail="Someone's already registered with that name — add a last initial so your manager can tell you apart.",
+        )
+
     pin = generate_unique_pin(supabase, venue["id"])
     staff = (
         supabase.table("staff_members")
         .insert(
             {
                 "venue_id": venue["id"],
-                "name": payload.name.strip(),
+                "name": name,
                 "role": _default_join_role(venue["id"]),
                 "pin": pin,
                 "pending": True,

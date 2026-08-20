@@ -27,6 +27,14 @@ export default async function ManagerLayout({ children }: { children: React.Reac
     redirect("/onboarding");
   }
 
+  // Resume gate: a manager who created a venue but never finished the wizard
+  // (setup_state present and not completed) is sent back to resume — not
+  // dropped onto a near-empty dashboard. Onboarding boot handles the rehydrate.
+  const setupState = venue.setup_state as { completed?: boolean } | null;
+  if (setupState && !setupState.completed) {
+    redirect("/onboarding");
+  }
+
   if (venue.is_active === false) {
     return (
       <div className="cp-manager flex min-h-screen items-center justify-center bg-surface-page px-6 text-ink">

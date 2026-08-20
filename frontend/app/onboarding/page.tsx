@@ -7,16 +7,13 @@ import OIcon, { OIconName } from "@/components/onboarding/icon";
 import TimeWheel from "@/components/onboarding/time-wheel";
 import {
   ApiError,
-  Period,
   activateOnboarding,
   createRole,
   createShift,
   createStaff,
   createVenue,
   deleteShift,
-  generateRota,
   getVenue,
-  listPeriods,
   listRoles,
   listShifts,
   listStaff,
@@ -43,7 +40,6 @@ const VENUE_TYPES: Record<VenueKey, { label: string; foh: string[]; boh: string[
 };
 
 const TOTAL = 7; // steps 0–6 are numbered; step 7 is the solve payoff.
-const ROTA_ROLE_ICONS: OIconName[] = ["glass", "users", "chef-hat"];
 
 // "23:00" → "11:00pm", for the app's free-text shift times.
 function fmtTime(t: string): string {
@@ -381,6 +377,12 @@ function OnboardingWizard() {
   }
 
   async function handleRolesContinue() {
+    // A venue with no roles leaves staff on a non-existent "Staff" fallback and
+    // an empty coverage step — require at least one.
+    if (roles.length === 0) {
+      showToast("Add at least one role");
+      return;
+    }
     setSaving(true);
     try {
       await persistRoles();
@@ -394,6 +396,12 @@ function OnboardingWizard() {
   }
 
   async function handleHoursContinue() {
+    // A venue open zero days would leave persistShifts deleting both shifts —
+    // a broken, unschedulable venue. Require at least one open day.
+    if (days.every((d) => d.closed)) {
+      showToast("Your venue needs to be open at least one day");
+      return;
+    }
     setSaving(true);
     try {
       // persistShifts writes the real per-day schedule (incl. closed days) into
@@ -470,12 +478,26 @@ function OnboardingWizard() {
       }
       await updateRules({ min_rest_hours: 11 }).catch(() => {});
       await updateScheduler({ require_day_off: rest }).catch(() => {});
-      const periods = await listPeriods().catch<Period[]>(() => []);
-      const period = periods.find((p) => p.status === "collecting") ?? periods[0];
-      if (period) await generateRota(period.id).catch(() => {});
+      // A fresh venue has no availability yet, so the solve produces nothing —
+      // the real payoff is the invite screen. Make sure a join PIN exists for it.
+      if (!joinPin) {
+        const res = await rotateJoinCode().catch(() => null);
+        if (res) setJoinPin(res.join_pin);
+      }
     } catch {
-      /* the landing tolerates an empty/sample rota */
+      /* setup writes are best-effort; the invite screen still works */
     }
+  }
+
+  // Copy the join link + venue PIN together — the one action that makes the
+  // next rota real. Reuses the join primitive; adds the PIN to the copied text.
+  async function copyInvite() {
+    const link = venueToken ? `${window.location.origin}/v/${venueToken}` : "";
+    const text = joinPin
+      ? `Join our team on Crewplan: ${link}\nVenue PIN: ${joinPin}`
+      : link;
+    await navigator.clipboard.writeText(text).catch(() => {});
+    showToast("Link & PIN copied — paste it to your team");
   }
 
   async function finishOnboarding() {
@@ -518,7 +540,16 @@ function OnboardingWizard() {
               {si === 6 && StepDefaults()}
             </div>
           )}
-          {si === 7 && <StepSolve onOpen={finishOnboarding} onGenerate={handleGenerate} />}
+          {si === 7 && (
+            <StepSolve
+              onFinish={finishOnboarding}
+              onGenerate={handleGenerate}
+              team={team}
+              joinPin={joinPin}
+              venueToken={venueToken}
+              onCopy={copyInvite}
+            />
+          )}
         </div>
 
         {si < 7 && <div className="ob-cta">{renderCta()}</div>}
@@ -618,7 +649,7 @@ function OnboardingWizard() {
         </button>
       ) : (
         <button className="ob-btn ghost" onClick={() => { persist(5); set(5); }}>
-          Skip — show me a sample rota
+          Skip — I'll invite them next
         </button>
       );
     if (si === 5)
@@ -630,7 +661,7 @@ function OnboardingWizard() {
     if (si === 6)
       return (
         <button className="ob-btn" onClick={() => set(7)}>
-          <OIcon name="sparkles" size={17} /> Build my first rota
+          <OIcon name="sparkles" size={17} /> Finish setup
         </button>
       );
     return null;
@@ -642,7 +673,7 @@ function OnboardingWizard() {
       <div>
         <div className="ob-eyebrow">Welcome</div>
         <div className="ob-h">Let&apos;s set up your venue</div>
-        <div className="ob-p">A few quick questions and Crewplan builds your first rota automatically. Your progress saves as you go.</div>
+        <div className="ob-p">A few quick questions and your venue&apos;s set up. Your progress saves as you go.</div>
         <div className="ob-field">
           <div className="ob-lbl">Your name</div>
           <input className="ob-in" value={name} onChange={(e) => setName(e.target.value)} placeholder="Alex Morgan" />
@@ -884,18 +915,30 @@ function Why({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ── Step 7: stepped solver animation → rota landing + coach tour ────────────
-const SOLVE_STEPS = ["Reading availability", "Matching roles to coverage", "Checking working-time rules", "Balancing hours fairly"];
-const TOUR = [
-  { t: "sched", n: "1 of 3", h: "Scheduler", p: "Set how many staff each shift needs and the rules the solver follows. Change these and regenerate anytime." },
-  { t: "rota", n: "2 of 3", h: "Rota", p: "Review the auto-built rota and publish it. Gaps show in amber so nothing goes out half-filled." },
-  { t: "team", n: "3 of 3", h: "Team", p: "Add crew or share your join link so staff register themselves — and send the availability link to sharpen the next rota.", cta: "Share availability link" },
-];
+// ── Step 7: honest "setup saved" beat → invite-first landing ────────────────
+// No fake rota / forced tour: a brand-new venue's first rota is necessarily
+// empty (no availability yet), so the payoff is the one action that makes the
+// NEXT rota real — sharing the join link + PIN so staff submit availability.
+const SOLVE_STEPS = ["Saving your roles & shifts", "Applying your coverage levels", "Setting working-time rules", "Preparing your venue"];
 
-function StepSolve({ onOpen, onGenerate }: { onOpen: () => void; onGenerate: () => void }) {
-  const [done, setDone] = useState(-1); // index of last completed solve line
+function StepSolve({
+  onFinish,
+  onGenerate,
+  team,
+  joinPin,
+  venueToken,
+  onCopy,
+}: {
+  onFinish: () => void;
+  onGenerate: () => void;
+  team: Team[];
+  joinPin: string | null;
+  venueToken: string | null;
+  onCopy: () => void;
+}) {
+  const [done, setDone] = useState(-1); // index of last completed setup line
   const [finished, setFinished] = useState(false);
-  const [showRota, setShowRota] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
   const genFired = useRef(false);
 
   useEffect(() => {
@@ -911,12 +954,12 @@ function StepSolve({ onOpen, onGenerate }: { onOpen: () => void; onGenerate: () 
         clearInterval(iv);
         setTimeout(() => setFinished(true), 460);
       }
-    }, 600);
+    }, 550);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (showRota) return <RotaLanding onFinish={onOpen} />;
+  if (showInvite) return <InviteScreen team={team} joinPin={joinPin} venueToken={venueToken} onCopy={onCopy} onFinish={onFinish} />;
 
   return (
     <>
@@ -924,9 +967,9 @@ function StepSolve({ onOpen, onGenerate }: { onOpen: () => void; onGenerate: () 
         <div className={`ob-ring ${finished ? "done" : ""}`}>
           {finished ? <OIcon name="check" size={32} /> : <span className="spin"><OIcon name="loader" size={32} /></span>}
         </div>
-        <div className="ob-h" style={{ textAlign: "center" }}>{finished ? "Your rota is ready" : "Building your rota…"}</div>
+        <div className="ob-h" style={{ textAlign: "center" }}>{finished ? "Your venue’s ready" : "Setting up your venue…"}</div>
         <div className="ob-p" style={{ textAlign: "center", marginBottom: 0 }}>
-          {finished ? "Built with a sample crew so you can see it work" : "Fitting your crew to every shift"}
+          {finished ? "Roles, hours, coverage and safe rules are all saved." : "Saving your setup"}
         </div>
         <div className="ob-slist">
           {SOLVE_STEPS.map((t, i) => (
@@ -938,8 +981,8 @@ function StepSolve({ onOpen, onGenerate }: { onOpen: () => void; onGenerate: () 
       </div>
       {finished && (
         <div className="ob-cta">
-          <button className="ob-btn" onClick={() => setShowRota(true)}>
-            Open my rota <OIcon name="arrow-right" size={17} />
+          <button className="ob-btn" onClick={() => setShowInvite(true)}>
+            Bring in my team <OIcon name="arrow-right" size={17} />
           </button>
         </div>
       )}
@@ -947,96 +990,77 @@ function StepSolve({ onOpen, onGenerate }: { onOpen: () => void; onGenerate: () 
   );
 }
 
-function RotaLanding({ onFinish }: { onFinish: () => void }) {
-  const [tourStep, setTourStep] = useState(0);
-  const [tourOn, setTourOn] = useState(false);
-  const [activeTab, setActiveTab] = useState("rota");
+function InviteScreen({
+  team,
+  joinPin,
+  venueToken,
+  onCopy,
+  onFinish,
+}: {
+  team: Team[];
+  joinPin: string | null;
+  venueToken: string | null;
+  onCopy: () => void;
+  onFinish: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const link = venueToken ? `${origin.replace(/^https?:\/\//, "")}/v/${venueToken}` : "your venue link";
+  const pin = (joinPin ?? "····").padEnd(4, "·").slice(0, 4).split("");
 
-  useEffect(() => {
-    const t = setTimeout(() => setTourOn(true), 650);
-    return () => clearTimeout(t);
-  }, []);
-
-  const cur = TOUR[tourStep];
-  const last = tourStep === TOUR.length - 1;
-  const spot = tourOn ? cur.t : null;
-
-  const cells = [
-    { role: "Bar · evening", icon: ROTA_ROLE_ICONS[0], crew: ["Priya", "Jess"], gap: true },
-    { role: "Floor · evening", icon: ROTA_ROLE_ICONS[1], crew: ["Tom", "Leah"], gap: false },
-    { role: "Kitchen · evening", icon: ROTA_ROLE_ICONS[2], crew: ["Sam", "Aday"], gap: false },
-  ];
-
-  function nextTour() {
-    if (last) {
-      setTourOn(false);
-      onFinish();
-      return;
-    }
-    setTourStep((s) => s + 1);
+  function handleCopy() {
+    onCopy();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2200);
   }
 
   return (
-    <div className="ob-rota show">
-      <div className="ob-rnav ob-rise">
-        <div className="ob-wm">crewplan<span>.</span></div>
-        <div style={{ fontSize: 12, color: "var(--accent)", fontWeight: 500 }}>This week</div>
-      </div>
-      <div className="ob-rbody">
-        <div className="ob-banner ob-rise" style={{ animationDelay: ".04s" }}>
-          <span className="ic"><OIcon name="bulb" size={16} /></span>
-          <div>
-            <div className="t">This rota isn&apos;t optimised yet</div>
-            <div className="s">It&apos;s built without your team&apos;s availability. Once your crew shares when they can work, regenerate for a much better fit.</div>
-          </div>
-        </div>
-        {cells.map((c, i) => (
-          <div key={i} className="ob-rrole ob-rise" style={{ animationDelay: `${0.1 + i * 0.06}s` }}>
-            <div className="ob-rrh"><span className="ic"><OIcon name={c.icon} size={14} /></span> {c.role}</div>
-            <div className="ob-rcell">
-              {c.crew.map((n) => (
-                <span key={n} className="ob-pill"><span className="ob-pa">{n[0]}</span>{n}</span>
-              ))}
-              {c.gap && <span className="ob-gap">Needs 1 more</span>}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className={`ob-scrim ${tourOn ? "show" : ""}`} />
-      <div className="ob-tabs">
-        {[
-          { t: "sched", label: "Scheduler", icon: "adjustments" as OIconName },
-          { t: "rota", label: "Rota", icon: "calendar" as OIconName },
-          { t: "team", label: "Team", icon: "users" as OIconName },
-        ].map((tab) => (
-          <div key={tab.t} className={`ob-tab ${activeTab === tab.t ? "active" : ""} ${spot === tab.t ? "spot" : ""}`}>
-            <OIcon name={tab.icon} size={20} />
-            {tab.label}
-          </div>
-        ))}
-      </div>
-      <div className={`ob-coach ${tourOn ? "show" : ""}`}>
-        <div className="cn">{cur.n}</div>
-        <div className="ch">{cur.h}</div>
-        <div className="cp2">{cur.p}</div>
-        <div className="crow">
-          <div className="ob-dots">
-            {TOUR.map((_, i) => (
-              <span key={i} className={`ob-dot ${i === tourStep ? "on" : ""}`} />
+    <>
+      <div className="ob-step ob-invite">
+        <div className="ob-eyebrow">You’re all set</div>
+        <div className="ob-h">Bring in your crew</div>
+        <div className="ob-p">Your first real rota fills up the moment your team shares when they can work. Send them this.</div>
+
+        <div className="ob-joincard">
+          <div className="ob-jclabel">Join link + venue PIN</div>
+          <div className="ob-pinrow">
+            {pin.map((d, i) => (
+              <div key={i} className="ob-pindig">{d}</div>
             ))}
           </div>
-          <button
-            className="ob-cbtn"
-            onClick={() => {
-              if (last) setActiveTab("team");
-              nextTour();
-            }}
-          >
-            {last ? `${cur.cta} →` : "Next"}
+          <div className="ob-linkrow">
+            <span className="ob-lk">{link}</span>
+            <span className="ob-lkic"><OIcon name="link" size={15} /></span>
+          </div>
+          <button className={`ob-copybtn ${copied ? "done" : ""}`} onClick={handleCopy}>
+            <OIcon name={copied ? "check" : "share"} size={16} /> {copied ? "Copied" : "Copy link & PIN"}
           </button>
         </div>
+
+        <div className="ob-why">
+          <span className="ic"><OIcon name="bulb" size={15} /></span>
+          <span>Staff open the link, enter the PIN, and tell you when they’re free. Then your first rota is one tap from great.</span>
+        </div>
+
+        {team.length > 0 && (
+          <>
+            <div className="ob-group">You’ve added {team.length} — invite the rest</div>
+            {team.map((m, i) => (
+              <div key={i} className="ob-tm">
+                <div className="ob-av">{m.name.charAt(0).toUpperCase()}</div>
+                <div style={{ flex: 1 }}>
+                  <div className="ob-rn">{m.name}{m.u18 && <span className="ob-u18">U18</span>}</div>
+                  <div className="ob-rt">will join with the link above</div>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
-    </div>
+      <div className="ob-cta">
+        <button className="ob-btn ghost" onClick={onFinish}>Go to my dashboard →</button>
+      </div>
+    </>
   );
 }
 

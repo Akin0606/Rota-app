@@ -140,11 +140,38 @@ def list_staff(
     return staff
 
 
+def _assert_unique_name(supabase, venue_id: str, name: str, exclude_id: Optional[str] = None) -> str:
+    """Team-member names are unique per venue, case-insensitively ("Priya" ==
+    "priYa"), so a manager never ends up with two indistinguishable people.
+    Trims and returns the cleaned name. Only the live roster (is_active) is
+    checked — a soft-deleted name frees up for reuse."""
+    cleaned = (name or "").strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Enter a name")
+    rows = (
+        supabase.table("staff_members")
+        .select("id,name")
+        .eq("venue_id", venue_id)
+        .eq("is_active", True)
+        .execute()
+        .data
+        or []
+    )
+    target = cleaned.lower()
+    for r in rows:
+        if r["id"] == exclude_id:
+            continue
+        if (r.get("name") or "").strip().lower() == target:
+            raise HTTPException(status_code=409, detail=f"You already have someone named {r['name']}.")
+    return cleaned
+
+
 @router.post("", response_model=StaffManagerOut)
 def create_staff(payload: StaffCreateRequest, manager: dict = Depends(get_current_manager)):
     venue = get_manager_venue(manager["id"])
     supabase = get_supabase()
 
+    name = _assert_unique_name(supabase, venue["id"], payload.name)
     pin = _generate_unique_pin(venue["id"])
 
     staff = (
@@ -152,7 +179,7 @@ def create_staff(payload: StaffCreateRequest, manager: dict = Depends(get_curren
         .insert(
             {
                 "venue_id": venue["id"],
-                "name": payload.name,
+                "name": name,
                 "email": payload.email,
                 "phone": payload.phone,
                 "role": payload.role,
@@ -278,6 +305,10 @@ def update_staff(
     # of the column update so it never reaches the table write.
     role_ids_provided = "role_ids" in updates
     role_ids = updates.pop("role_ids", None)
+
+    # Renames respect the same case-insensitive per-venue uniqueness (excluding self).
+    if "name" in updates:
+        updates["name"] = _assert_unique_name(supabase, venue["id"], updates["name"], exclude_id=staff_id)
 
     staff = existing
     if updates:
