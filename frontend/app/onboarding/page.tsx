@@ -649,7 +649,7 @@ function OnboardingWizard() {
         </button>
       ) : (
         <button className="ob-btn ghost" onClick={() => { persist(5); set(5); }}>
-          Skip — I'll invite them next
+          Skip — I&apos;ll invite them next
         </button>
       );
     if (si === 5)

@@ -97,17 +97,18 @@ state; coverage → per-day evening `min_staff` via Batch 4's propagate; and a
 Settings banner prompts `needs_shift_recapture` venues, auto-clearing when they
 save any per-day schedule. **The model is functionally live end-to-end.**
 
-**Remaining loose ends before striking the `'close'` items / moving to Roadmap
-Done:** (a) the legacy **Settings simple shift editor** (`START_TIMES`/
-`END_TIMES`) still offers free-text `'close'` and caps at 11pm — a late close
-must use the per-day "Hours" editor; migrate the simple editor off `'close'`
-(carefully — un-recaptured venues still hold `'close'` in `shifts.end_time` as
-the representative, resolved in `shift_days` to `'11:00pm'`). (b) the
-**availability grid** still offers every shift on every day at the shift-level
-time — UX-only (the solver's existence gate already ignores closed-day
-availability); plumb per-day existence/times into the `/week` payload. (c) the
-full **live onboarding walkthrough** (throwaway auth user) is unverified this
-session — backend write path + row-building logic are verified, the browser
+**No write path produces `'close'` any more** — onboarding, the per-day "Hours"
+editor, and now the legacy **Settings simple editor** all use real times
+(the simple editor moved to `ALL_TIMES`, which drops `'close'` and lifts the old
+11pm cap; a lingering `'close'` on `shifts.end_time` is normalised to `'11:00pm'`
+on load, so saving any shift migrates the representative off it). `parse_hour`
+keeps `'close'→23.0` only as a defensive fallback for any unmigrated row (`shift_days`
+already holds `'11:00pm'`). **Remaining follow-ups (UX / verification only):**
+(a) the **availability grid** still offers every shift on every day at the
+shift-level time — UX-only (the solver's existence gate already ignores
+closed-day availability); plumb per-day existence/times into the `/week` payload.
+(b) the full **live onboarding walkthrough** (throwaway auth user) is unverified
+this session — backend write path + row-building logic are verified, the browser
 click-through is pending a clean session.
 
 ## Roadmap
@@ -127,12 +128,13 @@ managers only see them on the dashboard and staff only by reopening the app).
 Running list. Grouped by what it blocks. Resolved items move to Learnings.
 
 ### Near-term / in-flight
-- **Hours-based accrual (12.07%) is blocked by free-text shift ends.** Since
+- **Hours-based accrual (12.07%) is now unblocked — not yet built.** Since
   April 2024 UK statutory leave for irregular-hours staff accrues at 12.07% of
-  hours worked. The app already knows hours worked — except a shift ending
-  `"close"` has no measurable duration, so an accrual off it under-reports.
-  **The per-day shift model resolves this** (stored real times); the days-based
-  model in migration `021` is the honest interim.
+  hours worked. This was blocked by free-text `"close"` shift ends having no
+  measurable duration; **the per-day shift model resolved that** (every shift-day
+  stores a real start/end, so `duration_for` is exact). The accrual computation
+  itself is the remaining work; the days-based model in migration `021` is the
+  honest interim until it's built.
 - **Manager-side leave controls unverified live** — the Team modal holiday
   fields and Settings holiday panel (migration `021`) are typechecked and
   lint-clean but never clicked, because OTP login is off-limits. First real
@@ -193,8 +195,6 @@ details in Learnings.)
   frontend) still has **zero coverage** and is verified by hand against one live
   venue. Next-highest-value targets: the availability submit/claim endpoints.
 - **PIN brute-force protection is best-effort only** — see Security posture.
-- **Free-text shift ends (`"close"`)** under-report hours & pay and defeat the
-  solver's max-hours cap until the per-day shift model ships.
 
 ## Security posture (audited — mitigations & known weaknesses)
 Sound where it counts, with two known-weak areas flagged in-code:
@@ -219,6 +219,8 @@ Sound where it counts, with two known-weak areas flagged in-code:
 - **Never touch the OTP / PIN auth flow without flagging first** (working rule).
 
 ## Learnings (append after each session — most recent first)
+- **Per-day shift model — the `'close'` write path is finally closed (Settings simple editor migrated).** The last surface that could reintroduce free-text `'close'` was the Settings *simple* shift editor, whose `END_TIMES` dropdown offered `'close'` and capped at 11pm. Switched **both** its start/end selects to `ALL_TIMES` (the 48 half-hour labels incl. post-midnight, no `'close'`) — so the simple editor now expresses a real late close too — and added a `normTime()` that maps a legacy `'close'` → `'11:00pm'` when shifts load, so an un-recaptured shift renders the real time and saving it migrates `shifts.end_time` off `'close'` (which also fixes the Batch-2 transitional cosmetic where the frontend showed `close` while the backend showed `11pm`). `START_TIMES`/`END_TIMES` are now unused (left in `constants.ts`, harmless). `parse_hour` keeps `'close'→23.0` only as a defensive fallback. Net: **no write path produces `'close'` any more**; the model is live end-to-end with `'close'` eliminated.
+- **Caught a build-breaker while at it: an unescaped apostrophe in the bundled onboarding remodel (`onboarding/page.tsx` "I'll invite them next") that `next lint` had been *silently caching past*.** Earlier `next lint` runs reported clean because ESLint's `.eslintcache` skipped the unchanged file; deleting `.eslintcache` before linting surfaced the real `react/no-unescaped-entities` error, which would have failed Vercel's `next build`. **Lesson: `rm -f frontend/.eslintcache` before trusting a "lint clean" on files you didn't just touch** — a cached pass is not a real pass. Fixed with `&apos;`.
 - **Per-day shift model, Batch 5 — onboarding writes real `shift_days` (the bridge is gone).** The onboarding wizard already *captured* per-day hours (`days: DayHours[]`, open/close/closed per day in 24h `HH:MM`); the gap was `persistShifts()`, which ignored them and created the hardcoded Day(open→17:00)/Evening(17:00→close) shift-level bridge. Rewrote it to keep the two named shifts (the app schedules named shifts, coverage is per-shift) but **split each open day into Day/Evening at 17:00 from the real captured `days`** and write them to `shift_days` via Batch 4's `setShiftSchedule` — **a closed day emits no row** (solver existence gate never schedules it), a **late close lands intact** (Fri/Sat 5pm→1am is a real 8h evening across midnight, not truncated), and `fmtTime` converts `HH:MM`→am/pm so the times match the rest of the app. Robust band logic (verified with a node check over normal-pub / late-weekend / lunch-only / evening-only / closed-day schedules): Day band `open..min(17:00, close)` only if `open < 17:00`; Evening band `max(17:00, open)..close` only if the venue is open past 5pm (close after 17:00 **or** crosses midnight); a band no open day uses is deleted (an evening-only venue keeps just Evening). Coverage step is unchanged and now correct *for free* — `updateShift(evening, {min_staff})` propagates to every evening `shift_days` row via Batch 4's `propagate_fields`. **Verified:** node logic check + a 9/9 integration run driving the real `create_shift`+`set_shift_schedule` endpoints (Sun closed → no rows for either shift, Fri evening = 8h across midnight, solver refuses Sunday / assigns Friday, cascade cleanup). Frontend typecheck + lint clean, 52 backend tests green.
 - **Batch 5 also wired the `needs_shift_recapture` prompt (it existed only as a DB column since Batch 1).** Exposed it on `VenueOut` (`get_venue` already returned the full row; the response_model was dropping it), added a Settings banner above Shift Types telling backfilled venues their evening close is a placeholder 11pm and to set the real time via the per-day "Hours" editor, and **auto-clear the flag the moment they save any per-day schedule** (`set_shift_schedule` flips it false) — no separate dismiss. The editor's `onSaved` already bumps `reloadToken`, so `getVenue` refetches and the banner vanishes. Verified end-to-end (flag exposed via the router, cleared by a real `set_shift_schedule` call, original state restored). **Deliberately did NOT strike the `'close'` items or move the model to Roadmap Done:** the legacy Settings simple editor's `END_TIMES` still offers free-text `'close'` (and caps at 11pm), so a write path can still reintroduce it — that migration is a documented follow-up, done carefully because un-recaptured venues still hold `'close'` in `shifts.end_time` as the representative (resolved to `'11:00pm'` in `shift_days`).
 - **Per-day shift model, Batch 4 — the manager per-day editor + write-path validation + per-day display.** Made `shift_days` **authoritative on writes** (Batch 1-3 only read it): the new `services/shift_days_service.py` owns every `shift_days` write so the "shifts.* stays coherent with shift_days" invariant lives in one place. Three write paths: `sync_uniform` (create → 7 identical open days), `propagate_fields` (the simple single-field editor pushes ONLY the edited time/staff columns onto existing rows, preserving per-day divergence in columns it didn't touch), and `replace_schedule` (the per-day editor — the ONLY path that creates closed days / full divergence, rewriting from an explicit open-day list and mirroring the first open day onto `shifts.*` as the representative fallback). **This fixed a latent Batch-1 bug:** the backfill wrote `shift_days` rows, but the old `update_shift` changed only `shifts.*`, leaving the row stale — and `bounds_for` *prefers* the row, so editing a shift's time silently did nothing to the solve. New endpoints `GET`/`PUT /api/shifts/{id}/days`; the editor UI is a `BottomSheet` in **Settings → per-shift "Hours"** (`components/manager/shift-day-editor.tsx`) with a "same hours every day" mode (one control set + per-day open/closed chips — the common case) and a full per-day mode. Times validated at **every** write path (`parse_hour` → `ScheduleError` → 400), closing G5 at the write path too. New `ALL_TIMES` (48 half-hour labels incl. post-midnight, **no `'close'`**) since the old `END_TIMES` stopped at 11pm and couldn't express a 2:30am close. **Verified:** 7 new service unit-tests + a throwaway integration run driving the real endpoints with a resolved manager (17/17: create seeds 7 uniform rows, per-day schedule with Mon-Thu closed round-trips, `shifts.*` mirrors the first open day, solver honours the existence gate + 9.5h midnight duration, bad time / empty schedule → 400, simple min_staff edit preserves per-day hours, delete cascades). **52 tests green.**

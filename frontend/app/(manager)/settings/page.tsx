@@ -36,13 +36,19 @@ import {
   updateVenue,
   updateVenueLeaveSettings,
 } from "@/lib/api";
-import { END_TIMES, SHIFT_COLORS, START_TIMES } from "@/lib/constants";
+import { ALL_TIMES, SHIFT_COLORS } from "@/lib/constants";
 import { DAY_NAMES, formatWeekRange } from "@/lib/utils";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+
+// Legacy free-text 'close' -> the concrete 11:00pm the per-day backfill uses, so
+// it renders in the ALL_TIMES dropdown (which no longer offers 'close').
+function normTime(t: string): string {
+  return t.trim().toLowerCase() === "close" ? "11:00pm" : t;
+}
 
 export default function SettingsPage() {
   const [venue, setVenue] = useState<Venue | null>(null);
@@ -99,7 +105,12 @@ export default function SettingsPage() {
         if (cancelled) return;
         setVenue(venueRes);
         setVenueName(venueRes.name);
-        setShifts(shiftsRes);
+        // The per-day model replaced free-text 'close' with a real '11:00pm'
+        // (Batch 1 backfill resolved it in shift_days). Normalise any legacy
+        // 'close' still on the shift row so the simple editor shows the real
+        // time — the ALL_TIMES dropdown has no 'close', so saving here also
+        // migrates the representative off it.
+        setShifts(shiftsRes.map((s) => ({ ...s, start_time: normTime(s.start_time), end_time: normTime(s.end_time) })));
         setRules(rulesRes);
         setPeriods(periodsRes);
         setStaff(staffRes.filter((m) => m.is_active));
@@ -408,7 +419,7 @@ export default function SettingsPage() {
                         onChange={(e) => patchShiftLocal(sh.id, { start_time: e.target.value })}
                         className="flex-1 rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-2 text-[13px] outline-none"
                       >
-                        {START_TIMES.map((t) => (
+                        {ALL_TIMES.map((t) => (
                           <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
@@ -418,7 +429,7 @@ export default function SettingsPage() {
                         onChange={(e) => patchShiftLocal(sh.id, { end_time: e.target.value })}
                         className="flex-1 rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-2 text-[13px] outline-none"
                       >
-                        {END_TIMES.map((t) => (
+                        {ALL_TIMES.map((t) => (
                           <option key={t} value={t}>{t}</option>
                         ))}
                       </select>
