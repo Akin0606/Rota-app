@@ -180,7 +180,7 @@ function OnboardingWizard() {
       try {
         const v = await getVenue();
         setVenueName(v.name);
-        setVenueToken(v.link_token);
+        setVenueToken(v.slug ?? v.link_token);
         setJoinPin(v.join_pin);
         const st = v.setup_state as (WizState & Record<string, unknown>) | null;
         if (!st || st.completed) {
@@ -263,7 +263,7 @@ function OnboardingWizard() {
     try {
       if (!venueToken) {
         const created = await createVenue(venueName.trim());
-        setVenueToken(created.link_token);
+        setVenueToken(created.slug ?? created.link_token);
       } else {
         await updateVenue(venueName.trim());
       }
@@ -273,7 +273,7 @@ function OnboardingWizard() {
       if (err instanceof ApiError && err.status === 409) {
         // Venue already exists for this account — adopt it and move on.
         const existing = await getVenue().catch(() => null);
-        if (existing) setVenueToken(existing.link_token);
+        if (existing) setVenueToken(existing.slug ?? existing.link_token);
         persist(1);
         set(1);
       } else {

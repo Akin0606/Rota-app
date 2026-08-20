@@ -8,7 +8,7 @@ import Toast from "@/components/toast";
 import { ApiError, authenticatePin, getVenueInfo, joinTeam } from "@/lib/api";
 import { deviceKey, pinStorageKey } from "@/lib/utils";
 
-type Mode = "pin" | "join" | "reveal";
+type Mode = "choice" | "pin" | "join" | "reveal";
 
 function PinEntryContent({ venue_token }: { venue_token: string }) {
   const router = useRouter();
@@ -20,7 +20,9 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
   const [inactiveMsg, setInactiveMsg] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const [mode, setMode] = useState<Mode>("pin");
+  // Unknown device lands on a register-vs-PIN choice. A recognised device never
+  // sees this — the effect below redirects it straight into the app (Case C).
+  const [mode, setMode] = useState<Mode>("choice");
 
   // PIN entry
   const [pin, setPin] = useState("");
@@ -40,6 +42,9 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
     const expired = searchParams.get("expired");
     if (expired) {
       localStorage.removeItem(deviceKey(venue_token));
+      // They had a session, so they already have a PIN — send them to PIN entry
+      // rather than the first-time choice screen.
+      setMode("pin");
       showToast("Please enter your PIN again");
       return;
     }
@@ -137,6 +142,38 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
     <div className="mx-auto max-w-[420px] py-4">
       <div className="mx-4 animate-fadeIn overflow-hidden rounded-card bg-surface shadow-card">
         <div className="flex min-h-[480px] flex-col items-center justify-center px-6 py-10">
+          {mode === "choice" && (
+            <>
+              <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-[18px] bg-accent-light">
+                <span className="text-[28px] font-extrabold text-accent">{venueName?.[0] ?? "R"}</span>
+              </div>
+              <div className="mb-1.5 text-center text-2xl font-bold text-ink">{venueName}</div>
+              <div className="mb-8 max-w-[280px] text-center text-sm text-ink-faint">
+                Your team&apos;s shifts and availability, in one place.
+              </div>
+
+              <button
+                onClick={() => {
+                  setMode("join");
+                  setJoinCode("");
+                  setJoinName("");
+                }}
+                className="w-full rounded-control bg-accent py-4 text-center text-base font-semibold text-white transition-transform duration-150 active:scale-[0.98]"
+              >
+                First time? Register
+              </button>
+              <button
+                onClick={() => {
+                  setMode("pin");
+                  setPin("");
+                }}
+                className="mt-3 w-full rounded-control border border-hairline py-4 text-center text-base font-semibold text-ink-muted transition-transform duration-150 active:scale-[0.98]"
+              >
+                I already have a PIN
+              </button>
+            </>
+          )}
+
           {mode === "pin" && (
             <>
               <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-[18px] bg-accent-light">
@@ -168,19 +205,12 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
                 Forgot PIN?
               </Link>
 
-              <div className="mt-8 w-full border-t border-hairline pt-6 text-center">
-                <div className="text-[13px] text-ink-faint">New here?</div>
-                <button
-                  onClick={() => {
-                    setMode("join");
-                    setJoinCode("");
-                    setJoinName("");
-                  }}
-                  className="mt-1 text-[15px] font-semibold text-accent"
-                >
-                  Join the team
-                </button>
-              </div>
+              <button
+                onClick={() => setMode("choice")}
+                className="mt-8 w-full border-t border-hairline pt-6 text-center text-[13px] text-ink-faint"
+              >
+                New here? <span className="font-semibold text-accent">Register instead</span>
+              </button>
             </>
           )}
 

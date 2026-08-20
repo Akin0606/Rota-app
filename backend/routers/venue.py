@@ -14,7 +14,7 @@ from models.schemas import (
 )
 from services import cron_scheduler, schedule_windows
 from services.auth_service import get_current_manager, get_manager_venue
-from services.pin_service import generate_pin, generate_venue_token
+from services.pin_service import generate_pin, generate_venue_slug, generate_venue_token
 
 router = APIRouter(prefix="/api/venue", tags=["venue"])
 
@@ -46,9 +46,13 @@ def create_venue(payload: VenueCreateRequest, manager: dict = Depends(get_curren
         # Row exists (e.g. pre-provisioned) but was never claimed — attach it
         # to this manager instead of failing on the manager_email unique
         # constraint.
+        update = {"manager_id": manager["id"], "name": payload.name}
+        # Give it a slug now if it has none (pre-slug row, or the name changed).
+        if not row.get("slug"):
+            update["slug"] = generate_venue_slug(supabase, payload.name)
         venue = (
             supabase.table("venues")
-            .update({"manager_id": manager["id"], "name": payload.name})
+            .update(update)
             .eq("id", row["id"])
             .execute()
             .data[0]
@@ -63,6 +67,7 @@ def create_venue(payload: VenueCreateRequest, manager: dict = Depends(get_curren
                 "manager_email": manager["email"],
                 "manager_id": manager["id"],
                 "link_token": generate_venue_token(payload.name),
+                "slug": generate_venue_slug(supabase, payload.name),
             }
         )
         .execute()

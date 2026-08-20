@@ -38,6 +38,31 @@ function toHHMM({ h, m, p }: Sel): string {
   return `${String(H).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+// Adapters between the app's display labels ("5:00pm", "2:30am", "12:00am" —
+// the ALL_TIMES vocabulary) and the 24h "HH:MM" the wheel speaks. Exported so
+// the manager editors can drop the wheel in without changing what they store.
+export function labelToHHMM(label: string): string {
+  if (!label) return "17:00";
+  const ampm = label.trim().toLowerCase().match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/);
+  if (ampm) {
+    let H = parseInt(ampm[1], 10);
+    if (ampm[3] === "am") H = H === 12 ? 0 : H;
+    else H = H === 12 ? 12 : H + 12;
+    return `${String(H).padStart(2, "0")}:${ampm[2]}`;
+  }
+  const h24 = label.trim().match(/^(\d{1,2}):(\d{2})$/); // tolerate a bare 24h value
+  if (h24) return `${h24[1].padStart(2, "0")}:${h24[2]}`;
+  return "17:00";
+}
+export function hhmmToLabel(hhmm: string): string {
+  const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return hhmm;
+  const H = parseInt(m[1], 10);
+  const period = H < 12 ? "am" : "pm";
+  const h12 = H % 12 === 0 ? 12 : H % 12;
+  return `${h12}:${m[2]}${period}`;
+}
+
 export default function TimeWheel({
   open,
   value,
@@ -108,7 +133,11 @@ export default function TimeWheel({
   );
 
   return (
-    <>
+    // Scope the reference's --card/--text/--accent… aliases so the wheel themes
+    // correctly wherever it's mounted (onboarding *or* .cp-manager). display:
+    // contents means the wrapper paints nothing and adds no box — it only
+    // carries the CSS variables down to the fixed-position sheet below.
+    <div className="cp-onboarding" style={{ display: "contents" }}>
       <div className={`ob-vscrim ob-vscrim-tw ${open ? "open" : ""}`} onClick={onClose} />
       <div className={`ob-tw ${open ? "open" : ""}`} role="dialog" aria-label={label}>
         <div className="ob-grab" />
@@ -145,6 +174,6 @@ export default function TimeWheel({
           </button>
         </div>
       </div>
-    </>
+    </div>
   );
 }

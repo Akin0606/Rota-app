@@ -529,6 +529,10 @@ export type Venue = {
   name: string;
   manager_email: string;
   link_token: string;
+  // Vanity alias for the public team link (e.g. "bar-so16"); resolves to the
+  // same venue as link_token. May be null on a venue created before the slug
+  // migration. Prefer slug for display, fall back to link_token.
+  slug: string | null;
   created_at: string;
   is_active: boolean;
   // Self-registration code (§3). null = joining disabled.

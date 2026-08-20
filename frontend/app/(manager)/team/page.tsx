@@ -142,8 +142,13 @@ export default function TeamPage() {
 
   function copyLink() {
     if (!venue) return;
-    navigator.clipboard.writeText(`${window.location.origin}/v/${venue.link_token}`);
-    showToast("Link copied!");
+    // One invite: the vanity link + the join code together, matching onboarding.
+    const link = `${window.location.origin}/v/${venue.slug ?? venue.link_token}`;
+    const text = venue.join_pin
+      ? `Join our team on Crewplan: ${link}\nJoin code: ${venue.join_pin}`
+      : link;
+    navigator.clipboard.writeText(text);
+    showToast(venue.join_pin ? "Link & join code copied" : "Link copied!");
   }
 
   // The role id for a given role name, so we can translate between the picker

@@ -38,3 +38,26 @@ def slugify(text: str) -> str:
 
 def generate_venue_token(venue_name: str) -> str:
     return f"{slugify(venue_name)}-{secrets.token_hex(3)}"
+
+
+def generate_venue_slug(supabase, venue_name: str) -> str:
+    """A bare, human-readable slug for the public team link (e.g. "bar-so16"),
+    unique across venues. Collisions get a numeric suffix (-2, -3, …). Unlike
+    generate_venue_token this carries no random hex — it's the vanity alias."""
+    base = slugify(venue_name)
+    candidate = base
+    n = 1
+    while n <= 50:
+        clash = (
+            supabase.table("venues")
+            .select("id")
+            .eq("slug", candidate)
+            .limit(1)
+            .execute()
+        )
+        if not clash.data:
+            return candidate
+        n += 1
+        candidate = f"{base}-{n}"
+    # Extremely unlikely fallback — keep it unique without another round-trip.
+    return f"{base}-{secrets.token_hex(2)}"

@@ -322,7 +322,7 @@ export default function SchedulerPage() {
   }
 
   return (
-    <div className="px-4 pb-28 pt-2">
+    <div className="px-4 pb-[calc(150px+env(safe-area-inset-bottom))] pt-2 md:pb-28">
       {!config.has_shifts && (
         <div className="mb-4 mt-2 rounded-cp-control border-[0.5px] border-cp-amber/30 bg-cp-amber-soft px-3.5 py-3 text-[12px] text-ink">
           Add at least one shift in <span className="font-medium">Settings</span> so the scheduler can work out
@@ -509,7 +509,10 @@ export default function SchedulerPage() {
       </div>
 
       {/* ---------- Sticky generate bar ---------- */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t-[0.5px] border-hairline bg-surface-card">
+      {/* Sits ABOVE the mobile bottom tab bar (its ~56px height) so it never
+          covers the nav; drops to the screen edge on md+ where the tab bar is
+          hidden. */}
+      <div className="fixed inset-x-0 bottom-[calc(56px+env(safe-area-inset-bottom))] z-40 border-t-[0.5px] border-hairline bg-surface-card md:bottom-0">
         <div className="mx-auto flex w-full max-w-[460px] items-center gap-3 px-4 py-3">
           <div className="min-w-0 flex-1">
             <select

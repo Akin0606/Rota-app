@@ -166,6 +166,10 @@ class VenueOut(BaseModel):
     name: str
     manager_email: str
     link_token: str
+    # Vanity alias for the public team link (e.g. "bar-so16"). Resolves to the
+    # same venue as link_token, which stays the real key. May be None on a
+    # venue created before the slug migration until it's next saved.
+    slug: Optional[str] = None
     created_at: str
     is_active: bool = True
     # The rotatable join code that gates self-registration. None = joining is

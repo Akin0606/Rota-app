@@ -6,6 +6,7 @@ import Link from "next/link";
 import ManagerIcon, { type ManagerIconName } from "@/components/manager/icon";
 import RoleSheet from "@/components/manager/role-sheet";
 import ShiftDayEditor from "@/components/manager/shift-day-editor";
+import TimeField from "@/components/manager/time-field";
 import LoadingScreen from "@/components/loading-screen";
 import Modal from "@/components/modal";
 import StatusBanner from "@/components/status-banner";
@@ -36,7 +37,7 @@ import {
   updateVenue,
   updateVenueLeaveSettings,
 } from "@/lib/api";
-import { ALL_TIMES, SHIFT_COLORS } from "@/lib/constants";
+import { SHIFT_COLORS } from "@/lib/constants";
 import { DAY_NAMES, formatWeekRange } from "@/lib/utils";
 
 const MONTH_NAMES = [
@@ -414,25 +415,17 @@ export default function SettingsPage() {
                       className="w-full rounded-lg border-[1.5px] border-accent-border px-2.5 py-2 text-sm font-semibold outline-none"
                     />
                     <div className="flex items-center gap-1.5">
-                      <select
+                      <TimeField
                         value={sh.start_time}
-                        onChange={(e) => patchShiftLocal(sh.id, { start_time: e.target.value })}
-                        className="flex-1 rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-2 text-[13px] outline-none"
-                      >
-                        {ALL_TIMES.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
+                        onChange={(v) => patchShiftLocal(sh.id, { start_time: v })}
+                        ariaLabel="Start time"
+                      />
                       <span className="text-[13px] text-ink-muted">→</span>
-                      <select
+                      <TimeField
                         value={sh.end_time}
-                        onChange={(e) => patchShiftLocal(sh.id, { end_time: e.target.value })}
-                        className="flex-1 rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-2 text-[13px] outline-none"
-                      >
-                        {ALL_TIMES.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
+                        onChange={(v) => patchShiftLocal(sh.id, { end_time: v })}
+                        ariaLabel="End time"
+                      />
                     </div>
                   </div>
                   <button

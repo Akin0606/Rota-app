@@ -93,6 +93,16 @@ def _get_venue_or_404(venue_token: str) -> dict:
         .execute()
     )
     if not res.data:
+        # Fall back to the vanity slug alias (e.g. "bar-so16") — same venue,
+        # link_token stays the real key. Only queried when the token misses.
+        res = (
+            supabase.table("venues")
+            .select("*")
+            .eq("slug", venue_token)
+            .limit(1)
+            .execute()
+        )
+    if not res.data:
         raise HTTPException(status_code=404, detail="Venue link not found")
     venue = res.data[0]
     if not venue.get("is_active", True):

@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, getShiftSchedule, setShiftSchedule, type Shift } from "@/lib/api";
-import { ALL_TIMES } from "@/lib/constants";
 
 import BottomSheet from "./bottom-sheet";
 import Switch from "./switch";
+import TimeField from "./time-field";
 
 // Per-day shift-hours editor (Batch 4 of the per-day shift model). Writes the
 // venue's real per-day schedule to shift_days via PUT /shifts/{id}/days: a
@@ -136,18 +136,7 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, showToast }: P
   }
 
   const timeSelect = (value: string, onChange: (v: string) => void, label: string) => (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="min-w-0 flex-1 rounded-lg border-[1.5px] border-accent-border bg-surface-subtle px-2 py-2 text-[13px] outline-none focus-visible:border-accent"
-    >
-      {ALL_TIMES.map((t) => (
-        <option key={t} value={t}>
-          {t}
-        </option>
-      ))}
-    </select>
+    <TimeField value={value} onChange={onChange} ariaLabel={label} />
   );
 
   const staffStepper = (min: number, max: number, onChange: (s: { min_staff: number; max_staff: number }) => void) => (
