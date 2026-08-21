@@ -95,6 +95,9 @@ function OnboardingWizard() {
 
   const [checking, setChecking] = useState(true);
   const [resendWall, setResendWall] = useState(false);
+  // An API/network failure while loading the venue — distinct from "no venue
+  // yet". Shows a retry screen instead of silently starting re-setup.
+  const [bootError, setBootError] = useState(false);
   const [managerEmail, setManagerEmail] = useState<string | null>(null);
 
   // Wizard state
@@ -201,8 +204,18 @@ function OnboardingWizard() {
         setTeam(savedTeam.filter((m) => !m.pending).map((m) => ({ name: m.name, u18: m.is_under_18 })));
         setSi(typeof st.step === "number" ? st.step : 1);
         setChecking(false);
-      } catch {
-        setChecking(false); // no venue yet → fresh start at step 0
+      } catch (err) {
+        // A 404 genuinely means "no venue for this account yet" → start
+        // onboarding at step 0. Anything else — a 500/503 (backend down mid-
+        // deploy), a network drop — is an API failure, NOT a missing venue.
+        // Dropping a live manager into re-setup on a transient blip is the
+        // exact trap that made an outage look like "start setup"; show a retry.
+        if (err instanceof ApiError && err.status === 404) {
+          setChecking(false);
+        } else {
+          setBootError(true);
+          setChecking(false);
+        }
       }
     }
     void boot();
@@ -507,6 +520,7 @@ function OnboardingWizard() {
 
   // ── Renders ───────────────────────────────────────────────────────────────
   if (resendWall) return <ResendWall />;
+  if (bootError) return <BootError onRetry={() => window.location.reload()} />;
   if (checking) return <Centered>Loading…</Centered>;
 
   return (
@@ -1074,6 +1088,21 @@ function ResendWall() {
           Setup links work once and for 7 days. Ask your Crewplan contact to send a fresh one, and you&apos;ll be set up in a few minutes.
         </div>
         <a className="ob-btn" style={{ maxWidth: 300 }} href="mailto:hello@crewplan.app?subject=Resend%20my%20setup%20link">Request a new link</a>
+      </div>
+    </div>
+  );
+}
+
+function BootError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="cp-manager cp-onboarding">
+      <div className="ob-shell" style={{ justifyContent: "center", alignItems: "center", padding: "0 24px", textAlign: "center" }}>
+        <div className="ob-ring" style={{ marginBottom: 20 }}><OIcon name="info-circle" size={30} /></div>
+        <div className="ob-h">We couldn&apos;t load your venue</div>
+        <div className="ob-p" style={{ maxWidth: 300 }}>
+          This is a connection hiccup, not your account — your venue is safe. Give it a moment and try again.
+        </div>
+        <button className="ob-btn" style={{ maxWidth: 300 }} onClick={onRetry}>Try again</button>
       </div>
     </div>
   );

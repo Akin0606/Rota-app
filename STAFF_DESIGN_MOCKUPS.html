@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CrewPlan staff — before / after mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  /* ---- CrewPlan real tokens (from frontend/app/globals.css .cp-staff) ---- */
+  :root {
+    --bg: #0d0d0d;
+    --card: #141414;
+    --subtle: #1a1a1a;
+    --hairline: rgba(255, 255, 255, 0.07);
+    --ink: #f0efe9;
+    --ink-muted: #7a7a75;   /* today's muted */
+    --ink-faint: #4a4a47;   /* today's faint */
+    --accent: #ff4d00;
+    --accent-light: rgba(255, 77, 0, 0.12);
+    --icon-bg: #1e1e1e;
+    --green: #2ecc71;
+    --green-soft: rgba(46, 204, 113, 0.14);
+    --amber: #e5a800;
+    --amber-soft: rgba(255, 193, 7, 0.14);
+    --red: #e5484d;
+    --red-soft: rgba(229, 72, 77, 0.12);
+
+    /* Proposed contrast-fixed tokens (see review §3.2) */
+    --ink-muted-fixed: #9a9a93;   /* ~4.6:1 on #141414 */
+    --ink-faint-fixed: #8f8f88;   /* reserve real "faint" but keep it legible */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #050505;
+    color: var(--ink);
+    font-family: "IBM Plex Sans", sans-serif;
+    font-weight: 400;
+    line-height: 1.5;
+    padding: 40px 20px 80px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 1040px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 500;
+    font-size: 30px;
+    letter-spacing: -0.8px;
+    margin-bottom: 6px;
+  }
+  h1 .dot { color: var(--accent); }
+  .lede {
+    color: var(--ink-muted-fixed);
+    font-size: 14px;
+    max-width: 680px;
+    margin-bottom: 8px;
+  }
+  .method {
+    color: var(--ink-muted);
+    font-size: 12px;
+    max-width: 680px;
+    margin-bottom: 40px;
+  }
+
+  .pair {
+    margin-bottom: 56px;
+  }
+  .pair-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .pair-num {
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--accent);
+  }
+  .pair-title {
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 500;
+    font-size: 19px;
+    letter-spacing: -0.3px;
+  }
+  .pair-why {
+    color: var(--ink-muted-fixed);
+    font-size: 13px;
+    margin-bottom: 4px;
+    max-width: 760px;
+  }
+  .pair-src {
+    color: var(--ink-muted);
+    font-size: 11.5px;
+    font-family: "Space Grotesk", monospace;
+    margin-bottom: 20px;
+  }
+
+  .cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
+
+  .col-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .col-label .tag {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+  .before .tag { background: var(--red); }
+  .after .tag { background: var(--green); }
+  .before .col-label { color: #c98d8f; }
+  .after .col-label { color: #7fcf9e; }
+
+  /* A phone-ish staff surface frame */
+  .surface {
+    background: var(--bg);
+    border: 0.5px solid var(--hairline);
+    border-radius: 20px;
+    padding: 20px;
+  }
+
+  /* ---- shared staff primitives ---- */
+  .cp-card {
+    background: var(--card);
+    border: 0.5px solid var(--hairline);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .eyebrow {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 10px;
+  }
+  .display {
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 500;
+    letter-spacing: -0.5px;
+  }
+  .note {
+    font-family: "Space Grotesk", monospace;
+    font-size: 11px;
+    color: var(--ink-muted);
+    margin-top: 10px;
+  }
+
+  /* ================= PAIR 1 — contrast ================= */
+  .hours-hero { padding: 22px; }
+  .hours-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-bottom: 18px; }
+  .hours-total-label { font-size: 12px; margin-bottom: 6px; }
+  .hours-total { font-family: "Space Grotesk"; font-weight: 500; font-size: 38px; line-height: 1; letter-spacing: -1.5px; color: var(--ink); }
+  .hours-total .unit { font-size: 16px; font-weight: 400; letter-spacing: normal; margin-left: 3px; }
+  .hours-pay { font-family: "Space Grotesk"; font-weight: 500; font-size: 26px; letter-spacing: -0.8px; color: var(--accent); text-align: right; }
+  .hours-pay-sub { font-size: 11px; margin-top: 3px; text-align: right; }
+  .track { height: 6px; border-radius: 999px; background: var(--icon-bg); overflow: hidden; }
+  .track > i { display: block; height: 100%; width: 62%; background: var(--accent); border-radius: 999px; }
+  .hours-foot { display: flex; justify-content: space-between; font-size: 11px; margin-top: 8px; }
+  .footnote { display: flex; gap: 6px; align-items: center; font-size: 11px; margin-top: 14px; }
+  .footnote svg { flex: none; }
+
+  /* Colour overrides that make the before/after visible */
+  .t-faint-before { color: var(--ink-faint); }
+  .t-faint-after  { color: var(--ink-faint-fixed); }
+  .t-muted-before { color: var(--ink-muted); }
+  .t-muted-after  { color: var(--ink-muted-fixed); }
+
+  /* ================= PAIR 2 — entry screen ================= */
+  .entry {
+    min-height: 360px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center;
+    padding: 30px 22px;
+    border-radius: 16px;
+  }
+  /* Before uses global tokens + shadow + heavy weights */
+  .entry-before {
+    background: #141414;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+  }
+  .entry-after {
+    background: var(--card);
+    border: 0.5px solid var(--hairline);
+  }
+  .entry-badge {
+    width: 60px; height: 60px; border-radius: 18px;
+    background: var(--accent-light);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 20px;
+  }
+  .entry-badge span { color: var(--accent); font-family: "Space Grotesk"; }
+  .entry-before .entry-badge span { font-weight: 800; font-size: 28px; }   /* extrabold */
+  .entry-after  .entry-badge span { font-weight: 500; font-size: 28px; }
+  .entry-name { margin-bottom: 6px; }
+  .entry-before .entry-name { font-family: "Space Grotesk"; font-weight: 700; font-size: 23px; }  /* bold */
+  .entry-after  .entry-name { font-family: "Space Grotesk"; font-weight: 500; font-size: 23px; letter-spacing: -0.4px; }
+  .entry-sub { font-size: 13px; color: var(--ink-muted); max-width: 250px; margin-bottom: 26px; }
+  .entry-after .entry-sub { color: var(--ink-muted-fixed); }
+  .btn {
+    width: 100%; border: none; border-radius: 12px; padding: 15px;
+    font-family: "IBM Plex Sans"; font-size: 15px; cursor: default;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-ghost { background: transparent; border: 0.5px solid var(--hairline); color: var(--ink-muted); margin-top: 12px; }
+  .entry-after .btn-ghost { color: var(--ink-muted-fixed); }
+  /* Before: semibold (600). After: medium (500). */
+  .entry-before .btn { font-weight: 600; }
+  .entry-after  .btn { font-weight: 500; }
+  .entry-before .btn-ghost { border: 1px solid var(--hairline); }
+
+  /* ================= PAIR 3 — availability states ================= */
+  .avail-day { }
+  .avail-day-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .avail-day-name { font-size: 14px; font-weight: 500; }
+  .avail-day-date { font-size: 12px; color: var(--ink-muted); margin-left: 8px; }
+  .allday { font-size: 11px; color: var(--ink-muted); }
+  .slots { display: flex; gap: 8px; }
+  .slot {
+    flex: 1; border-radius: 10px; padding: 10px 8px; text-align: center;
+    border: 0.5px solid var(--hairline);
+    position: relative;
+  }
+  .slot .sname { font-size: 12px; font-weight: 500; }
+  .slot .stime { font-size: 10px; color: var(--ink-faint); margin-top: 2px; }
+  .slot.after .stime { color: var(--ink-faint-fixed); }
+  .slot-yes  { background: var(--green-soft); border-color: rgba(46,204,113,0.4); }
+  .slot-yes .sname { color: var(--green); }
+  .slot-maybe{ background: var(--amber-soft); border-color: rgba(255,193,7,0.4); }
+  .slot-maybe .sname { color: var(--amber); }
+  .slot-no   { background: var(--red-soft); border-color: rgba(229,72,77,0.4); }
+  .slot-no .sname { color: var(--red); }
+  .slot-unset{ background: transparent; border-style: dashed; border-color: var(--hairline); }
+  .slot-unset .sname { color: var(--ink-muted); }
+  /* After: a state glyph/word chip so state survives without colour */
+  .state-tag {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 9px; font-weight: 500; letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .state-tag svg { display: block; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-muted); }
+  .sw { width: 12px; height: 12px; border-radius: 4px; flex: none; }
+
+  /* ================= PAIR 4 — touch targets ================= */
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { border-radius: 10px; font-size: 12px; font-weight: 500; border: 0.5px solid var(--hairline); background: var(--card); color: var(--ink-muted); display: inline-flex; align-items: center; }
+  .pill.active { background: var(--accent); color: #fff; border-color: transparent; }
+  .pill-before { padding: 6px 12px; }        /* ~32px tall (py-2 px-3) */
+  .pill-after  { padding: 11px 14px; }        /* ~44px tall */
+  .toggle-row { display: flex; align-items: center; gap: 12px; }
+  .toggle {
+    position: relative; border-radius: 999px; background: var(--icon-bg);
+    border: 0.5px solid var(--hairline); flex: none;
+  }
+  .toggle-before { width: 52px; height: 28px; }
+  .toggle-after  { width: 52px; height: 28px; padding: 8px 0; box-sizing: content-box; } /* expanded hit area, same visual */
+  .toggle .knob { position: absolute; top: 50%; transform: translateY(-50%); left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); }
+  .toggle-after .knob { top: 8px; transform: none; }
+  .hitbox { outline: 1px dashed rgba(46,204,113,0.5); outline-offset: 0; border-radius: 999px; }
+  .measure { font-size: 11px; color: var(--ink-muted); }
+
+  /* ================= PAIR 5 — ✕ glyph swap ================= */
+  .note-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: var(--subtle); border: 0.5px solid var(--hairline);
+    border-radius: 10px; padding: 8px 12px;
+  }
+  .note-row .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); }
+  .note-row .val { font-size: 13px; color: var(--ink); }
+  .x-glyph { font-size: 13px; color: var(--ink-faint); width: 18px; text-align: center; cursor: default; }
+  .x-btn {
+    width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;
+    color: var(--ink-muted-fixed); border-radius: 10px; flex: none;
+    margin: -10px -6px -10px 0;
+  }
+  .x-btn:hover { color: var(--accent); }
+
+  .foot { color: var(--ink-muted); font-size: 12px; margin-top: 48px; border-top: 0.5px solid var(--hairline); padding-top: 20px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>crewplan<span class="dot">.</span> staff — before / after</h1>
+  <p class="lede">Side-by-side mockups for the visual changes in <strong>STAFF_DESIGN_REVIEW.md</strong>. Each pair renders the current behaviour (taken from the real source) beside the proposed version, using CrewPlan's actual <code>.cp-staff</code> tokens, Space Grotesk + IBM Plex Sans, dark-mode-first.</p>
+  <p class="method">Note: contrast numbers in the review are token-derived; verify on a real build. "Before" is faithful to what the cited source renders today, not a strawman.</p>
+
+  <!-- ============ PAIR 1 ============ -->
+  <section class="pair">
+    <div class="pair-head"><span class="pair-num">P0 · 1</span><span class="pair-title">Muted / faint text contrast</span></div>
+    <p class="pair-why">Today <code>--c-ink-faint</code> (#4a4a47 ≈ ~2:1) carries real information at 10–11px — shift times, the "can't measure" caveat, pay sub-label, foot notes. The fix raises muted to meet 4.5:1 and reserves faint for a still-legible tone, so information stops disappearing.</p>
+    <p class="pair-src">source: hours/page.tsx:199,275–281 · availability/page.tsx:477 · components/staff/screen.tsx:50 · tokens: globals.css:153–154</p>
+    <div class="cols">
+      <div class="before">
+        <div class="col-label"><span class="tag"></span>Before — today</div>
+        <div class="surface">
+          <div class="cp-card hours-hero">
+            <div class="hours-top">
+              <div>
+                <div class="hours-total-label t-muted-before">Total this week</div>
+                <div class="hours-total">28<span class="unit t-muted-before">hrs</span></div>
+              </div>
+              <div>
+                <div class="hours-pay">£320+</div>
+                <div class="hours-pay-sub t-faint-before">est. at £11.44/hr</div>
+              </div>
+            </div>
+            <div class="track"><i></i></div>
+            <div class="hours-foot">
+              <span class="t-faint-before"><strong style="color:var(--ink-muted)">28h</strong> booked</span>
+              <span class="t-faint-before">Target <strong style="color:var(--ink-muted)">40h</strong></span>
+            </div>
+            <div class="footnote t-faint-before">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 9h.01M11 12h1v4h1"/></svg>
+              2 shifts end at a time we can't measure, so totals show as a minimum
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="after">
+        <div class="col-label"><span class="tag"></span>After — proposed</div>
+        <div class="surface">
+          <div class="cp-card hours-hero">
+            <div class="hours-top">
+              <div>
+                <div class="hours-total-label t-muted-after">Total this week</div>
+                <div class="hours-total">28<span class="unit t-muted-after">hrs</span></div>
+              </div>
+              <div>
+                <div class="hours-pay">£320+</div>
+                <div class="hours-pay-sub t-muted-after">est. at £11.44/hr</div>
+              </div>
+            </div>
+            <div class="track"><i></i></div>
+            <div class="hours-foot">
+              <span class="t-muted-after"><strong style="color:var(--ink)">28h</strong> booked</span>
+              <span class="t-muted-after">Target <strong style="color:var(--ink)">40h</strong></span>
+            </div>
+            <div class="footnote t-muted-after">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 9h.01M11 12h1v4h1"/></svg>
+              2 shifts end at a time we can't measure, so totals show as a minimum
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAIR 2 ============ -->
+  <section class="pair">
+    <div class="pair-head"><span class="pair-num">P0 · 2</span><span class="pair-title">Entry screen on the staff language</span></div>
+    <p class="pair-why">The first screen every staffer sees is the one surface not wrapped in <code>.cp-staff</code>: it uses heavier weights (extrabold/bold/semibold) than the two-weight rule allows and a drop shadow the language forbids. After: flat 0.5px-hairline card, weights 500/400 only, on-brand — matching the rest of the app.</p>
+    <p class="pair-src">source: app/v/[venue_token]/page.tsx:143,148,150,161,199 (choice mode)</p>
+    <div class="cols">
+      <div class="before">
+        <div class="col-label"><span class="tag"></span>Before — today</div>
+        <div class="surface">
+          <div class="entry entry-before">
+            <div class="entry-badge"><span>B</span></div>
+            <div class="entry-name">Bar So16</div>
+            <div class="entry-sub">Your team's shifts and availability, in one place.</div>
+            <button class="btn btn-primary">First time? Register</button>
+            <button class="btn btn-ghost">I already have a PIN</button>
+          </div>
+        </div>
+        <div class="note">weights: 800 / 700 / 600 · box-shadow present · global tokens</div>
+      </div>
+      <div class="after">
+        <div class="col-label"><span class="tag"></span>After — proposed</div>
+        <div class="surface">
+          <div class="entry entry-after">
+            <div class="entry-badge"><span>B</span></div>
+            <div class="entry-name">Bar So16</div>
+            <div class="entry-sub">Your team's shifts and availability, in one place.</div>
+            <button class="btn btn-primary">First time? Register</button>
+            <button class="btn btn-ghost">I already have a PIN</button>
+          </div>
+        </div>
+        <div class="note">weights: 500 / 400 · flat 0.5px hairline · .cp-staff tokens + theme</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAIR 3 ============ -->
+  <section class="pair">
+    <div class="pair-head"><span class="pair-num">P0 · 3</span><span class="pair-title">Availability states — not colour alone</span></div>
+    <p class="pair-why">Today the three answered states (available / if&nbsp;needed / can't&nbsp;work) differ only by hue — a red/green-colourblind staffer can't tell them apart. After: a small glyph + micro-word inside each selected cell carries the state without relying on colour. (<code>unset</code> already differs structurally as dashed hollow.)</p>
+    <p class="pair-src">source: availability/page.tsx:82–103 (SLOT_STYLE) · 455–481 (cell render)</p>
+    <div class="cols">
+      <div class="before">
+        <div class="col-label"><span class="tag"></span>Before — today</div>
+        <div class="surface">
+          <div class="cp-card avail-day">
+            <div class="avail-day-head">
+              <div><span class="avail-day-name">Thursday</span><span class="avail-day-date">28 Aug</span></div>
+              <span class="allday">All day</span>
+            </div>
+            <div class="slots">
+              <div class="slot slot-yes"><div class="sname">Day</div><div class="stime">9am–5pm</div></div>
+              <div class="slot slot-maybe"><div class="sname">Evening</div><div class="stime">5pm–close</div></div>
+            </div>
+            <div class="slots" style="margin-top:8px">
+              <div class="slot slot-no"><div class="sname">Day</div><div class="stime">9am–5pm</div></div>
+              <div class="slot slot-unset"><div class="sname">Evening</div><div class="stime">5pm–close</div></div>
+            </div>
+            <div class="legend">
+              <span class="legend-item"><span class="sw" style="background:var(--green)"></span>Available</span>
+              <span class="legend-item"><span class="sw" style="background:var(--amber)"></span>If needed</span>
+              <span class="legend-item"><span class="sw" style="background:var(--red)"></span>Can't work</span>
+            </div>
+          </div>
+        </div>
+        <div class="note">state = hue only (name text identical in every state)</div>
+      </div>
+      <div class="after">
+        <div class="col-label"><span class="tag"></span>After — proposed</div>
+        <div class="surface">
+          <div class="cp-card avail-day">
+            <div class="avail-day-head">
+              <div><span class="avail-day-name">Thursday</span><span class="avail-day-date">28 Aug</span></div>
+              <span class="allday">All day</span>
+            </div>
+            <div class="slots">
+              <div class="slot after slot-yes">
+                <span class="state-tag" style="color:var(--green)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5l10 -10"/></svg>YES</span>
+                <div class="sname">Day</div><div class="stime">9am–5pm</div>
+              </div>
+              <div class="slot after slot-maybe">
+                <span class="state-tag" style="color:var(--amber)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14"/></svg>MAYBE</span>
+                <div class="sname">Evening</div><div class="stime">5pm–close</div>
+              </div>
+            </div>
+            <div class="slots" style="margin-top:8px">
+              <div class="slot after slot-no">
+                <span class="state-tag" style="color:var(--red)"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 6l12 12M18 6l-12 12"/></svg>NO</span>
+                <div class="sname">Day</div><div class="stime">9am–5pm</div>
+              </div>
+              <div class="slot after slot-unset"><div class="sname">Evening</div><div class="stime" style="color:var(--ink-muted)">tap to answer</div></div>
+            </div>
+            <div class="legend">
+              <span class="legend-item"><span class="sw" style="background:var(--green)"></span>Available</span>
+              <span class="legend-item"><span class="sw" style="background:var(--amber)"></span>If needed</span>
+              <span class="legend-item"><span class="sw" style="background:var(--red)"></span>Can't work</span>
+            </div>
+          </div>
+        </div>
+        <div class="note">glyph + micro-word ⇒ state readable without colour; time legible</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAIR 4 ============ -->
+  <section class="pair">
+    <div class="pair-head"><span class="pair-num">P1 · 4</span><span class="pair-title">Touch targets ≥ 44px</span></div>
+    <p class="pair-why">Primary controls sit below the 44px minimum: the availability week pills (~32px, <code>py-2 px-3</code>) and the mode toggle (28px). After: pills grow to ~44px; the toggle keeps its 28px visual but gains an expanded hit area (dashed outline = tappable box).</p>
+    <p class="pair-src">source: availability/page.tsx:392 (pills) · components/staff/mode-toggle.tsx:34 (toggle)</p>
+    <div class="cols">
+      <div class="before">
+        <div class="col-label"><span class="tag"></span>Before — today</div>
+        <div class="surface">
+          <div class="pills">
+            <span class="pill pill-before active">This week</span>
+            <span class="pill pill-before">Next week</span>
+            <span class="pill pill-before">w/c 8 Sep</span>
+          </div>
+          <div class="toggle-row" style="margin-top:20px">
+            <span class="toggle toggle-before"><span class="knob"></span></span>
+            <span class="measure">28px tall · tap box = visual box</span>
+          </div>
+        </div>
+      </div>
+      <div class="after">
+        <div class="col-label"><span class="tag"></span>After — proposed</div>
+        <div class="surface">
+          <div class="pills">
+            <span class="pill pill-after active">This week</span>
+            <span class="pill pill-after">Next week</span>
+            <span class="pill pill-after">w/c 8 Sep</span>
+          </div>
+          <div class="toggle-row" style="margin-top:20px">
+            <span class="hitbox"><span class="toggle toggle-after"><span class="knob"></span></span></span>
+            <span class="measure">28px visual, 44px hit area (dashed)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAIR 5 ============ -->
+  <section class="pair">
+    <div class="pair-head"><span class="pair-num">P1 · 5</span><span class="pair-title">Note-remove: literal ✕ → SVG icon in a 44px hit area</span></div>
+    <p class="pair-why">The note remove control is a literal "✕" text glyph — inconsistent with the app's inline-SVG icon set and a tiny tap target. After: a proper stroke icon (matching the set) inside a 44px hit box.</p>
+    <p class="pair-src">source: availability/page.tsx:519</p>
+    <div class="cols">
+      <div class="before">
+        <div class="col-label"><span class="tag"></span>Before — today</div>
+        <div class="surface">
+          <div class="note-row">
+            <div><div class="lbl">Thu</div><div class="val">Can stay late if needed</div></div>
+            <span class="x-glyph">✕</span>
+          </div>
+        </div>
+        <div class="note">text character, ~14px hit target, faint colour</div>
+      </div>
+      <div class="after">
+        <div class="col-label"><span class="tag"></span>After — proposed</div>
+        <div class="surface">
+          <div class="note-row">
+            <div><div class="lbl">Thu</div><div class="val">Can stay late if needed</div></div>
+            <span class="x-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M10 10l4 4M14 10l-4 4"/></svg></span>
+          </div>
+        </div>
+        <div class="note">circle-x SVG (icon-set consistent), 44px hit box</div>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">Companion to STAFF_DESIGN_REVIEW.md. Mockups are static illustrations of proposed states; the "After" token values (<code>--ink-muted-fixed</code>, <code>--ink-faint-fixed</code>) are candidate values to confirm with a contrast checker on a real build. No app source was modified to produce this file.</p>
+</div>
+</body>
+</html>

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-import BackButton from "@/components/staff/back-button";
 import CalendarBlock from "@/components/staff/calendar-block";
 import Icon from "@/components/staff/icon";
 import ModeToggle from "@/components/staff/mode-toggle";
@@ -103,7 +102,7 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
     return (
       <StaffScreen>
         <StaffTopBar
-          left={<BackButton href={`/v/${venue_token}/hub`} />}
+          left={null}
           right={<ModeToggle venueToken={venue_token} />}
         />
         <div className="mb-5 mt-4">
@@ -158,7 +157,7 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
   return (
     <StaffScreen>
       <StaffTopBar
-        left={<BackButton href={`/v/${venue_token}/hub`} />}
+        left={null}
         right={<ModeToggle venueToken={venue_token} />}
       />
 

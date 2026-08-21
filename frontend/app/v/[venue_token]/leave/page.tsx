@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 
 import Modal from "@/components/modal";
 import Toast from "@/components/toast";
-import BackButton from "@/components/staff/back-button";
 import Icon, { IconName } from "@/components/staff/icon";
 import MetricCard from "@/components/staff/metric-card";
 import ModeToggle from "@/components/staff/mode-toggle";
@@ -186,7 +185,7 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
   return (
     <StaffScreen>
       <StaffTopBar
-        left={<BackButton href={`/v/${venue_token}/hub`} />}
+        left={null}
         right={<ModeToggle venueToken={venue_token} />}
       />
 

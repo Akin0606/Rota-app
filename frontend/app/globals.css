@@ -150,8 +150,11 @@ a:hover {
   --c-hairline: rgba(255, 255, 255, 0.07);
   --c-ink: #f0efe9;
   --c-ink-label: #f0efe9;
-  --c-ink-muted: #7a7a75;
-  --c-ink-faint: #4a4a47;
+  /* Muted + faint both raised to clear WCAG AA (4.5:1) on the #141414 card —
+     the old #7a7a75 (~4.2:1) and #4a4a47 (~2:1) failed, and faint carries real
+     info (shift times, dates, caveats). Verify with a checker on a real build. */
+  --c-ink-muted: #8f8f8a;
+  --c-ink-faint: #82827c;
   --c-accent: #ff4d00;
   --c-accent-hover: #e64500;
   --c-accent-light: rgba(255, 77, 0, 0.12);
@@ -180,8 +183,10 @@ a:hover {
   --c-hairline: rgba(0, 0, 0, 0.08);
   --c-ink: #1a1815;
   --c-ink-label: #1a1815;
-  --c-ink-muted: #78766f;
-  --c-ink-faint: #a8a69e;
+  /* Raised to clear AA on white — old muted #78766f sat at ~4.47:1 and faint
+     #a8a69e at ~2.4:1. See the dark-mode note above. */
+  --c-ink-muted: #6d6b64;
+  --c-ink-faint: #737169;
   --c-accent-light: rgba(255, 77, 0, 0.08);
 
   --cp-icon-bg: #f2f0ea;

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import BackButton from "@/components/staff/back-button";
 import Icon from "@/components/staff/icon";
 import Modal from "@/components/modal";
 import ModeToggle from "@/components/staff/mode-toggle";
@@ -100,6 +99,17 @@ const SLOT_STYLE: Record<SlotState, { box: string; echo: string; label: string }
     echo: "border-[0.5px] border-dashed border-[var(--c-hairline)] bg-transparent",
     label: "text-ink-muted",
   },
+};
+
+// A non-colour differentiator for the three answered states (WCAG "colour is
+// not the only signal"): a check / dash / cross glyph inside the selected cell,
+// so "available", "if needed" and "can't work" stay distinguishable without
+// relying on green/amber/red. `unset` stays the dashed-hollow box with no glyph.
+const STATE_GLYPH: Record<SlotState, "check" | "minus" | "x" | null> = {
+  yes: "check",
+  maybe: "minus",
+  no: "x",
+  unset: null,
 };
 
 type Grid = Record<number, Record<string, number>>;
@@ -356,7 +366,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   return (
     <StaffScreen>
       <StaffTopBar
-        left={<BackButton href={`/v/${venue_token}/hub`} />}
+        left={null}
         right={<ModeToggle venueToken={venue_token} />}
       />
 
@@ -389,7 +399,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
             <button
               key={opt.weekStart}
               onClick={() => setSelectedWeek(opt.weekStart)}
-              className={`shrink-0 rounded-cp-slot px-3 py-2 text-[12px] font-medium transition-colors ${
+              className={`inline-flex min-h-[44px] shrink-0 items-center rounded-cp-slot px-3.5 py-2 text-[12px] font-medium transition-colors ${
                 active ? "bg-accent text-white" : "cp-hairline bg-surface-card text-ink-muted"
               }`}
             >
@@ -441,7 +451,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                 </div>
                 <button
                   onClick={() => setAllDay(dayIndex)}
-                  className="shrink-0 text-[11px] text-ink-muted transition-colors hover:text-accent"
+                  className="-my-2 -mr-2 inline-flex min-h-[44px] shrink-0 items-center px-2 text-[11px] text-ink-muted transition-colors hover:text-accent"
                 >
                   All day
                 </button>
@@ -471,10 +481,13 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                       // by the .cp-staff * rule in globals.css.
                       className={`min-w-0 flex-1 rounded-cp-slot px-2 py-2.5 text-center transition-[background-color,border-color,color,transform] duration-[180ms] active:scale-[0.97] ${boxClass}`}
                     >
-                      <div className={`truncate text-[12px] font-medium transition-colors ${style.label}`}>
-                        {shift.name}
+                      <div className={`flex items-center justify-center gap-1 transition-colors ${style.label}`}>
+                        {STATE_GLYPH[state] && (
+                          <Icon name={STATE_GLYPH[state]!} size={11} strokeWidth={2.5} />
+                        )}
+                        <span className="truncate text-[12px] font-medium">{shift.name}</span>
                       </div>
-                      <div className="mt-0.5 truncate text-[10px] text-ink-faint transition-colors duration-[350ms]">
+                      <div className="mt-0.5 truncate text-[11px] text-ink-muted transition-colors duration-[350ms]">
                         {compactTimeRange(shift.start_time, shift.end_time)}
                       </div>
                     </button>
@@ -514,9 +527,9 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                 <button
                   onClick={() => removeNote(di)}
                   aria-label={`Remove ${day} note`}
-                  className="shrink-0 text-[13px] text-ink-faint transition-colors hover:text-accent"
+                  className="-my-2 -mr-2 inline-flex h-11 w-11 shrink-0 items-center justify-center text-ink-muted transition-colors hover:text-accent"
                 >
-                  ✕
+                  <Icon name="circle-x" size={16} />
                 </button>
               )}
             </div>
@@ -541,7 +554,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                   <button
                     key={di}
                     onClick={() => setNoteDay(di)}
-                    className={`rounded-cp-badge px-2 py-1 text-[11px] font-medium transition-colors ${
+                    className={`inline-flex min-h-[44px] items-center rounded-cp-badge px-3 py-1 text-[11px] font-medium transition-colors ${
                       noteDay === di ? "bg-accent text-white" : "bg-cp-icon text-ink-muted"
                     }`}
                   >
@@ -577,22 +590,6 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
         <Icon name="info-circle" size={13} />
         Tap to cycle: available → if needed → can&apos;t work · dashed = no answer yet
       </div>
-
-      <ProgressBar value={answeredDays / 7} label={`${answeredDays} of 7 days`} className="mb-1" />
-
-      {editable ? (
-        <button
-          onClick={handleSubmit}
-          disabled={submitting || weekLoading}
-          className="mt-3 w-full rounded-cp-panel bg-accent py-[15px] text-[15px] font-medium tracking-[-0.1px] text-white transition-opacity hover:opacity-90 disabled:opacity-60"
-        >
-          {submitting ? "Submitting…" : "Submit availability"}
-        </button>
-      ) : (
-        <div className="mt-3 rounded-cp-panel bg-cp-icon py-[15px] text-center text-[13px] text-ink-muted">
-          Submissions for this week have closed
-        </div>
-      )}
 
       <div className="cp-hairline mt-3.5 flex items-center justify-between gap-3 rounded-cp-tile bg-surface-card px-4 py-3.5 transition-all duration-[350ms]">
         <div className="min-w-0">
@@ -658,6 +655,43 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
           </button>
         </div>
       </Modal>
+
+      {/* Clears the sticky submit bar + tab bar so the auto-submit toggle above
+          is never trapped underneath them. */}
+      <div aria-hidden className="h-[92px]" />
+
+      {/* Sticky submit — the primary action is always thumb-reachable on a long
+          grid, pinned directly above the bottom tab bar (z-30 < nav's z-40).
+          Progress + submit only; the toggle and notes stay in the scroll. */}
+      <div
+        className="fixed inset-x-0 z-30 bg-surface-page"
+        style={{
+          bottom: "calc(56px + env(safe-area-inset-bottom))",
+          borderTop: "0.5px solid var(--c-hairline)",
+        }}
+      >
+        <div className="mx-auto w-full max-w-[440px] px-[22px] pb-3 pt-3">
+          <ProgressBar
+            value={answeredDays / 7}
+            label={`${answeredDays} of 7 days`}
+            ariaLabel="Days answered this week"
+            className="mb-2.5"
+          />
+          {editable ? (
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || weekLoading}
+              className="w-full rounded-cp-panel bg-accent py-[13px] text-[15px] font-medium tracking-[-0.1px] text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              {submitting ? "Submitting…" : "Submit availability"}
+            </button>
+          ) : (
+            <div className="rounded-cp-panel bg-cp-icon py-[13px] text-center text-[13px] text-ink-muted">
+              Submissions for this week have closed
+            </div>
+          )}
+        </div>
+      </div>
 
       <Toast message={toast} />
     </StaffScreen>

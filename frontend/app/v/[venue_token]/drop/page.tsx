@@ -46,6 +46,12 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
   // a shift is picked here.
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Swap is a bottom-nav tab now, so it normally has no back button. The one
+  // exception is the deep-link from My shifts (?assignment=…): there we keep a
+  // contextual "‹ My shifts" so the round-trip is one tap. Set from the URL in
+  // the mount effect, so it's resolved before the top bar ever renders.
+  const [deepLinked, setDeepLinked] = useState(false);
+
   const [confirmTarget, setConfirmTarget] = useState<StaffRotaAssignment | null>(null);
   const [dropping, setDropping] = useState(false);
   const [justDroppedId, setJustDroppedId] = useState<string | null>(null);
@@ -74,6 +80,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
     // lands here with it already picked. Read straight off the URL rather than
     // useSearchParams so the page needs no Suspense boundary.
     const preselect = new URLSearchParams(window.location.search).get("assignment");
+    setDeepLinked(!!preselect);
 
     // The background refresh only replaces the data, never the selection: if
     // the selected shift is gone from the fresh copy, `selected` resolves to
@@ -197,7 +204,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
     return (
       <StaffScreen>
         <StaffTopBar
-          left={<BackButton href={`/v/${venue_token}/hub`} />}
+          left={deepLinked ? <BackButton href={`/v/${venue_token}/rota`} label="My shifts" /> : null}
           right={<ModeToggle venueToken={venue_token} />}
         />
         <div className="mb-5 mt-4">
@@ -446,7 +453,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
               footer = (
                 <button
                   onClick={() => setClaimTarget(a)}
-                  className="w-full rounded-cp-control bg-accent py-2.5 text-center text-[13px] font-medium text-white transition-colors hover:bg-accent-hover"
+                  className="w-full rounded-cp-control bg-accent py-3 text-center text-[13px] font-medium text-white transition-colors hover:bg-accent-hover"
                 >
                   Claim this shift
                 </button>

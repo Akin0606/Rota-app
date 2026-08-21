@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Modal from "@/components/modal";
-import BackButton from "@/components/staff/back-button";
 import CalendarBlock from "@/components/staff/calendar-block";
 import ModeToggle from "@/components/staff/mode-toggle";
 import ProgressBar from "@/components/staff/progress-bar";
@@ -108,7 +107,7 @@ export default function StaffHoursPage({ params }: { params: { venue_token: stri
     return (
       <StaffScreen>
         <StaffTopBar
-          left={<BackButton href={`/v/${venue_token}/hub`} />}
+          left={null}
           right={<ModeToggle venueToken={venue_token} />}
         />
         <div className="mb-5 mt-4">
@@ -163,7 +162,7 @@ export default function StaffHoursPage({ params }: { params: { venue_token: stri
   return (
     <StaffScreen>
       <StaffTopBar
-        left={<BackButton href={`/v/${venue_token}/hub`} />}
+        left={null}
         right={<ModeToggle venueToken={venue_token} />}
       />
 
@@ -204,7 +203,7 @@ export default function StaffHoursPage({ params }: { params: { venue_token: stri
           </div>
         </div>
 
-        <ProgressBar size="md" value={target === null ? 0 : hours / target} />
+        <ProgressBar size="md" value={target === null ? 0 : hours / target} ariaLabel="Hours toward weekly target" />
         <div className="mt-2 flex items-center justify-between text-[11px] text-ink-faint transition-colors duration-[350ms]">
           <span>
             <strong className="font-medium text-ink-muted">{hoursLabel}h</strong> booked

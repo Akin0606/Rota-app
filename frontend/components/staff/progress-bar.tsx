@@ -5,10 +5,13 @@ type ProgressBarProps = {
   value: number;
   size?: "sm" | "md";
   label?: React.ReactNode;
+  /** Names the progressbar for assistive tech (the visual label is often just a
+   *  bare count like "4 of 7", which doesn't say what's being counted). */
+  ariaLabel?: string;
   className?: string;
 };
 
-export default function ProgressBar({ value, size = "sm", label, className = "" }: ProgressBarProps) {
+export default function ProgressBar({ value, size = "sm", label, ariaLabel, className = "" }: ProgressBarProps) {
   const pct = Math.round(Math.min(1, Math.max(0, value)) * 100);
   const track = size === "sm" ? "h-1 bg-cp-icon" : "h-1.5 bg-cp-track";
 
@@ -16,6 +19,7 @@ export default function ProgressBar({ value, size = "sm", label, className = "" 
     <div
       className={`flex-1 overflow-hidden rounded-full transition-colors duration-[350ms] ${track}`}
       role="progressbar"
+      aria-label={ariaLabel}
       aria-valuenow={pct}
       aria-valuemin={0}
       aria-valuemax={100}

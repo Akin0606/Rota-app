@@ -6,14 +6,12 @@ import Link from "next/link";
 
 import Icon from "@/components/staff/icon";
 import ModeToggle from "@/components/staff/mode-toggle";
-import StaffScreen, { SectionLabel, StaffTopBar } from "@/components/staff/screen";
-import { HubTile, PrimaryHubTile } from "@/components/staff/hub-tile";
+import StaffScreen, { StaffTopBar } from "@/components/staff/screen";
 import NotificationBell from "@/components/notification-bell";
 import Modal from "@/components/modal";
 import Toast from "@/components/toast";
 import {
   ApiError,
-  LeaveRequest,
   PinAuthData,
   StaffRota,
   StaffRotaAssignment,
@@ -24,14 +22,12 @@ import {
   declineGive,
   declineSwap,
   getStaffRota,
-  myLeaveRequests,
 } from "@/lib/api";
 import {
   DAY_NAMES,
-  formatDeadlineDay,
   formatHoursTotal,
-  formatDays,
   formatWeekOf,
+  parseISODate,
   pinStorageKey,
   sumShiftHours,
   weeksFromThisWeek,
@@ -42,11 +38,6 @@ function greeting(): string {
   if (h < 12) return "Good morning";
   if (h < 18) return "Good afternoon";
   return "Good evening";
-}
-
-function todayISO(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 export default function StaffHubPage({ params }: { params: { venue_token: string } }) {
@@ -60,8 +51,6 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
   const [toast, setToast] = useState<string | null>(null);
 
   const [rota, setRota] = useState<StaffRota | null>(null);
-  const [rotaLoaded, setRotaLoaded] = useState(false);
-  const [leave, setLeave] = useState<LeaveRequest[] | null>(null);
 
   const [acceptTarget, setAcceptTarget] = useState<StaffRotaAssignment | null>(null);
   const [resolving, setResolving] = useState(false);
@@ -88,23 +77,13 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
       })
       .finally(() => setLoading(false));
 
-    // Both feed tile badges and the pending-request banners — a nice-to-have,
-    // not something the hub should fail to render over.
-    //
-    // Leave is fetched after the rota rather than alongside it. A backend
-    // whose Supabase connection pool has gone stale starts 500ing once
-    // several requests land together (see CLAUDE.md), and this tile's badge
-    // is the least important thing on the screen — chaining it keeps the
-    // hub's peak in-flight count where it was before the tile existed.
+    // Feeds the next-shift glance, the This-week card, the pending give/swap
+    // banners, and the in-flight row — a nice-to-have, not something the hub
+    // should fail to render over. Leave now lives on its own nav tab, so the
+    // hub no longer fetches it (one fewer request on the flaky pool).
     getStaffRota(venue_token, storedPin, { onRevalidate: setRota })
       .then(setRota)
-      .catch(() => {})
-      .finally(() => {
-        setRotaLoaded(true);
-        myLeaveRequests(venue_token, storedPin, { onRevalidate: (res) => setLeave(res.requests) })
-          .then((res) => setLeave(res.requests))
-          .catch(() => {});
-      });
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [venue_token]);
 
@@ -241,16 +220,6 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
       ).length + rota.pending_swaps.length
     : 0;
 
-  const today = todayISO();
-  // Counted in days, not requests, so the tile agrees with the Time off screen
-  // it opens — "2 booked" next to that screen's "Booked · 6 days" reads as a
-  // contradiction. `days` is the backend's figure, so neither side does this
-  // arithmetic itself. Booked is upcoming only here; the screen's strip is the
-  // whole year's usage, which is a different question.
-  const leaveDays = (rs: LeaveRequest[]) => rs.reduce((sum, r) => sum + r.days, 0);
-  const leaveBooked = leaveDays(leave?.filter((r) => r.status === "approved" && r.end_date >= today) ?? []);
-  const leavePending = leaveDays(leave?.filter((r) => r.status === "pending") ?? []);
-
   // ---- Availability tile state ----
   const collecting = availPeriod?.status === "collecting";
   const alreadySubmitted = auth.submissions.length > 0;
@@ -258,48 +227,58 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
   const whichWeek =
     weeksAhead === 0 ? "this week" : weeksAhead === 1 ? "next week" : `w/c ${formatWeekOf(availPeriod!.week_start)}`;
 
-  let availTile;
-  if (!availPeriod) {
-    availTile = (
-      <PrimaryHubTile
-        href={`/v/${venue_token}/availability`}
-        icon="calendar-plus"
-        title="Submit your availability"
-        desc="Nothing open right now — you can still plan ahead"
-      />
-    );
-  } else if (!collecting) {
-    availTile = (
-      <PrimaryHubTile
-        href={`/v/${venue_token}/availability`}
-        icon="calendar-plus"
-        title="Availability is closed"
-        desc={`Submissions for ${whichWeek} have closed`}
-      />
-    );
-  } else if (alreadySubmitted) {
-    availTile = (
-      <PrimaryHubTile
-        href={`/v/${venue_token}/availability`}
-        icon="calendar-plus"
-        title="Availability submitted"
-        desc={`You've told us about ${whichWeek}`}
-        note="Tap to review or change it"
-        noteIcon="circle-check"
-        noteTone="green"
-      />
-    );
-  } else {
-    availTile = (
-      <PrimaryHubTile
-        href={`/v/${venue_token}/availability`}
-        icon="calendar-plus"
-        title="Submit your availability"
-        desc={`Tell us when you can work ${whichWeek}`}
-        note={`Closes ${formatDeadlineDay(auth.rules.avail_closes_day, auth.rules.avail_closes_time)}`}
-      />
-    );
+  // ---- Home glance: next shift + availability status ----
+  // The nav owns navigation now, so Home stops being a launcher grid and
+  // becomes a glance — the biggest thing being "when am I next in?", front and
+  // centre, which the old tile layout never surfaced.
+  const nowUTC = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+  let nextShift: { whenLabel: string; name: string; times: string; withNames: string[] } | null = null;
+  if (rota?.period) {
+    const weekMs = parseISODate(rota.period.week_start).getTime();
+    const items = myAssignments
+      .map((a) => {
+        const base = a.shift_id ? shiftsById.get(a.shift_id) : undefined;
+        return base ? { a, base, ms: weekMs + a.day_index * 86_400_000 } : null;
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((x, y) => x.ms - y.ms);
+    const up = items.find((it) => it.ms >= nowUTC);
+    if (up) {
+      const diff = Math.round((up.ms - nowUTC) / 86_400_000);
+      const d = new Date(up.ms);
+      const whenLabel =
+        diff === 0
+          ? "Today"
+          : diff === 1
+            ? "Tomorrow"
+            : `${DAY_NAMES[up.a.day_index]} ${d.getUTCDate()} ${d.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}`;
+      const withNames = rota.assignments
+        .filter(
+          (o) =>
+            o.day_index === up.a.day_index &&
+            o.shift_id === up.a.shift_id &&
+            o.staff_id &&
+            o.staff_id !== rota.staff_id,
+        )
+        .map((o) => rota.team.find((t) => t.id === o.staff_id)?.name.split(" ")[0])
+        .filter((n): n is string => Boolean(n));
+      nextShift = {
+        whenLabel,
+        name: up.base.name,
+        times: `${up.a.start_time ?? up.base.start_time} – ${up.a.end_time ?? up.base.end_time}`,
+        withNames,
+      };
+    }
   }
+
+  const availValue = !availPeriod
+    ? "None open"
+    : !collecting
+      ? "Closed"
+      : alreadySubmitted
+        ? "Submitted"
+        : "Not sent";
+  const availMeta = availPeriod ? `for ${whichWeek}` : "nothing open right now";
 
   return (
     <StaffScreen>
@@ -321,7 +300,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
         }
       />
 
-      <div className="cp-hairline mb-6 mt-5 flex items-center gap-2 rounded-cp-panel bg-surface-card px-3.5 py-3 transition-all duration-[350ms]">
+      <div className="cp-hairline mb-3 mt-5 flex items-center gap-2 rounded-cp-panel bg-surface-card px-3.5 py-3 transition-all duration-[350ms]">
         <span
           className="h-[7px] w-[7px] shrink-0 rounded-full bg-cp-green"
           style={{ boxShadow: "0 0 6px rgba(46,204,113,0.6)" }}
@@ -333,6 +312,34 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
           </span>
         )}
       </div>
+
+      {/* Next shift — the single most-asked question, made the hero of Home. */}
+      <Link
+        href={`/v/${venue_token}/rota`}
+        className="mb-3 block rounded-cp-card border-[0.5px] border-[rgba(255,77,0,0.25)] bg-accent-light p-[18px] transition-transform duration-150 active:scale-[0.99]"
+      >
+        <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-muted">Next shift</div>
+        {nextShift ? (
+          <>
+            <div className="mt-1.5 text-[19px] font-medium tracking-[-0.4px] text-ink">
+              {nextShift.whenLabel} · {nextShift.name}
+            </div>
+            <div className="mt-1 text-[12px] text-ink-muted">
+              {nextShift.times}
+              {nextShift.withNames.length > 0 && ` · with ${nextShift.withNames.join(", ")}`}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mt-1.5 text-[19px] font-medium tracking-[-0.4px] text-ink">
+              {hasRota ? "No upcoming shifts" : "No shifts published yet"}
+            </div>
+            <div className="mt-1 text-[12px] text-ink-muted">
+              {hasRota ? "You're all caught up this week" : "Your rota appears here once it's published"}
+            </div>
+          </>
+        )}
+      </Link>
 
       {auth.auto_submitted && (
         <Link
@@ -366,52 +373,42 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
         />
       )}
 
-      <SectionLabel>This week</SectionLabel>
+      {/* Glance row — the two questions worth answering at a glance. Everything
+          else is one tap away on the bottom nav. */}
+      <div className="flex gap-2.5">
+        <Link
+          href={`/v/${venue_token}/availability`}
+          className="cp-hairline flex-1 rounded-cp-panel bg-surface-card px-4 py-3.5 transition-transform duration-150 active:scale-[0.99]"
+        >
+          <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-muted">Availability</div>
+          <div className="mt-1 text-[15px] font-medium text-ink">{availValue}</div>
+          <div className="mt-0.5 text-[12px] text-ink-muted">{availMeta}</div>
+        </Link>
 
-      <div className="grid grid-cols-2 gap-3">
-        {availTile}
-
-        <HubTile
-          href={`/v/${venue_token}/rota`}
-          icon="calendar-week"
-          title="My shifts"
-          desc="Your published rota"
-          badge={hasRota ? `${myAssignments.length} shift${myAssignments.length === 1 ? "" : "s"}` : undefined}
-        />
-
-        <HubTile
-          href={`/v/${venue_token}/drop`}
-          icon="arrows-exchange"
-          title="Drop, give or swap"
-          desc="Manage a shift you can't make"
-          badge={inFlight > 0 ? `${inFlight} pending` : rotaLoaded ? "Nothing pending" : undefined}
-          badgeTone={inFlight > 0 ? "amber" : "neutral"}
-        />
-
-        <HubTile
+        <Link
           href={`/v/${venue_token}/hours`}
-          icon="clock-hour-4"
-          title="My hours"
-          desc="Weekly total and pay estimate"
-          badge={hasRota ? hoursBadge : undefined}
-          badgeTone="neutral"
-        />
-
-        <HubTile
-          href={`/v/${venue_token}/leave`}
-          icon="beach"
-          title="Time off"
-          desc="Request holiday or a day away"
-          badge={
-            leave === null || (leavePending === 0 && leaveBooked === 0)
-              ? undefined
-              : leavePending > 0
-                ? `${formatDays(leavePending)} ${leavePending === 1 ? "day" : "days"} pending`
-                : `${formatDays(leaveBooked)} ${leaveBooked === 1 ? "day" : "days"} booked`
-          }
-          badgeTone={leavePending > 0 ? "amber" : "neutral"}
-        />
+          className="cp-hairline flex-1 rounded-cp-panel bg-surface-card px-4 py-3.5 transition-transform duration-150 active:scale-[0.99]"
+        >
+          <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-muted">This week</div>
+          <div className="mt-1 text-[15px] font-medium text-ink">{hasRota ? hoursBadge : "—"}</div>
+          <div className="mt-0.5 text-[12px] text-ink-muted">
+            {hasRota ? `${myAssignments.length} shift${myAssignments.length === 1 ? "" : "s"}` : "no rota yet"}
+          </div>
+        </Link>
       </div>
+
+      {inFlight > 0 && (
+        <Link
+          href={`/v/${venue_token}/drop`}
+          className="cp-hairline mt-2.5 flex items-center gap-2.5 rounded-cp-panel bg-surface-card px-4 py-3 transition-transform duration-150 active:scale-[0.99]"
+        >
+          <Icon name="arrows-exchange" size={16} className="shrink-0 text-accent" />
+          <span className="text-[13px] font-medium text-ink">
+            {inFlight} drop/swap{inFlight === 1 ? "" : "s"} pending
+          </span>
+          <Icon name="chevron-right" size={16} className="ml-auto shrink-0 text-ink-muted" />
+        </Link>
+      )}
 
       <Modal open={acceptTarget !== null} onClose={() => setAcceptTarget(null)} title="Accept this shift?">
         {acceptTarget && (
@@ -503,14 +500,14 @@ function ActionBanner({
         <button
           onClick={onAccept}
           disabled={busy}
-          className="flex-1 rounded-cp-slot bg-accent py-2.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="flex-1 rounded-cp-slot bg-accent py-3 text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           Accept
         </button>
         <button
           onClick={onDecline}
           disabled={busy}
-          className="cp-hairline flex-1 rounded-cp-slot bg-surface-card py-2.5 text-[13px] font-medium text-ink-muted transition-colors disabled:opacity-50"
+          className="cp-hairline flex-1 rounded-cp-slot bg-surface-card py-3 text-[13px] font-medium text-ink-muted transition-colors disabled:opacity-50"
         >
           Decline
         </button>

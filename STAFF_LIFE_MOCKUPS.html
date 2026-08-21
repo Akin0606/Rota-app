@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CrewPlan staff — life & interaction mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  /* ===== CrewPlan real tokens (globals.css .cp-staff) + easings ===== */
+  :root {
+    --bg:#0d0d0d; --card:#141414; --subtle:#1a1a1a;
+    --hairline:rgba(255,255,255,0.07);
+    --ink:#f0efe9; --ink-muted:#9a9a93; --ink-faint:#8f8f88; /* review's corrected tones */
+    --accent:#ff4d00; --accent-light:rgba(255,77,0,0.12); --accent-border:rgba(255,77,0,0.25);
+    --icon-bg:#1e1e1e; --track:#1e1e1e;
+    --green:#2ecc71; --green-soft:rgba(46,204,113,0.14);
+    --amber:#e5a800; --amber-soft:rgba(255,193,7,0.14);
+    --red:#e5484d; --red-soft:rgba(229,72,77,0.12);
+    /* the four real app easings */
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+    --ease-pop: cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:#050505; color:var(--ink); font-family:"IBM Plex Sans",sans-serif; line-height:1.5; padding:40px 20px 90px; -webkit-font-smoothing:antialiased; }
+  .page { max-width:1060px; margin:0 auto; }
+  h1 { font-family:"Space Grotesk"; font-weight:500; font-size:30px; letter-spacing:-0.8px; margin-bottom:6px; }
+  h1 .dot { color:var(--accent); }
+  .lede { color:var(--ink-muted); font-size:14px; max-width:720px; margin-bottom:6px; }
+  .method { color:var(--ink-faint); font-size:12px; max-width:720px; margin-bottom:34px; }
+
+  .pair { margin-bottom:52px; }
+  .pair-head { display:flex; align-items:baseline; gap:10px; margin-bottom:4px; flex-wrap:wrap; }
+  .pair-num { font-family:"Space Grotesk"; font-weight:700; font-size:12px; color:var(--accent); }
+  .pair-title { font-family:"Space Grotesk"; font-weight:500; font-size:19px; letter-spacing:-0.3px; }
+  .pair-why { color:var(--ink-muted); font-size:13px; margin-bottom:3px; max-width:800px; }
+  .pair-src { color:var(--ink-faint); font-size:11.5px; font-family:"Space Grotesk",monospace; margin-bottom:18px; }
+  .live-tag { font-size:10px; font-weight:500; letter-spacing:0.1em; text-transform:uppercase; color:var(--accent); border:0.5px solid var(--accent-border); border-radius:999px; padding:2px 8px; }
+
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; }
+  @media (max-width:760px){ .cols{ grid-template-columns:1fr; } }
+
+  .col-label { display:inline-flex; align-items:center; gap:7px; font-size:11px; font-weight:500; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:12px; }
+  .col-label .tg { width:8px; height:8px; border-radius:50%; }
+  .before .tg{ background:var(--red); } .after .tg{ background:var(--green); }
+  .before .col-label{ color:#c98d8f; } .after .col-label{ color:#7fcf9e; }
+
+  .surface { background:var(--bg); border:0.5px solid var(--hairline); border-radius:20px; padding:20px; min-height:120px; }
+  .cp-card { background:var(--card); border:0.5px solid var(--hairline); border-radius:12px; }
+  .eyebrow { font-size:10px; font-weight:500; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-muted); }
+  .replay { margin-top:12px; display:inline-flex; align-items:center; gap:7px; font-family:"Space Grotesk"; font-size:12px; font-weight:500; color:var(--ink); background:var(--subtle); border:0.5px solid var(--hairline); border-radius:999px; padding:8px 14px; cursor:pointer; user-select:none; transition:transform .12s var(--ease-out), border-color .2s; }
+  .replay:hover { border-color:var(--accent-border); }
+  .replay:active { transform:scale(0.96); }
+  .hint { font-size:11px; color:var(--ink-faint); margin-top:8px; font-family:"Space Grotesk",monospace; }
+
+  /* ---------- shared bits ---------- */
+  .tile { display:flex; flex-direction:column; gap:14px; padding:18px; min-height:120px; border-radius:12px; background:var(--card); border:0.5px solid var(--hairline); cursor:pointer; }
+  .tile .ic { width:42px; height:42px; border-radius:10px; background:var(--icon-bg); color:var(--accent); display:flex; align-items:center; justify-content:center; }
+  .tile .t { font-size:15px; font-weight:500; letter-spacing:-0.2px; }
+  .tile .d { font-size:12px; color:var(--ink-muted); margin-top:3px; }
+  .row-bottom { margin-top:auto; display:flex; align-items:center; }
+  .arrow { margin-left:auto; color:var(--ink-faint); }
+
+  /* ===== P0·1 press contract (LIVE) ===== */
+  .tile-before { transition:transform .2s var(--ease-out), border-color .2s, background-color .2s; }
+  .tile-before:hover { transform:translateY(-2px); border-color:var(--accent-border); background:var(--subtle); }
+  /* touch: nothing meaningful — simulate "instant, no press" */
+  .tile-before:active { }
+  .tile-after { transition:transform .15s var(--ease-out), border-color .15s var(--ease-out), background-color .15s var(--ease-out); }
+  .tile-after:hover { border-color:var(--accent-border); }
+  .tile-after:active { transform:scale(0.97); border-color:var(--accent); background:var(--subtle); }
+
+  /* ===== P0·2 staggered entrance (LIVE / replay) ===== */
+  .stage { position:relative; }
+  .stagger-header, .stagger-item { opacity:1; }
+  .run-before .stagger-header, .run-before .stagger-item { animation:none; }
+  @keyframes settleUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  .run-after .stagger-header { animation:settleUp .30s var(--ease-out) both; }
+  .run-after .stagger-item { animation:settleUp .30s var(--ease-out) both; }
+  .run-after .stagger-item:nth-child(2){ animation-delay:.05s; }
+  .run-after .stagger-item:nth-child(3){ animation-delay:.10s; }
+  .run-after .stagger-item:nth-child(4){ animation-delay:.15s; }
+  .run-after .stagger-item:nth-child(5){ animation-delay:.20s; }
+  .mini-strip { display:flex; align-items:center; gap:8px; padding:11px 14px; border-radius:10px; background:var(--card); border:0.5px solid var(--hairline); font-size:13px; margin-bottom:12px; }
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 6px rgba(46,204,113,0.6); flex:none; }
+  .mini-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .mini-tile { background:var(--card); border:0.5px solid var(--hairline); border-radius:12px; padding:14px; min-height:74px; }
+  .mini-tile.prime { grid-column:1/3; background:var(--accent-light); border-color:var(--accent-border); }
+  .mini-tile .mt { font-size:13px; font-weight:500; }
+  .mini-tile .md { font-size:11px; color:var(--ink-muted); margin-top:2px; }
+
+  /* ===== P0·3 slot commit spring + tick (LIVE) ===== */
+  .slots { display:flex; gap:8px; }
+  .slot { flex:1; border-radius:10px; padding:10px 8px 11px; text-align:center; border:0.5px solid var(--hairline); background:transparent; cursor:pointer; position:relative; transition:background-color .18s var(--ease-out), border-color .18s var(--ease-out); }
+  .slot .sn { font-size:12px; font-weight:500; color:var(--ink-muted); }
+  .slot .st { font-size:10px; color:var(--ink-faint); margin-top:2px; }
+  .slot.on { background:var(--green-soft); border-color:rgba(46,204,113,0.4); }
+  .slot.on .sn { color:var(--green); }
+  .slot-before.on { /* colour only, linear-ish */ transition:background-color .18s ease, border-color .18s ease; }
+  .slot-before:active { }
+  .slot-after:active { transform:scale(0.97); }
+  .slot-after.on { animation:slotPop .34s var(--ease-pop) both; }
+  @keyframes slotPop { 0%{ transform:scale(0.9); } 60%{ transform:scale(1.04);} 100%{ transform:scale(1);} }
+  .tick { position:absolute; top:6px; right:6px; width:14px; height:14px; border-radius:50%; background:var(--green); color:#0d0d0d; display:none; align-items:center; justify-content:center; }
+  .slot.on .tick { display:flex; }
+  .slot-after.on .tick { animation:tickPop .32s var(--ease-pop) both; }
+  @keyframes tickPop { 0%{ transform:scale(0);} 100%{ transform:scale(1);} }
+
+  /* drop selection tick */
+  .selrow { display:flex; align-items:center; gap:14px; padding:15px 16px; border-radius:12px; border:0.5px solid var(--hairline); background:var(--card); cursor:pointer; transition:border-color .15s, background-color .15s; }
+  .selrow.sel { border-color:var(--accent); background:var(--accent-light); }
+  .selrow .cal { display:flex; flex-direction:column; align-items:center; min-width:40px; }
+  .selrow .cal .dw { font-size:9px; text-transform:uppercase; color:var(--ink-muted); }
+  .selrow .cal .dn { font-size:15px; font-weight:500; }
+  .selrow .info .tm { font-size:14px; font-weight:500; }
+  .selrow .info .rl { font-size:12px; color:var(--ink-muted); }
+  .selcircle { margin-left:auto; width:22px; height:22px; border-radius:50%; border:1.5px solid var(--hairline); display:flex; align-items:center; justify-content:center; color:#fff; }
+  .selrow.sel .selcircle { border-color:var(--accent); background:var(--accent); }
+  .selrow.sel.after-anim .selcircle { animation:tickPop .32s var(--ease-pop) both; }
+  .selrow .selcircle svg { opacity:0; }
+  .selrow.sel .selcircle svg { opacity:1; }
+
+  /* ===== P0·4 submit success beat (LIVE) ===== */
+  .btn { width:100%; border:none; border-radius:12px; padding:15px; font-family:"IBM Plex Sans"; font-weight:500; font-size:15px; color:#fff; background:var(--accent); cursor:pointer; }
+  .btn-before { transition:opacity .15s; }
+  .btn-before:hover { opacity:.9; }
+  .btn-after { transition:transform .12s var(--ease-out), opacity .15s; }
+  .btn-after:hover { opacity:.95; }
+  .btn-after:active { transform:scale(0.97); }
+  .success { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; min-height:150px; text-align:center; }
+  .success .ring { width:64px; height:64px; border-radius:50%; background:var(--green-soft); color:var(--green); display:flex; align-items:center; justify-content:center; }
+  .success.pop .ring { animation:cpPopIn .42s var(--ease-out) both; }
+  @keyframes cpPopIn { 0%{ transform:scale(0.4); opacity:0;} 60%{ transform:scale(1.08); opacity:1;} 100%{ transform:scale(1);} }
+  .success .msg { font-family:"Space Grotesk"; font-weight:500; font-size:18px; }
+  .success .sub { font-size:13px; color:var(--ink-muted); }
+  .swap-scene { position:relative; }
+
+  /* toast success pop */
+  .toast { display:inline-flex; align-items:center; gap:9px; background:var(--subtle); border:0.5px solid var(--hairline); border-radius:12px; padding:12px 15px; font-size:13px; font-weight:500; }
+  .toast .tk { width:20px; height:20px; border-radius:50%; background:var(--green-soft); color:var(--green); display:flex; align-items:center; justify-content:center; flex:none; }
+  .toast-before .tk { display:none; }
+  .toast.pop .tk { animation:cpPopIn .42s var(--ease-out) both; }
+
+  /* ===== P1·5 route transition (LIVE) ===== */
+  .viewport { position:relative; height:180px; border-radius:14px; overflow:hidden; border:0.5px solid var(--hairline); background:var(--card); }
+  .screen { position:absolute; inset:0; padding:18px; }
+  .screen h4 { font-family:"Space Grotesk"; font-weight:500; font-size:17px; margin-bottom:6px; }
+  .screen p { font-size:12px; color:var(--ink-muted); }
+  .screen .back { font-size:12px; color:var(--ink-muted); margin-bottom:14px; display:inline-flex; align-items:center; gap:6px; }
+  .scr-hub { background:var(--card); }
+  .scr-spoke { background:var(--subtle); }
+  /* before: instant swap */
+  .vp-before .scr-spoke { display:none; }
+  .vp-before.at-spoke .scr-spoke { display:block; }
+  .vp-before.at-spoke .scr-hub { display:none; }
+  /* after: directional slide */
+  .vp-after .scr-spoke { transform:translateX(100%); transition:transform .24s var(--ease-out); }
+  .vp-after .scr-hub  { transform:translateX(0); transition:transform .24s var(--ease-out); }
+  .vp-after.at-spoke .scr-spoke { transform:translateX(0); }
+  .vp-after.at-spoke .scr-hub  { transform:translateX(-16%); }
+
+  /* ===== P1·6 button hierarchy (static) ===== */
+  .btnset { display:flex; flex-direction:column; gap:10px; }
+  .b { border-radius:12px; padding:13px 16px; font-family:"IBM Plex Sans"; font-weight:500; font-size:14px; text-align:center; cursor:pointer; border:0.5px solid transparent; }
+  .b-primary { background:var(--accent); color:#fff; }
+  .b-secondary { background:var(--card); border-color:var(--hairline); color:var(--ink); }
+  .b-ghost { background:transparent; color:var(--ink-muted); }
+  .b-danger { background:var(--red); color:#fff; }
+  .b-after { transition:transform .12s var(--ease-out), border-color .15s, opacity .15s; }
+  .b-after:active { transform:scale(0.97); }
+  .b-after.b-secondary:active { border-color:var(--accent); }
+  .b-before { }
+  .heights { font-size:11px; color:var(--ink-faint); font-family:"Space Grotesk",monospace; margin-top:10px; }
+
+  .foot { color:var(--ink-muted); font-size:12px; margin-top:52px; border-top:0.5px solid var(--hairline); padding-top:20px; }
+  svg { display:block; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>crewplan<span class="dot">.</span> staff — life &amp; interaction</h1>
+  <p class="lede">Before/after pairs for <strong>STAFF_LIFE_REVIEW.md</strong>. Motion recommendations render as <strong>live demos</strong> — hover, press, or hit “Replay”. Built on CrewPlan's real <code>.cp-staff</code> tokens and the four app easings (<code>--ease-out / -in-out / -drawer / -pop</code>), dark-first, no shadows or gradients.</p>
+  <p class="method">All motion is cause-and-effect and reduced-motion-safe by design (each demo collapses to a fade if you enable “Reduce motion” in your OS). “Before” reflects what the cited source renders today.</p>
+
+  <!-- P0·1 press contract -->
+  <section class="pair">
+    <div class="pair-head"><span class="pair-num">P0 · 1</span><span class="pair-title">A press contract on every tappable surface</span><span class="live-tag">live · press me</span></div>
+    <p class="pair-why">Hub tiles animate on <em>hover</em> (desktop only) and give a touch user nothing on press. After: press-scale + material response (border→accent, bg lift) within 100ms — Apple's "feedback under 100ms". Press each card.</p>
+    <p class="pair-src">source: components/staff/hub-tile.tsx:19 (hover:-translate-y-0.5)</p>
+    <div class="cols">
+      <div class="before">
+        <div class="col-label"><span class="tg"></span>Before — today</div>
+        <div class="surface">
+          <div class="tile tile-before">
+            <span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M16 3v4M8 3v4M4 11h16"/></svg></span>
+            <div><div class="t">My shifts</div><div class="d">Your published rota</div></div>
+            <div class="row-bottom"><span class="arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6l-6 6"/></svg></span></div>
+          </div>
+          <div class="hint">hover lifts; on touch → no press feedback</div>
+        </div>
+      </div>
+      <div class="after">
+        <div class="col-label"><span class="tg"></span>After — proposed</div>
+        <div class="surface">
+          <div class="tile tile-after">
+            <span class="ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M16 3v4M8 3v4M4 11h16"/></svg></span>
+            <div><div class="t">My shifts</div><div class="d">Your published rota</div></div>
+            <div class="row-bottom"><span class="arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6l-6 6"/></svg></span></div>
+          </div>
+          <div class="hint">press → scale 0.97 + border/bg material response</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- P0·2 staggered entrance -->
+  <section class="pair">
+    <div class="pair-head"><span class="pair-num">P0 · 2</span><span class="pair-title">Give every screen an entrance</span><span class="live-tag">live · replay</span></div>
+    <p class="pair-why">Today content teleports in after the fetch resolves. After: header then cards settle up ~8px with a 50ms stagger (260–320ms, <code>--ease-out</code>) — the onboarding <code>obInFwd</code> vocabulary, ported to the staff shell. The single biggest "feels alive" win on app open.</p>
+    <p class="pair-src">source: hub/page.tsx:304–414 (renders with no entrance) · reference: globals.css:520 obInFwd</p>
+    <div class="cols">
+      <div class="before">
+        <div class="col-label"><span class="tg"></span>Before — today</div>
+        <div class="surface stage run-before" id="stageBefore">
+          <div class="stagger-header eyebrow" style="margin-bottom:12px">Hi, David</div>
+          <div class="mini-strip stagger-item"><span class="dot"></span>Bar So16</div>
+          <div class="mini-grid">
+            <div class="mini-tile prime stagger-item"><div class="mt">Submit your availability</div><div class="md">Tell us when you can work next week</div></div>
+            <div class="mini-tile stagger-item"><div class="mt">My shifts</div><div class="md">3 shifts</div></div>
+            <div class="mini-tile stagger-item"><div class="mt">Drop / swap</div><div class="md">Nothing pending</div></div>
+          </div>
+          <button class="replay" onclick="replayStage('stageBefore')">↻ Replay</button>
+          <div class="hint">all appears at once</div>
+        </div>
+      </div>
+      <div class="after">
+        <div class="col-label"><span class="tg"></span>After — proposed</div>
+        <div class="surface stage run-after" id="stageAfter">
+          <div class="stagger-header eyebrow" style="margin-bottom:12px">Hi, David</div>
+          <div class="mini-strip stagger-item"><span class="dot"></span>Bar So16</div>
+          <div class="mini-grid">
+            <div class="mini-tile prime stagger-item"><div class="mt">Submit your availability</div><div class="md">Tell us when you can work next week</div></div>
+            <div class="mini-tile stagger-item"><div class="mt">My shifts</div><div class="md">3 shifts</div></div>
+            <div class="mini-tile stagger-item"><div class="mt">Drop / swap</div><div class="md">Nothing pending</div></div>
+          </div>
+          <button class="replay" onclick="replayStage('stageAfter')">↻ Replay</button>
+          <div class="hint">staggered settle-up, 50ms apart</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- P0·3 slot commit spring -->
+  <section class="pair">
+    <div class="pair-head"><span class="pair-num">P0 · 3</span><span class="pair-title">Spring the commit — availability slot &amp; drop selection</span><span class="live-tag">live · tap me</span></div>
+    <p class="pair-why">Committing an answer should feel like it snaps into place. Today the slot changes colour on a linear settle. After: a small <code>--ease-pop</code> overshoot on the chosen fill + a tick that pops in (the onboarding <code>.ob-card.sel</code> reference). Tap the slots.</p>
+    <p class="pair-src">source: availability/page.tsx:472 (slot) · drop/page.tsx:340 (selection tick) · reference: globals.css:550</p>
+    <div class="cols">
+      <div class="before">
+        <div class="col-label"><span class="tg"></span>Before — today</div>
+        <div class="surface">
+          <div class="cp-card" style="padding:16px">
+            <div class="slots">
+              <div class="slot slot-before" onclick="this.classList.toggle('on')"><div class="sn">Day</div><div class="st">9am–5pm</div><span class="tick"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><path d="M5 12l5 5l10-10"/></svg></span></div>
+              <div class="slot slot-before" onclick="this.classList.toggle('on')"><div class="sn">Evening</div><div class="st">5pm–close</div><span class="tick"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><path d="M5 12l5 5l10-10"/></svg></span></div>
+            </div>
+          </div>
+          <div class="hint">colour swap only, linear settle</div>
+        </div>
+      </div>
+      <div class="after">
+        <div class="col-label"><span class="tg"></span>After — proposed</div>
+        <div class="surface">
+          <div class="cp-card" style="padding:16px">
+            <div class="slots">
+              <div class="slot slot-after" onclick="this.classList.toggle('on')"><div class="sn">Day</div><div class="st">9am–5pm</div><span class="tick"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><path d="M5 12l5 5l10-10"/></svg></span></div>
+              <div class="slot slot-after" onclick="this.classList.toggle('on')"><div class="sn">Evening</div><div class="st">5pm–close</div><span class="tick"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><path d="M5 12l5 5l10-10"/></svg></span></div>
+            </div>
+          </div>
+          <div class="hint">pop-scale on commit + tick pop-in</div>
+        </div>
+      </div>
+    </div>
+    <div class="cols" style="margin-top:18px">
+      <div class="before">
+        <div class="surface">
+          <div class="selrow" onclick="this.classList.toggle('sel')">
+            <div class="cal"><span class="dw">Thu</span><span class="dn">28</span></div>
+            <div class="info"><div class="tm">5pm – close</div><div class="rl">Bartender · evening</div></div>
+            <span class="selcircle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5l10-10"/></svg></span>
+          </div>
+          <div class="hint">drop select: tick appears, no motion</div>
+        </div>
+      </div>
+      <div class="after">
+        <div class="surface">
+          <div class="selrow after-anim" onclick="this.classList.toggle('sel')">
+            <div class="cal"><span class="dw">Thu</span><span class="dn">28</span></div>
+            <div class="info"><div class="tm">5pm – close</div><div class="rl">Bartender · evening</div></div>
+            <span class="selcircle"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5l10-10"/></svg></span>
+          </div>
+          <div class="hint">drop select: tick pops in — picking feels decisive</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- P0·4 land the key moments -->
+  <section class="pair">
+    <div class="pair-head"><span class="pair-num">P0 · 4</span><span class="pair-title">Land the key moments — submit &amp; claim</span><span class="live-tag">live · trigger</span></div>
+    <p class="pair-why">Submitting availability just navigates away; claiming fires a bare text toast. After: the existing <code>cp-pop-in</code> success check plays once on submit, and the approved-claim toast gets a check that pops. Earned beats, never looped. Hit the buttons.</p>
+    <p class="pair-src">source: availability/page.tsx:338 (router.push, no beat) · drop/page.tsx:181 · toast.tsx (no glyph) · reference: globals.css:426 cp-pop-in</p>
+    <div class="cols">
+      <div class="before">
+        <div class="col-label"><span class="tg"></span>Before — today</div>
+        <div class="surface" id="submitBefore">
+          <button class="btn btn-before" onclick="document.getElementById('sbState').textContent='→ navigated to /submitted (no beat)';">Submit availability</button>
+          <div class="hint" id="sbState" style="margin-top:14px">instant navigation, nothing lands</div>
+          <div style="margin-top:16px"><span class="toast toast-before"><span class="tk"></span>You're on this shift!</span></div>
+          <div class="hint">claim toast: text only</div>
+        </div>
+      </div>
+      <div class="after">
+        <div class="col-label"><span class="tg"></span>After — proposed</div>
+        <div class="surface" id="submitAfter">
+          <div id="afterBtnWrap"><button class="btn btn-after" onclick="playSubmit()">Submit availability</button></div>
+          <div class="success" id="submitSuccess" style="display:none">
+            <span class="ring"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5l10-10"/></svg></span>
+            <div><div class="msg">Availability sent</div><div class="sub">Your manager has it for next week</div></div>
+          </div>
+          <div style="margin-top:16px"><span class="toast" id="claimToast"><span class="tk"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l5 5l10-10"/></svg></span>You're on this shift!</span></div>
+          <button class="replay" onclick="popToast()">↻ Replay claim toast</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- P1·5 route transition -->
+  <section class="pair">
+    <div class="pair-head"><span class="pair-num">P1 · 5</span><span class="pair-title">Directional route transitions (spatial continuity)</span><span class="live-tag">live · navigate</span></div>
+    <p class="pair-why">Hub↔spoke swaps instantly, so there's no sense of depth. After: forward slides in from the right, back returns it — ~240ms <code>--ease-out</code>, reduced-motion → crossfade. Tap “Open My shifts” / “Back”.</p>
+    <p class="pair-src">source: every spoke navigates via next/link with no transition (e.g. hub-tile.tsx:17)</p>
+    <div class="cols">
+      <div class="before">
+        <div class="col-label"><span class="tg"></span>Before — today</div>
+        <div class="surface">
+          <div class="viewport vp-before" id="vpBefore">
+            <div class="screen scr-hub"><div class="eyebrow" style="margin-bottom:10px">Hub</div><h4>Hi, David</h4><p>Tap a destination.</p><div style="margin-top:14px"><button class="replay" onclick="document.getElementById('vpBefore').classList.add('at-spoke')">Open My shifts →</button></div></div>
+            <div class="screen scr-spoke"><div class="back">‹ Back</div><h4>My shifts</h4><p>Your published rota.</p><div style="margin-top:14px"><button class="replay" onclick="document.getElementById('vpBefore').classList.remove('at-spoke')">‹ Back to hub</button></div></div>
+          </div>
+          <div class="hint">instant cut — no direction</div>
+        </div>
+      </div>
+      <div class="after">
+        <div class="col-label"><span class="tg"></span>After — proposed</div>
+        <div class="surface">
+          <div class="viewport vp-after" id="vpAfter">
+            <div class="screen scr-hub"><div class="eyebrow" style="margin-bottom:10px">Hub</div><h4>Hi, David</h4><p>Tap a destination.</p><div style="margin-top:14px"><button class="replay" onclick="document.getElementById('vpAfter').classList.add('at-spoke')">Open My shifts →</button></div></div>
+            <div class="screen scr-spoke"><div class="back">‹ Back</div><h4>My shifts</h4><p>Your published rota.</p><div style="margin-top:14px"><button class="replay" onclick="document.getElementById('vpAfter').classList.remove('at-spoke')">‹ Back to hub</button></div></div>
+          </div>
+          <div class="hint">forward slides in from right, back slides out</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- P1·6 button hierarchy -->
+  <section class="pair">
+    <div class="pair-head"><span class="pair-num">P1 · 6</span><span class="pair-title">One button interaction contract</span><span class="live-tag">live · press</span></div>
+    <p class="pair-why">Same-looking buttons feel different — some have <code>active:scale</code>, primaries have only <code>transition-opacity</code>, heights wander around 44px. After: one contract — clear tiers (primary / secondary / ghost / destructive) all with press-scale within 100ms and consistent height. Press them.</p>
+    <p class="pair-src">source: availability/page.tsx:587 · leave/page.tsx:216 · drop/page.tsx:447,495 (uneven feedback)</p>
+    <div class="cols">
+      <div class="before">
+        <div class="col-label"><span class="tg"></span>Before — today</div>
+        <div class="surface">
+          <div class="btnset">
+            <div class="b b-before b-primary" style="opacity:1">Submit availability</div>
+            <div class="b b-before b-secondary" style="padding:11px 16px">Add all shifts to calendar</div>
+            <div class="b b-before b-danger" style="padding:11px 16px">Drop shift</div>
+          </div>
+          <div class="heights">mixed: py-[15px] vs py-2.5 · opacity-only vs scale · no uniform press</div>
+        </div>
+      </div>
+      <div class="after">
+        <div class="col-label"><span class="tg"></span>After — proposed</div>
+        <div class="surface">
+          <div class="btnset">
+            <div class="b b-after b-primary">Submit availability</div>
+            <div class="b b-after b-secondary">Add all shifts to calendar</div>
+            <div class="b b-after b-danger">Drop shift</div>
+            <div class="b b-after b-ghost">Cancel</div>
+          </div>
+          <div class="heights">one height, one press contract (scale 0.97), clear tiers</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">Companion to STAFF_LIFE_REVIEW.md. Live demos use CSS transitions/keyframes and the app's own easing tokens — no library, no shadows, no gradients. Every effect is cause-and-effect (user-triggered) and collapses to a fade under <code>prefers-reduced-motion</code>. No app source was modified to produce this file.</p>
+</div>
+
+<script>
+  function replayStage(id){
+    var el = document.getElementById(id);
+    var isAfter = el.classList.contains('run-after');
+    el.classList.remove('run-after','run-before');
+    // force reflow so the animation restarts
+    void el.offsetWidth;
+    el.classList.add(isAfter ? 'run-after' : 'run-before');
+  }
+  function playSubmit(){
+    document.getElementById('afterBtnWrap').style.display='none';
+    var s = document.getElementById('submitSuccess');
+    s.style.display='flex';
+    void s.offsetWidth;
+    s.classList.add('pop');
+    setTimeout(function(){
+      s.style.display='none'; s.classList.remove('pop');
+      document.getElementById('afterBtnWrap').style.display='block';
+    }, 2200);
+  }
+  function popToast(){
+    var t = document.getElementById('claimToast');
+    t.classList.remove('pop'); void t.offsetWidth; t.classList.add('pop');
+  }
+</script>
+</body>
+</html>

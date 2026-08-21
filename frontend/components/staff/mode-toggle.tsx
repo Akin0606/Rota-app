@@ -31,7 +31,9 @@ export default function ModeToggle({ venueToken }: { venueToken: string }) {
       type="button"
       onClick={toggle}
       aria-label="Toggle light or dark mode"
-      className="cp-hairline relative h-7 w-[52px] shrink-0 rounded-full bg-cp-icon transition-colors duration-[350ms]"
+      // 28px visual, but an invisible ~44px hit area (before:-inset-2) so it
+      // clears the touch-target minimum without changing the look.
+      className="cp-hairline relative h-7 w-[52px] shrink-0 rounded-full bg-cp-icon transition-colors duration-[350ms] before:absolute before:-inset-2 before:content-['']"
     >
       <span className="cp-knob absolute left-[2.5px] top-[2.5px] flex h-[22px] w-[22px] items-center justify-center rounded-full bg-accent text-white">
         <Icon name="moon" size={13} className="cp-knob-moon" />
