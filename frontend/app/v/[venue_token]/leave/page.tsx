@@ -214,7 +214,7 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
 
       <button
         onClick={openRequest}
-        className="mb-6 flex w-full items-center justify-center gap-2 rounded-cp-panel bg-accent p-3.5 text-[14px] font-medium tracking-[-0.1px] text-white transition-opacity duration-150 hover:opacity-90"
+        className="mb-6 flex w-full items-center justify-center gap-2 rounded-cp-panel bg-accent p-3.5 text-[14px] font-medium tracking-[-0.1px] text-white transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-[0.99]"
       >
         <Icon name="plus" size={17} />
         Request time off

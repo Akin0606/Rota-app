@@ -28,13 +28,18 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
   // PIN entry
   const [pin, setPin] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Inline, persistent field error — a wrong PIN/code shouldn't just flash a
+  // toast that vanishes in 2.5s with no lasting hint next to the field.
+  const [pinError, setPinError] = useState<string | null>(null);
 
   // Join flow
   const [joinCode, setJoinCode] = useState("");
   const [joinName, setJoinName] = useState("");
   const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [revealPin, setRevealPin] = useState<string | null>(null);
   const [revealName, setRevealName] = useState<string>("");
+  const [copied, setCopied] = useState(false);
 
   // Device "remember me" (§3): a returning staffer on this phone skips PIN
   // entry. On ?expired (a 401 elsewhere) the stored token is stale — clear it
@@ -82,10 +87,11 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
 
   async function handleContinue() {
     if (!/^\d{4}$/.test(pin)) {
-      showToast("Enter your 4-digit PIN");
+      setPinError("Enter your 4-digit PIN");
       return;
     }
     setSubmitting(true);
+    setPinError(null);
     try {
       await authenticatePin(venue_token, pin);
       // Remember this device so the PIN becomes recovery-only next time.
@@ -93,11 +99,11 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
       router.push(`/v/${venue_token}/hub`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
-        showToast(err.message);
+        setPinError(err.message);
       } else if (err instanceof ApiError && err.status === 401) {
-        showToast("Incorrect PIN");
+        setPinError("That PIN didn't match. Try again.");
       } else {
-        showToast("Something went wrong");
+        setPinError("Something went wrong. Try again.");
       }
     } finally {
       setSubmitting(false);
@@ -106,14 +112,15 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
 
   async function handleJoin() {
     if (!/^\d{4}$/.test(joinCode)) {
-      showToast("Enter the 4-digit join code");
+      setJoinError("Enter the 4-digit join code");
       return;
     }
     if (!joinName.trim()) {
-      showToast("Enter your name");
+      setJoinError("Enter your name");
       return;
     }
     setJoining(true);
+    setJoinError(null);
     try {
       const res = await joinTeam(venue_token, joinCode, joinName.trim());
       rememberDevice(res.pin);
@@ -121,17 +128,27 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
       setRevealPin(res.pin);
       setMode("reveal");
     } catch (err) {
-      if (err instanceof ApiError && err.status === 429) {
-        showToast(err.message);
-      } else if (err instanceof ApiError && err.status === 401) {
-        showToast("Incorrect join code");
-      } else if (err instanceof ApiError && err.status === 403) {
-        showToast(err.message);
+      if (err instanceof ApiError && err.status === 401) {
+        setJoinError("That join code didn't match. Check with your manager.");
+      } else if (err instanceof ApiError && (err.status === 429 || err.status === 403)) {
+        setJoinError(err.message);
       } else {
-        showToast("Something went wrong");
+        setJoinError("Something went wrong. Try again.");
       }
     } finally {
       setJoining(false);
+    }
+  }
+
+  async function copyPin() {
+    if (!revealPin) return;
+    try {
+      await navigator.clipboard.writeText(revealPin);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard blocked (insecure context / permissions) — the PIN is still
+      // on screen to read, so this is a soft failure, not worth an error.
     }
   }
 
@@ -190,16 +207,31 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
                 <div className="mb-1.5 text-center text-2xl font-medium text-ink">{venueName}</div>
                 <div className="mb-8 text-sm text-ink-muted">Enter your 4-digit PIN</div>
 
-                <input
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                  onKeyDown={(e) => e.key === "Enter" && handleContinue()}
-                  inputMode="numeric"
-                  autoFocus
-                  maxLength={4}
-                  placeholder="••••"
-                  className="cp-hairline mb-6 w-full rounded-cp-control bg-surface-subtle px-4 py-3.5 text-center text-2xl font-medium tracking-[0.5em] text-ink outline-none focus:border-accent"
-                />
+                <div className="mb-6 w-full">
+                  <input
+                    value={pin}
+                    onChange={(e) => {
+                      setPin(e.target.value.replace(/\D/g, "").slice(0, 4));
+                      if (pinError) setPinError(null);
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && handleContinue()}
+                    inputMode="numeric"
+                    autoFocus
+                    maxLength={4}
+                    placeholder="••••"
+                    aria-invalid={pinError ? true : undefined}
+                    className={`w-full rounded-cp-control bg-surface-subtle px-4 py-3.5 text-center text-2xl font-medium tracking-[0.5em] text-ink outline-none ${
+                      pinError
+                        ? "border-[0.5px] border-cp-red"
+                        : "cp-hairline focus:border-accent"
+                    }`}
+                  />
+                  {pinError && (
+                    <div role="alert" className="mt-2 text-center text-[13px] text-cp-red">
+                      {pinError}
+                    </div>
+                  )}
+                </div>
 
                 <button
                   onClick={handleContinue}
@@ -234,21 +266,34 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
 
                 <input
                   value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  onChange={(e) => {
+                    setJoinCode(e.target.value.replace(/\D/g, "").slice(0, 4));
+                    if (joinError) setJoinError(null);
+                  }}
                   inputMode="numeric"
                   autoFocus
                   maxLength={4}
                   placeholder="Join code"
                   className="cp-hairline mb-3 w-full rounded-cp-control bg-surface-subtle px-4 py-3.5 text-center text-xl font-medium tracking-[0.4em] text-ink outline-none focus:border-accent"
                 />
-                <input
-                  value={joinName}
-                  onChange={(e) => setJoinName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleJoin()}
-                  maxLength={80}
-                  placeholder="Your name"
-                  className="cp-hairline mb-6 w-full rounded-cp-control bg-surface-subtle px-4 py-3.5 text-center text-lg font-medium text-ink outline-none focus:border-accent"
-                />
+                <div className="mb-6 w-full">
+                  <input
+                    value={joinName}
+                    onChange={(e) => {
+                      setJoinName(e.target.value);
+                      if (joinError) setJoinError(null);
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && handleJoin()}
+                    maxLength={80}
+                    placeholder="Your name"
+                    className="cp-hairline w-full rounded-cp-control bg-surface-subtle px-4 py-3.5 text-center text-lg font-medium text-ink outline-none focus:border-accent"
+                  />
+                  {joinError && (
+                    <div role="alert" className="mt-2 text-center text-[13px] text-cp-red">
+                      {joinError}
+                    </div>
+                  )}
+                </div>
 
                 <button
                   onClick={handleJoin}
@@ -280,9 +325,25 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
                 <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-ink-muted">
                   Your PIN
                 </div>
-                <div className="mb-7 rounded-cp-card bg-accent-light px-8 py-5 text-[40px] font-medium tracking-[0.32em] text-accent">
+                <div className="mb-4 rounded-cp-card bg-accent-light px-8 py-5 text-[40px] font-medium tracking-[0.32em] text-accent">
                   {revealPin}
                 </div>
+
+                <button
+                  onClick={copyPin}
+                  className="mb-7 inline-flex items-center gap-1.5 text-[13px] font-medium text-accent transition-transform duration-150 active:scale-[0.97]"
+                >
+                  {copied ? (
+                    <>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 12l5 5l10 -10" />
+                      </svg>
+                      Copied
+                    </>
+                  ) : (
+                    "Copy PIN"
+                  )}
+                </button>
 
                 <button
                   onClick={() => router.push(`/v/${venue_token}/availability`)}

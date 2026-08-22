@@ -41,6 +41,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastTone, setToastTone] = useState<"success" | undefined>(undefined);
 
   // Progressive disclosure: the three action tiles stay dimmed and inert until
   // a shift is picked here.
@@ -104,8 +105,9 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [venue_token]);
 
-  function showToast(msg: string) {
+  function showToast(msg: string, tone?: "success") {
     setToast(msg);
+    setToastTone(tone);
     setTimeout(() => setToast(null), 3000);
   }
 
@@ -186,7 +188,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
       if (result.rota) setData(result.rota);
       setClaimTarget(null);
       if (result.status === "approved") {
-        showToast("You're on this shift!");
+        showToast("You're on this shift!", "success");
       } else {
         showToast(`Claim sent for manager approval${result.reason ? ` (${result.reason})` : ""}`);
       }
@@ -336,7 +338,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                 type="button"
                 aria-pressed={isSelected}
                 onClick={() => setSelectedId(isSelected ? null : a.id)}
-                className={`flex w-full items-center gap-3.5 rounded-cp-tile border-[0.5px] px-4 py-[15px] text-left transition-all duration-200 ${
+                className={`flex w-full items-center gap-3.5 rounded-cp-tile border-[0.5px] px-4 py-[15px] text-left transition-[border-color,background-color,transform] duration-200 active:scale-[0.99] ${
                   isSelected
                     ? "border-accent bg-accent-light"
                     : "border-hairline bg-surface-card hover:border-ink-faint hover:bg-surface-subtle"
@@ -344,11 +346,15 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
               >
                 {row}
                 <span
-                  className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] text-white transition-all duration-200 ${
+                  className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] text-white transition-[border-color,background-color] duration-200 ${
                     isSelected ? "border-accent bg-accent" : "border-hairline"
                   }`}
                 >
-                  {isSelected && <Icon name="check" size={12} strokeWidth={2.5} />}
+                  {isSelected && (
+                    <span className="cp-pop-in inline-flex">
+                      <Icon name="check" size={12} strokeWidth={2.5} />
+                    </span>
+                  )}
                 </span>
               </button>
             );
@@ -370,7 +376,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                 type="button"
                 disabled={!actionsActive}
                 onClick={() => runAction(action.key)}
-                className="cp-hairline rounded-cp-tile bg-surface-card px-3 py-[18px] text-center transition-all duration-200 hover:-translate-y-0.5 hover:border-accent"
+                className="cp-hairline rounded-cp-tile bg-surface-card px-3 py-[18px] text-center transition-[transform,border-color] duration-200 hover:-translate-y-0.5 hover:border-accent active:scale-[0.97]"
               >
                 <span className="mx-auto mb-2.5 flex h-10 w-10 items-center justify-center rounded-cp-control bg-cp-icon text-accent transition-colors duration-[350ms]">
                   <Icon name={action.icon} size={18} />
@@ -453,7 +459,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
               footer = (
                 <button
                   onClick={() => setClaimTarget(a)}
-                  className="w-full rounded-cp-control bg-accent py-3 text-center text-[13px] font-medium text-white transition-colors hover:bg-accent-hover"
+                  className="w-full rounded-cp-control bg-accent py-3 text-center text-[13px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-accent-hover active:scale-[0.98]"
                 >
                   Claim this shift
                 </button>
@@ -693,7 +699,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
         )}
       </Modal>
 
-      <Toast message={toast} />
+      <Toast message={toast} tone={toastTone} />
     </StaffScreen>
   );
 }

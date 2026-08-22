@@ -399,7 +399,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
             <button
               key={opt.weekStart}
               onClick={() => setSelectedWeek(opt.weekStart)}
-              className={`inline-flex min-h-[44px] shrink-0 items-center rounded-cp-slot px-3.5 py-2 text-[12px] font-medium transition-colors ${
+              className={`inline-flex min-h-[44px] shrink-0 items-center rounded-cp-slot px-3.5 py-2 text-[12px] font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.96] ${
                 active ? "bg-accent text-white" : "cp-hairline bg-surface-card text-ink-muted"
               }`}
             >
@@ -681,7 +681,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
             <button
               onClick={handleSubmit}
               disabled={submitting || weekLoading}
-              className="w-full rounded-cp-panel bg-accent py-[13px] text-[15px] font-medium tracking-[-0.1px] text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+              className="w-full rounded-cp-panel bg-accent py-[13px] text-[15px] font-medium tracking-[-0.1px] text-white transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-[0.99] disabled:opacity-60"
             >
               {submitting ? "Submitting…" : "Submit availability"}
             </button>

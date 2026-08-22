@@ -456,6 +456,16 @@ a:hover {
   }
 }
 
+/* Screen entrance — every staff screen (and every tab switch, since each
+   remounts) fades in on mount instead of teleporting in after the fetch.
+   Deliberately opacity-only: a transform on this wrapper would become the
+   containing block for its position:fixed descendants (the availability sticky
+   submit bar), glitching them for the animation's duration. Reduced motion is
+   handled by the global `.cp-staff *` duration collapse. */
+.cp-screen-enter {
+  animation: cp-fade-in 280ms var(--ease-out) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cp-overlay,
   .cp-overlay-card,

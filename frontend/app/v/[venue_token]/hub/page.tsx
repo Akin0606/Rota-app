@@ -49,6 +49,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastTone, setToastTone] = useState<"success" | undefined>(undefined);
 
   const [rota, setRota] = useState<StaffRota | null>(null);
 
@@ -87,8 +88,9 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [venue_token]);
 
-  function showToast(msg: string) {
+  function showToast(msg: string, tone?: "success") {
     setToast(msg);
+    setToastTone(tone);
     setTimeout(() => setToast(null), 3000);
   }
 
@@ -100,7 +102,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
       if (result.rota) setRota(result.rota);
       setAcceptTarget(null);
       if (result.status === "approved") {
-        showToast("You're on this shift!");
+        showToast("You're on this shift!", "success");
       } else {
         showToast(`Sent for manager approval${result.reason ? ` (${result.reason})` : ""}`);
       }
@@ -132,7 +134,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
       if (result.rota) setRota(result.rota);
       setAcceptSwapTarget(null);
       if (result.status === "approved") {
-        showToast("Swap complete — you're on the new shift!");
+        showToast("Swap complete — you're on the new shift!", "success");
       } else {
         showToast(`Sent for manager approval${result.reason ? ` (${result.reason})` : ""}`);
       }
@@ -463,7 +465,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
         )}
       </Modal>
 
-      <Toast message={toast} />
+      <Toast message={toast} tone={toastTone} />
     </StaffScreen>
   );
 }

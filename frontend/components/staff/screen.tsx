@@ -23,7 +23,7 @@ export default function StaffScreen({
       {/* Bottom clearance = tab bar (56px) + a little breathing room + safe
           area, so the last card never sits under the fixed nav. */}
       <div className="mx-auto w-full max-w-[440px] px-[22px] pb-[calc(64px+env(safe-area-inset-bottom))] pt-6">
-        <div className="pb-[26px]">{children}</div>
+        <div className="cp-screen-enter pb-[26px]">{children}</div>
       </div>
       {!hideNav && <StaffBottomNav />}
     </div>

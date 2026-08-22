@@ -8,7 +8,7 @@ export default function BackButton({ href, label = "Back" }: { href: string; lab
       href={href}
       // hover:!text-accent because globals.css has a bare `a:hover` rule that
       // ties on specificity and wins on source order.
-      className="flex items-center gap-1.5 text-[13px] text-ink-muted transition-colors hover:!text-accent"
+      className="inline-flex items-center gap-1.5 text-[13px] text-ink-muted transition-[color,transform] duration-150 active:scale-[0.96] hover:!text-accent"
     >
       <Icon name="arrow-left" size={15} />
       {label}
