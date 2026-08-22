@@ -24,6 +24,7 @@ import {
   createShift,
   deleteShift,
   getRules,
+  getShiftSchedule,
   getVenue,
   getVenueLeaveSettings,
   listPeriods,
@@ -51,9 +52,23 @@ function normTime(t: string): string {
   return t.trim().toLowerCase() === "close" ? "11:00pm" : t;
 }
 
+// Do the days this shift actually runs share one set of hours? If two open days
+// differ in start or end, the single representative time on the row is a lie —
+// the row shows "Varies by day" instead. Closed days aren't "varying hours"; a
+// shift open Fri–Sun at one time is still a single time.
+function hoursVaryByDay(days: { open: boolean; start_time: string | null; end_time: string | null }[]): boolean {
+  const open = days.filter((d) => d.open);
+  if (open.length <= 1) return false;
+  const first = open[0];
+  return open.some((d) => d.start_time !== first.start_time || d.end_time !== first.end_time);
+}
+
 export default function SettingsPage() {
   const [venue, setVenue] = useState<Venue | null>(null);
   const [shifts, setShifts] = useState<Shift[]>([]);
+  // Per-shift "do the hours differ across the days it runs?" — the row shows one
+  // representative time, so this flags when that single time is misleading.
+  const [shiftVaries, setShiftVaries] = useState<Record<string, boolean>>({});
   const [rules, setRules] = useState<SchedulingRules | null>(null);
   const [leaveSettings, setLeaveSettings] = useState<VenueLeaveSettings | null>(null);
 
@@ -139,6 +154,28 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [reloadToken]);
+
+  // Fetch each shift's per-day schedule (a background pass after the shifts
+  // themselves paint) to tell whether its open days share one set of hours. New
+  // `shifts` identity on every load — including a post-save reload — re-runs it,
+  // so "Varies by day" refreshes right after the editor saves. Per-shift
+  // failures fall back to "not varying" (show the representative time).
+  useEffect(() => {
+    if (shifts.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      shifts.map((s) =>
+        getShiftSchedule(s.id)
+          .then((sc) => [s.id, hoursVaryByDay(sc.days)] as const)
+          .catch(() => [s.id, false] as const),
+      ),
+    ).then((entries) => {
+      if (!cancelled) setShiftVaries(Object.fromEntries(entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [shifts]);
 
   const livePeriods = periods.filter((p) => p.status === "published" || p.status === "confirmed");
   const generatedPeriods = periods.filter((p) => p.status === "generated");
@@ -453,7 +490,7 @@ export default function SettingsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-semibold text-ink">{sh.name}</div>
                     <div className="truncate text-xs text-ink-faint">
-                      {sh.start_time} – {sh.end_time} · {sh.min_staff}
+                      {shiftVaries[sh.id] ? "Varies by day" : `${sh.start_time} – ${sh.end_time}`} · {sh.min_staff}
                       {sh.max_staff !== sh.min_staff ? `–${sh.max_staff}` : ""} staff
                     </div>
                   </div>
