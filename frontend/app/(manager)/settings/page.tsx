@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import ManagerIcon, { type ManagerIconName } from "@/components/manager/icon";
@@ -78,6 +78,7 @@ export default function SettingsPage() {
     role: null,
   });
   const [loading, setLoading] = useState(true);
+  const firstLoad = useRef(true);
   const [error, setError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
@@ -92,7 +93,13 @@ export default function SettingsPage() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      setLoading(true);
+      // Only the first load blanks the page. A reloadToken bump (e.g. after
+      // saving per-day hours) is a *background* refresh — keep the current UI
+      // on screen so a flaky-pool hiccup can't strand the manager on a blank
+      // "Something went wrong" screen and make them think the save was lost.
+      const isFirst = firstLoad.current;
+      firstLoad.current = false;
+      if (isFirst) setLoading(true);
       setError(false);
       try {
         const [venueRes, shiftsRes, rulesRes, periodsRes, staffRes, rolesRes] = await Promise.all([
@@ -118,9 +125,13 @@ export default function SettingsPage() {
         setStaffCount(staffRes.filter((m) => m.is_active).length);
         setRoles(rolesRes);
       } catch {
-        if (!cancelled) setError(true);
+        if (cancelled) return;
+        // A failed first load has nothing to show → the error screen. A failed
+        // background refresh keeps the last good data on screen.
+        if (isFirst) setError(true);
+        else showToast("Couldn't refresh — your saved changes are safe. Pull to reload if needed.");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && isFirst) setLoading(false);
       }
     }
     load();

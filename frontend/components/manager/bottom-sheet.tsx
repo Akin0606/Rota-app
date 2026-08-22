@@ -72,7 +72,12 @@ export default function BottomSheet({
 
         <div className="flex-1 overflow-y-auto px-5 py-5">{children}</div>
 
-        <div className="flex gap-2.5 border-t border-hairline px-5 py-4">{footer}</div>
+        {/* pb includes env(safe-area-inset-bottom) so the opaque sheet fills the
+            iOS home-indicator zone — otherwise the dark backdrop composites
+            behind the buttons under Safari's translucent toolbar as a shadow. */}
+        <div className="flex gap-2.5 border-t border-hairline px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          {footer}
+        </div>
       </div>
     </div>
   );
