@@ -326,16 +326,21 @@ function OnboardingWizard() {
     }
   }
 
-  // Two named shifts (Day / Evening) split at 17:00 — the app schedules named
-  // shifts, not raw opening hours — but their real per-day hours + closed days
-  // come from the captured `days` and land in `shift_days` (the per-day model),
-  // not a single hardcoded weekday pair. A closed day emits no row (the solver's
-  // existence gate then never schedules it). Idempotent.
+  // Two named shifts (Day / Evening) — the app schedules named shifts, not raw
+  // opening hours — but their real per-day hours + closed days come from the
+  // captured `days` and land in `shift_days` (the per-day model), not a single
+  // hardcoded weekday pair. A closed day emits no row (the solver's existence
+  // gate then never schedules it). The changeover boundary is venue-type-derived
+  // (Dan's review): a restaurant/café turns over service late afternoon (17:00),
+  // but a wet-led pub/bar/hotel doesn't change gear until the evening trade
+  // builds (~18:00), so a 17:00 split would put prime early-evening trade on the
+  // day crew. The manager can rename these or add more shifts in Settings.
+  // Idempotent.
   async function persistShifts() {
     const existing = await listShifts().catch(() => []);
     if (existing.length > 0) return;
 
-    const SPLIT = "17:00"; // Day/Evening boundary, 5pm
+    const SPLIT = venue === "resto" || venue === "cafe" ? "17:00" : "18:00"; // Day/Evening boundary
     const toMin = (t: string) => {
       const [h, m] = t.split(":").map(Number);
       return h * 60 + (m || 0);

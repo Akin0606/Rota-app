@@ -60,7 +60,7 @@ export default function AdminVenuesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [resendingFor, setResendingFor] = useState<string | null>(null);
-  const [loginLink, setLoginLink] = useState<string | null>(null);
+  const [loginLink, setLoginLink] = useState<{ email: string; url: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,7 +122,7 @@ export default function AdminVenuesPage() {
     setResendingFor(email);
     try {
       const res = await resendPendingManagerLoginLink(email);
-      setLoginLink(res.login_url);
+      setLoginLink({ email, url: res.login_url });
     } catch (err) {
       showToast(err instanceof AdminApiError ? err.message : "Could not create login link");
     } finally {
@@ -342,22 +342,34 @@ export default function AdminVenuesPage() {
         )}
       </Modal>
 
-      <Modal open={!!loginLink} onClose={() => setLoginLink(null)} title="Login link">
-        <div className="mb-3 text-[13px] text-ink-muted">
-          One-time link for them to sign in and finish onboarding. Send it directly — don&apos;t
-          share it anywhere public.
+      <Modal open={!!loginLink} onClose={() => setLoginLink(null)} title="Invite sent">
+        <div className="mb-4 flex flex-col items-center text-center">
+          <div className="cp-pop-in mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-avail-bg text-avail-text">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </div>
+          <div className="text-[15px] font-semibold text-ink">Onboarding link emailed</div>
+          <div className="mt-1 text-[13px] text-ink-muted">
+            We sent a one-time sign-in link to{" "}
+            <span className="font-semibold text-ink">{loginLink?.email}</span>. It works for 7 days.
+          </div>
+        </div>
+        <div className="mb-3 rounded-[10px] border border-hairline bg-surface-subtle px-3.5 py-2.5 text-[12px] text-ink-muted">
+          Not received? Emails only deliver reliably once the Resend domain is verified. You can copy
+          the link below and send it to them directly — don&apos;t share it anywhere public.
         </div>
         <div className="mb-4 break-all rounded-[10px] border border-hairline bg-surface-subtle px-3.5 py-2.5 text-[12px] text-ink-label">
-          {loginLink}
+          {loginLink?.url}
         </div>
         <button
           onClick={() => {
-            if (loginLink) navigator.clipboard.writeText(loginLink);
+            if (loginLink) navigator.clipboard.writeText(loginLink.url);
             showToast("Link copied");
           }}
-          className="w-full rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-white"
+          className="w-full rounded-xl border border-hairline py-3 text-center text-sm font-semibold text-ink"
         >
-          Copy link
+          Copy link instead
         </button>
       </Modal>
 

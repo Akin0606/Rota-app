@@ -389,13 +389,14 @@ export default function SettingsPage() {
               <ManagerIcon name="info-circle" size={16} />
               <span>
                 We set your evening shifts to a placeholder <span className="font-semibold">11pm</span> close.
-                Tap <span className="font-semibold">Hours</span> on each shift to enter the real closing time
+                Tap <span className="font-semibold">Days &amp; hours</span> on each shift to enter the real closing time
                 (a 1am or 2:30am close is fine) — this clears once you save.
               </span>
             </div>
           )}
           <div className="mb-4 text-[13px] text-ink-faint">
-            Name and default time live here. Use <span className="font-semibold text-ink">Hours</span> to set
+            We started you with a Day and an Evening shift — rename them or add more (e.g. a lunch
+            service) here. Use <span className="font-semibold text-ink">Days &amp; hours</span> to set
             which days a shift runs and different hours per day (e.g. a later close on weekends). Max
             hours/week and min rest live in{" "}
             <a href="/scheduler" className="font-semibold text-accent">
@@ -436,30 +437,33 @@ export default function SettingsPage() {
                   </button>
                 </div>
               ) : (
-                <div key={sh.id} className="flex items-center gap-2.5 rounded-[10px] bg-surface-subtle px-3.5 py-3">
+                <div key={sh.id} className="flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-[10px] bg-surface-subtle px-3.5 py-3">
                   <div className="h-6 w-1 shrink-0 rounded-sm" style={{ background: sh.color }} />
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold text-ink">{sh.name}</div>
-                    <div className="text-xs text-ink-faint">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-ink">{sh.name}</div>
+                    <div className="truncate text-xs text-ink-faint">
                       {sh.start_time} – {sh.end_time} · {sh.min_staff}
                       {sh.max_staff !== sh.min_staff ? `–${sh.max_staff}` : ""} staff
                     </div>
                   </div>
+                  {/* Per-day hours is the easily-missed control — give it a bordered
+                      affordance + icon so a manager can see where per-day times live. */}
+                  <button
+                    onClick={() => setScheduleShift(sh)}
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg border border-accent-border px-3 py-2 text-[13px] font-medium text-accent"
+                  >
+                    <ManagerIcon name="calendar-bolt" size={14} />
+                    Days &amp; hours
+                  </button>
                   <button
                     onClick={() => setEditingShiftId(sh.id)}
-                    className="rounded-lg px-3 py-2 text-[13px] font-medium text-accent"
+                    className="shrink-0 rounded-lg px-2.5 py-2 text-[13px] font-medium text-ink-muted"
                   >
                     Edit
                   </button>
                   <button
-                    onClick={() => setScheduleShift(sh)}
-                    className="rounded-lg px-3 py-2 text-[13px] font-medium text-accent"
-                  >
-                    Hours
-                  </button>
-                  <button
                     onClick={() => handleDeleteShift(sh)}
-                    className="rounded-lg px-3 py-2 text-[13px] font-medium text-unavail-text"
+                    className="shrink-0 rounded-lg px-2.5 py-2 text-[13px] font-medium text-unavail-text"
                   >
                     Delete
                   </button>
