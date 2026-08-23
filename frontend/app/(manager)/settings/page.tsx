@@ -6,7 +6,6 @@ import Link from "next/link";
 import ManagerIcon, { type ManagerIconName } from "@/components/manager/icon";
 import RoleSheet from "@/components/manager/role-sheet";
 import ShiftDayEditor from "@/components/manager/shift-day-editor";
-import TimeField from "@/components/manager/time-field";
 import LoadingScreen from "@/components/loading-screen";
 import Modal from "@/components/modal";
 import StatusBanner from "@/components/status-banner";
@@ -18,6 +17,7 @@ import {
   Role,
   SchedulingRules,
   Shift,
+  ShiftDay,
   StaffManager,
   Venue,
   VenueLeaveSettings,
@@ -34,12 +34,11 @@ import {
   reopenAvailability,
   unpublishRota,
   updateRules,
-  updateShift,
   updateVenue,
   updateVenueLeaveSettings,
 } from "@/lib/api";
 import { SHIFT_COLORS } from "@/lib/constants";
-import { DAY_NAMES, formatWeekRange } from "@/lib/utils";
+import { compactTimeRange, DAY_NAMES, formatWeekRange } from "@/lib/utils";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -52,23 +51,83 @@ function normTime(t: string): string {
   return t.trim().toLowerCase() === "close" ? "11:00pm" : t;
 }
 
-// Do the days this shift actually runs share one set of hours? If two open days
-// differ in start or end, the single representative time on the row is a lie —
-// the row shows "Varies by day" instead. Closed days aren't "varying hours"; a
-// shift open Fri–Sun at one time is still a single time.
-function hoursVaryByDay(days: { open: boolean; start_time: string | null; end_time: string | null }[]): boolean {
+const DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_INITIAL = ["M", "T", "W", "T", "F", "S", "S"];
+
+// Compress a set of day indices into a readable range: all 7 -> "Every day";
+// contiguous runs joined ("Mon–Fri", "Mon–Thu, Sun"); singletons ("Sun").
+function dayRangeLabel(indices: number[]): string {
+  const s = [...indices].sort((a, b) => a - b);
+  if (s.length === 7) return "Every day";
+  if (s.length === 0) return "No days";
+  const runs: [number, number][] = [];
+  for (const d of s) {
+    const last = runs[runs.length - 1];
+    if (last && d === last[1] + 1) last[1] = d;
+    else runs.push([d, d]);
+  }
+  return runs.map(([a, b]) => (a === b ? DAY_ABBR[a] : `${DAY_ABBR[a]}–${DAY_ABBR[b]}`)).join(", ");
+}
+
+// "1:00am" -> "1am", "5:30pm" -> "5:30pm" (for the "till {end}" exception form).
+function shortTime(t: string | null): string {
+  const m = (t ?? "").trim().toLowerCase().match(/^(\d{1,2}):(\d{2})(am|pm)$/);
+  if (!m) return t ?? "";
+  return m[2] === "00" ? `${m[1]}${m[3]}` : `${m[1]}:${m[2]}${m[3]}`;
+}
+
+type ShiftSummary = {
+  strip: { open: boolean; late: boolean }[];
+  baseDays: string; // "Every day" / "Mon–Fri" / "Mon–Thu, Sun"
+  baseHours: string; // "11am–5pm"
+  exception?: string; // "Fri–Sat till 1am" / "Sat 5pm–2am"
+  closed: boolean; // no open days at all
+};
+
+// Reduce a shift's 7-day schedule to the row's trust signals: which days it runs
+// (the strip), the common hours, and — never hidden — the divergent hours inline.
+// Open days are grouped by (start,end); the largest group is the base, the rest
+// are exceptions shown after it.
+function summariseShift(days: ShiftDay[]): ShiftSummary {
   const open = days.filter((d) => d.open);
-  if (open.length <= 1) return false;
-  const first = open[0];
-  return open.some((d) => d.start_time !== first.start_time || d.end_time !== first.end_time);
+  const strip = Array.from({ length: 7 }, (_, i) => ({
+    open: !!days.find((x) => x.day_index === i)?.open,
+    late: false,
+  }));
+  if (open.length === 0) return { strip, baseDays: "No days set", baseHours: "", closed: true };
+
+  const groups = new Map<string, { start: string | null; end: string | null; days: number[] }>();
+  for (const d of [...open].sort((a, b) => a.day_index - b.day_index)) {
+    const key = `${d.start_time}|${d.end_time}`;
+    const g = groups.get(key) ?? { start: d.start_time, end: d.end_time, days: [] };
+    g.days.push(d.day_index);
+    groups.set(key, g);
+  }
+  const arr = Array.from(groups.values()).sort((a, b) => b.days.length - a.days.length || a.days[0] - b.days[0]);
+  const [base, ...exceptions] = arr;
+  for (const g of exceptions) for (const di of g.days) strip[di].late = true;
+
+  let exception: string | undefined;
+  if (exceptions.length === 1) {
+    const e = exceptions[0];
+    const range = dayRangeLabel(e.days);
+    exception =
+      e.start === base.start
+        ? `${range} till ${shortTime(e.end)}`
+        : `${range} ${compactTimeRange(e.start ?? "", e.end ?? "")}`;
+  } else if (exceptions.length > 1) {
+    exception = `${exceptions.reduce((n, g) => n + g.days.length, 0)} days differ`;
+  }
+  return { strip, baseDays: dayRangeLabel(base.days), baseHours: compactTimeRange(base.start ?? "", base.end ?? ""), exception, closed: false };
 }
 
 export default function SettingsPage() {
   const [venue, setVenue] = useState<Venue | null>(null);
   const [shifts, setShifts] = useState<Shift[]>([]);
-  // Per-shift "do the hours differ across the days it runs?" — the row shows one
-  // representative time, so this flags when that single time is misleading.
-  const [shiftVaries, setShiftVaries] = useState<Record<string, boolean>>({});
+  // Per-shift 7-day schedule, so each row can show which days it runs + the real
+  // (possibly divergent) hours without opening the editor. Fetched in a
+  // background pass after the shifts paint (see the effect below).
+  const [shiftSchedules, setShiftSchedules] = useState<Record<string, ShiftDay[]>>({});
   const [rules, setRules] = useState<SchedulingRules | null>(null);
   const [leaveSettings, setLeaveSettings] = useState<VenueLeaveSettings | null>(null);
 
@@ -100,7 +159,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
 
   const [venueName, setVenueName] = useState("");
-  const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
+  const [menuShiftId, setMenuShiftId] = useState<string | null>(null);
   const [scheduleShift, setScheduleShift] = useState<Shift | null>(null);
   const [unpublishTarget, setUnpublishTarget] = useState<Period | null>(null);
   const [unpublishing, setUnpublishing] = useState(false);
@@ -166,11 +225,11 @@ export default function SettingsPage() {
     Promise.all(
       shifts.map((s) =>
         getShiftSchedule(s.id)
-          .then((sc) => [s.id, hoursVaryByDay(sc.days)] as const)
-          .catch(() => [s.id, false] as const),
+          .then((sc) => [s.id, sc.days] as const)
+          .catch(() => [s.id, [] as ShiftDay[]] as const),
       ),
     ).then((entries) => {
-      if (!cancelled) setShiftVaries(Object.fromEntries(entries));
+      if (!cancelled) setShiftSchedules(Object.fromEntries(entries));
     });
     return () => {
       cancelled = true;
@@ -216,23 +275,6 @@ export default function SettingsPage() {
     setTimeout(() => setToast(null), 2500);
   }
 
-  function patchShiftLocal(id: string, patch: Partial<Shift>) {
-    setShifts((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  }
-
-  async function handleShiftDone(shift: Shift) {
-    try {
-      await updateShift(shift.id, {
-        name: shift.name,
-        start_time: shift.start_time,
-        end_time: shift.end_time,
-      });
-      setEditingShiftId(null);
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not save shift");
-    }
-  }
-
   async function handleAddShift() {
     const color = SHIFT_COLORS[shifts.length % SHIFT_COLORS.length];
     try {
@@ -246,7 +288,7 @@ export default function SettingsPage() {
         max_staff: 2,
       });
       setShifts((prev) => [...prev, created]);
-      setEditingShiftId(created.id);
+      setScheduleShift(created);
     } catch {
       showToast("Could not add shift");
     }
@@ -437,87 +479,133 @@ export default function SettingsPage() {
               <ManagerIcon name="info-circle" size={16} />
               <span>
                 We set your evening shifts to a placeholder <span className="font-semibold">11pm</span> close.
-                Tap <span className="font-semibold">Days &amp; hours</span> on each shift to enter the real closing time
+                <span className="font-semibold"> Tap a shift</span> to enter the real closing time
                 (a 1am or 2:30am close is fine) — this clears once you save.
               </span>
             </div>
           )}
           <div className="mb-4 text-[13px] text-ink-faint">
             We started you with a Day and an Evening shift — rename them or add more (e.g. a lunch
-            service) here. Use <span className="font-semibold text-ink">Days &amp; hours</span> to set
-            which days a shift runs and different hours per day (e.g. a later close on weekends). Max
-            hours/week and min rest live in{" "}
+            service) here. <span className="font-semibold text-ink">Tap a shift</span> to set which days
+            it runs and different hours per day (e.g. a later close on weekends). Max hours/week and min
+            rest live in{" "}
             <a href="/scheduler" className="font-semibold text-accent">
               Scheduler
             </a>
             .
           </div>
+          {/* Each row taps into one editor (name + days + hours + staff). The row
+              itself carries the trust signals — which days it runs (the 7-dot
+              strip) and the real hours, divergent hours shown inline, never
+              hidden behind "varies". Delete lives in the ⋯ overflow. */}
           <div className="flex flex-col gap-2">
-            {shifts.map((sh) =>
-              editingShiftId === sh.id ? (
-                <div key={sh.id} className="flex items-center gap-2.5 rounded-[10px] border-2 border-accent bg-accent-light p-3.5">
-                  <div className="h-[60px] w-1 shrink-0 rounded-sm" style={{ background: sh.color }} />
-                  <div className="flex flex-1 flex-col gap-2">
-                    <input
-                      value={sh.name}
-                      onChange={(e) => patchShiftLocal(sh.id, { name: e.target.value })}
-                      className="w-full rounded-lg border-[1.5px] border-accent-border px-2.5 py-2 text-sm font-semibold outline-none"
-                    />
-                    <div className="flex items-center gap-1.5">
-                      <TimeField
-                        value={sh.start_time}
-                        onChange={(v) => patchShiftLocal(sh.id, { start_time: v })}
-                        ariaLabel="Start time"
-                      />
-                      <span className="text-[13px] text-ink-muted">→</span>
-                      <TimeField
-                        value={sh.end_time}
-                        onChange={(v) => patchShiftLocal(sh.id, { end_time: v })}
-                        ariaLabel="End time"
-                      />
-                    </div>
-                  </div>
+            {shifts.map((sh) => {
+              const sched = shiftSchedules[sh.id];
+              const sum = sched ? summariseShift(sched) : null;
+              const staffLabel = `${sh.min_staff}${sh.max_staff !== sh.min_staff ? `–${sh.max_staff}` : ""} staff`;
+              return (
+                <div key={sh.id} className="relative">
                   <button
-                    onClick={() => handleShiftDone(sh)}
-                    className="shrink-0 rounded-lg px-3 py-2 text-[13px] font-semibold text-accent"
-                  >
-                    Done
-                  </button>
-                </div>
-              ) : (
-                <div key={sh.id} className="flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-[10px] bg-surface-subtle px-3.5 py-3">
-                  <div className="h-6 w-1 shrink-0 rounded-sm" style={{ background: sh.color }} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold text-ink">{sh.name}</div>
-                    <div className="truncate text-xs text-ink-faint">
-                      {shiftVaries[sh.id] ? "Varies by day" : `${sh.start_time} – ${sh.end_time}`} · {sh.min_staff}
-                      {sh.max_staff !== sh.min_staff ? `–${sh.max_staff}` : ""} staff
-                    </div>
-                  </div>
-                  {/* Per-day hours is the easily-missed control — give it a bordered
-                      affordance + icon so a manager can see where per-day times live. */}
-                  <button
+                    type="button"
                     onClick={() => setScheduleShift(sh)}
-                    className="flex shrink-0 items-center gap-1.5 rounded-lg border border-accent-border px-3 py-2 text-[13px] font-medium text-accent"
+                    className="flex w-full items-stretch gap-3 rounded-[11px] border-[0.5px] border-hairline bg-surface-subtle px-3 py-3 pr-9 text-left transition-colors hover:border-accent-border"
                   >
-                    <ManagerIcon name="calendar-bolt" size={14} />
-                    Days &amp; hours
+                    <div className="w-1 shrink-0 self-stretch rounded-sm" style={{ background: sh.color }} />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1.5 flex items-center gap-2">
+                        <span className="truncate text-sm font-medium text-ink">{sh.name}</span>
+                        <span className="shrink-0 rounded-full border-[0.5px] border-hairline px-2 py-px text-[10.5px] text-ink-muted">
+                          {staffLabel}
+                        </span>
+                      </div>
+                      {sum && (
+                        <div className="mb-1.5 flex gap-[5px]">
+                          {sum.strip.map((d, i) => (
+                            <div key={i} className="flex w-[22px] flex-col items-center gap-1">
+                              <span className="text-[9px] uppercase tracking-wide text-ink-faint">{DAY_INITIAL[i]}</span>
+                              <span
+                                className={`relative h-4 w-4 rounded-[5px] ${d.open ? "bg-accent" : "bg-cp-icon"}`}
+                              >
+                                {d.late && (
+                                  <span
+                                    className="absolute -bottom-0.5 -right-0.5 h-[7px] w-[7px] rounded-full border border-surface-subtle"
+                                    style={{ background: "var(--cp-amber)" }}
+                                  />
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="truncate text-xs text-ink-muted">
+                        {sum ? (
+                          sum.closed ? (
+                            "No days set — tap to set hours"
+                          ) : (
+                            <>
+                              {sum.baseDays} · {sum.baseHours}
+                              {sum.exception && (
+                                <>
+                                  {" · "}
+                                  <span className="font-medium text-accent">{sum.exception}</span>
+                                </>
+                              )}
+                            </>
+                          )
+                        ) : (
+                          `${sh.start_time} – ${sh.end_time}`
+                        )}
+                      </div>
+                    </div>
+                    <svg
+                      className="shrink-0 self-center text-ink-faint"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      aria-hidden="true"
+                    >
+                      <path d="M9 18l6-6-6-6" />
+                    </svg>
                   </button>
                   <button
-                    onClick={() => setEditingShiftId(sh.id)}
-                    className="shrink-0 rounded-lg px-2.5 py-2 text-[13px] font-medium text-ink-muted"
+                    type="button"
+                    aria-label={`More options for ${sh.name}`}
+                    onClick={() => setMenuShiftId((id) => (id === sh.id ? null : sh.id))}
+                    className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-md text-ink-faint hover:bg-accent-light hover:text-ink"
                   >
-                    Edit
+                    <span className="text-lg leading-none">⋯</span>
                   </button>
-                  <button
-                    onClick={() => handleDeleteShift(sh)}
-                    className="shrink-0 rounded-lg px-2.5 py-2 text-[13px] font-medium text-unavail-text"
-                  >
-                    Delete
-                  </button>
+                  {menuShiftId === sh.id && (
+                    <div className="absolute right-1.5 top-9 z-20 min-w-[150px] rounded-lg border border-hairline bg-surface-card p-1 shadow-[0_10px_30px_var(--c-shadow)]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuShiftId(null);
+                          handleDeleteShift(sh);
+                        }}
+                        className="w-full rounded-md px-3 py-2 text-left text-[13px] font-medium text-unavail-text hover:bg-surface-subtle"
+                      >
+                        Delete shift
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ),
-            )}
+              );
+            })}
+          </div>
+          {menuShiftId && (
+            <button
+              type="button"
+              aria-hidden="true"
+              tabIndex={-1}
+              onClick={() => setMenuShiftId(null)}
+              className="fixed inset-0 z-10 cursor-default"
+            />
+          )}
+          <div className="mt-2 flex flex-col gap-2">
             <button
               onClick={handleAddShift}
               className="mt-1 rounded-[10px] border-2 border-dashed border-accent-border py-3 text-center text-[13px] font-semibold text-accent"
@@ -718,6 +806,11 @@ export default function SettingsPage() {
         shift={scheduleShift}
         onClose={() => setScheduleShift(null)}
         onSaved={() => setReloadToken((n) => n + 1)}
+        onDelete={() => {
+          const target = scheduleShift;
+          setScheduleShift(null);
+          if (target) handleDeleteShift(target);
+        }}
         showToast={showToast}
       />
 

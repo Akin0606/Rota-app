@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { ApiError, getShiftSchedule, setShiftSchedule, type Shift } from "@/lib/api";
+import { ApiError, getShiftSchedule, setShiftSchedule, updateShift, type Shift } from "@/lib/api";
 
 import BottomSheet from "./bottom-sheet";
 import Switch from "./switch";
@@ -42,10 +42,12 @@ type Props = {
   shift: Shift | null;
   onClose: () => void;
   onSaved: () => void;
+  onDelete: () => void;
   showToast: (msg: string) => void;
 };
 
-export default function ShiftDayEditor({ shift, onClose, onSaved, showToast }: Props) {
+export default function ShiftDayEditor({ shift, onClose, onSaved, onDelete, showToast }: Props) {
+  const [name, setName] = useState("");
   const [days, setDays] = useState<DayState[]>([]);
   const [uniform, setUniform] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -53,6 +55,7 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, showToast }: P
 
   useEffect(() => {
     if (!shift) return;
+    setName(shift.name);
     let cancelled = false;
     setLoading(true);
     getShiftSchedule(shift.id)
@@ -115,6 +118,10 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, showToast }: P
     }
     setSaving(true);
     try {
+      const trimmed = name.trim();
+      if (trimmed && trimmed !== shift.name) {
+        await updateShift(shift.id, { name: trimmed });
+      }
       await setShiftSchedule(
         shift.id,
         openDays.map((d) => ({
@@ -125,11 +132,11 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, showToast }: P
           max_staff: d.max_staff,
         })),
       );
-      showToast(`${shift.name} hours saved`);
+      showToast(`${trimmed || shift.name} saved`);
       onSaved();
       onClose();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not save hours");
+      showToast(err instanceof ApiError ? err.message : "Could not save shift");
     } finally {
       setSaving(false);
     }
@@ -160,10 +167,17 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, showToast }: P
     <BottomSheet
       open={shift !== null}
       onClose={onClose}
-      title={shift ? `${shift.name} hours` : "Hours"}
-      subtitle="Set the days this shift runs and the hours for each"
+      title="Edit shift"
+      subtitle="Name, the days it runs, hours and staffing"
       footer={
         <>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="shrink-0 rounded-xl border border-hairline px-3.5 py-3 text-sm font-medium text-unavail-text"
+          >
+            Delete
+          </button>
           <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-hairline py-3 text-sm font-medium text-ink-muted">
             Cancel
           </button>
@@ -173,7 +187,7 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, showToast }: P
             disabled={saving || loading || openCount === 0}
             className="flex-1 rounded-xl bg-accent py-3 text-sm font-medium text-white disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Save hours"}
+            {saving ? "Saving…" : "Save shift"}
           </button>
         </>
       }
@@ -182,6 +196,19 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, showToast }: P
         <div className="py-8 text-center text-sm text-ink-muted">Loading…</div>
       ) : (
         <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="shift-name" className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+              Shift name
+            </label>
+            <input
+              id="shift-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Evening, Lunch service"
+              className="rounded-lg border-[1.5px] border-hairline bg-surface-subtle px-3 py-2.5 text-sm font-medium text-ink outline-none focus:border-accent"
+            />
+          </div>
+
           <label className="flex items-center justify-between gap-3 rounded-xl bg-surface-subtle px-3.5 py-3">
             <span className="text-sm font-medium text-ink">Same hours every day</span>
             <Switch checked={uniform} onChange={setUniform} label="Same hours every day" />
