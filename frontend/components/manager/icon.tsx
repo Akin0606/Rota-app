@@ -46,7 +46,9 @@ export type ManagerIconName =
   | "chef-hat"
   | "user"
   | "broom"
-  | "home";
+  | "home"
+  | "lock"
+  | "dots";
 
 const PATHS: Record<ManagerIconName, string[]> = {
   moon: ["M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"],
@@ -214,6 +216,16 @@ const PATHS: Record<ManagerIconName, string[]> = {
     "M5 12l-2 0l9 -9l9 9l-2 0",
     "M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7",
     "M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6",
+  ],
+  lock: [
+    "M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z",
+    "M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0",
+    "M8 11v-4a4 4 0 1 1 8 0v4",
+  ],
+  dots: [
+    "M5 12a1 1 0 1 0 2 0a1 1 0 0 0 -2 0",
+    "M11 12a1 1 0 1 0 2 0a1 1 0 0 0 -2 0",
+    "M17 12a1 1 0 1 0 2 0a1 1 0 0 0 -2 0",
   ],
 };
 

@@ -67,7 +67,7 @@ export default function ManagerRotaMatrix({
           title={`${shift.name} — tap to remove`}
           className="w-full truncate rounded-md bg-accent-light px-1 py-1.5 text-[11px] font-medium text-accent"
         >
-          {compactTimeRange(shift.start_time, shift.end_time)}
+          {compactTimeRange(a.start_time ?? shift.start_time, a.end_time ?? shift.end_time)}
         </button>
       );
     }

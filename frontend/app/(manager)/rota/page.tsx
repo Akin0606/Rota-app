@@ -4,17 +4,20 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import AvailabilityPanel from "@/components/availability-panel";
-import ClaimsPanel from "@/components/claims-panel";
 import LoadingScreen from "@/components/loading-screen";
+import ApprovalsRow from "@/components/manager/approvals-row";
+import CoverageSummary, { type CoverageSlot } from "@/components/manager/coverage-summary";
 import GenerateOverlay from "@/components/manager/generate-overlay";
 import ManagerIcon from "@/components/manager/icon";
 import ManagerRotaMatrix from "@/components/manager/rota-matrix";
 import ManagerRotaReview from "@/components/manager/rota-review";
+import RotaMoreSheet from "@/components/manager/rota-more-sheet";
+import RotaRiskModal from "@/components/manager/rota-risk-modal";
+import U18LegalBlock from "@/components/manager/u18-legal-block";
 import PublishPanel from "@/components/publish-panel";
 import { RotaOrientation } from "@/components/rota-grid";
 import RotaImageView from "@/components/rota-image-view";
 import StatusBanner, { STATUS_CONFIG } from "@/components/status-banner";
-import SwapsPanel from "@/components/swaps-panel";
 import Toast from "@/components/toast";
 import {
   ApiError,
@@ -50,7 +53,7 @@ import {
   rejectSwap,
 } from "@/lib/api";
 import { STAFF_ROLES } from "@/lib/constants";
-import { DAY_LABELS, formatWeekRange } from "@/lib/utils";
+import { formatWeekRange } from "@/lib/utils";
 
 // This week's Monday (offset 0) and the following weeks, as YYYY-MM-DD.
 function mondayISO(offsetWeeks: number): string {
@@ -77,20 +80,20 @@ export default function RotaPage() {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [claimBusyId, setClaimBusyId] = useState<string | null>(null);
   const [pendingApproveId, setPendingApproveId] = useState<string | null>(null);
-  const [claimRiskOpen, setClaimRiskOpen] = useState(false);
-  const [claimRiskReason, setClaimRiskReason] = useState<string | null>(null);
   const [swaps, setSwaps] = useState<Swap[]>([]);
   const [swapBusyId, setSwapBusyId] = useState<string | null>(null);
   const [pendingApproveSwapId, setPendingApproveSwapId] = useState<string | null>(null);
-  const [swapRiskOpen, setSwapRiskOpen] = useState(false);
-  const [swapRiskReason, setSwapRiskReason] = useState<string | null>(null);
+  // One unified risk modal for the three confirm paths (add / claim / swap).
+  const [risk, setRisk] = useState<{ kind: "add" | "claim" | "swap"; reason: string | null } | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<string>(WEEK_OPTIONS[0].weekStart);
   const [orientation, setOrientation] = useState<RotaOrientation>("staff-rows");
   const [view, setView] = useState<"review" | "matrix">("review");
   const [reviewDay, setReviewDay] = useState(0);
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exportingFmt, setExportingFmt] = useState<"pdf" | "xlsx" | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [showAvailability, setShowAvailability] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
   const [loading, setLoading] = useState(true);
   const [rotaLoading, setRotaLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -115,8 +118,6 @@ export default function RotaPage() {
     shiftId: string;
     staffId: string;
   } | null>(null);
-  const [addRiskOpen, setAddRiskOpen] = useState(false);
-  const [addRiskReason, setAddRiskReason] = useState<string | null>(null);
   const [addSaving, setAddSaving] = useState(false);
 
   const period = periods.find((p) => p.week_start === selectedWeek) ?? null;
@@ -232,13 +233,12 @@ export default function RotaPage() {
       const result = await approveClaim(period.id, assignmentId, confirm);
       if (result.status === "needs_confirm") {
         setPendingApproveId(assignmentId);
-        setClaimRiskReason(result.reason ?? null);
-        setClaimRiskOpen(true);
+        setRisk({ kind: "claim", reason: result.reason ?? null });
         return;
       }
       if (result.summary) setSummary(result.summary);
       setClaims(result.claims);
-      setClaimRiskOpen(false);
+      setRisk(null);
       setPendingApproveId(null);
       showToast("Claim approved");
     } catch (err) {
@@ -279,13 +279,12 @@ export default function RotaPage() {
       const result = await approveSwap(period.id, swapId, confirm);
       if (result.status === "needs_confirm") {
         setPendingApproveSwapId(swapId);
-        setSwapRiskReason(result.reason ?? null);
-        setSwapRiskOpen(true);
+        setRisk({ kind: "swap", reason: result.reason ?? null });
         return;
       }
       if (result.summary) setSummary(result.summary);
       setSwaps(result.swaps);
-      setSwapRiskOpen(false);
+      setRisk(null);
       setPendingApproveSwapId(null);
       showToast("Swap approved");
     } catch (err) {
@@ -420,12 +419,11 @@ export default function RotaPage() {
       });
       if (result.status === "needs_confirm") {
         setPendingAdd({ dayIndex, shiftId, staffId });
-        setAddRiskReason(result.reason ?? null);
-        setAddRiskOpen(true);
+        setRisk({ kind: "add", reason: result.reason ?? null });
         return;
       }
       if (result.summary) setSummary(result.summary);
-      setAddRiskOpen(false);
+      setRisk(null);
       setPendingAdd(null);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not update rota");
@@ -441,6 +439,20 @@ export default function RotaPage() {
   function handleConfirmAdd() {
     if (!pendingAdd) return;
     submitAdd(pendingAdd.dayIndex, pendingAdd.shiftId, pendingAdd.staffId, true);
+  }
+
+  function cancelRisk() {
+    setRisk(null);
+    setPendingAdd(null);
+    setPendingApproveId(null);
+    setPendingApproveSwapId(null);
+  }
+
+  function confirmRisk() {
+    if (!risk) return;
+    if (risk.kind === "add") handleConfirmAdd();
+    else if (risk.kind === "claim") handleConfirmApproveClaim();
+    else handleConfirmApproveSwap();
   }
 
   async function handleRemove(dayIndex: number, shiftId: string, staffId: string) {
@@ -488,7 +500,7 @@ export default function RotaPage() {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-      setExportMenuOpen(false);
+      setMoreOpen(false);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not export the rota");
     } finally {
@@ -518,25 +530,10 @@ export default function RotaPage() {
     return <div className="p-10 text-center text-sm text-ink-muted">Add some shifts in Settings first.</div>;
   }
 
-  const uncoveredByShift = new Map<string, number[]>();
-  for (const u of summary?.uncovered ?? []) {
-    const days = uncoveredByShift.get(u.shift_id) ?? [];
-    days.push(u.day_index);
-    uncoveredByShift.set(u.shift_id, days);
-  }
-  // Under-covered: below the shift's min_staff (but not empty). Grouped as
-  // "Day (2/3)" so the manager sees how short each slot is.
-  const underCoveredByShift = new Map<string, { day: number; assigned: number; required: number }[]>();
-  for (const u of summary?.under_covered ?? []) {
-    const list = underCoveredByShift.get(u.shift_id) ?? [];
-    list.push({ day: u.day_index, assigned: u.assigned, required: u.required });
-    underCoveredByShift.set(u.shift_id, list);
-  }
   const shiftsById = new Map(shifts.map((s) => [s.id, s]));
 
-  // Manager-posted open shifts (no owner yet) — keyed by shift+day so the
-  // uncovered/under-staffed lists can show "already posted" instead of the
-  // post control once one exists for that slot.
+  // Manager-posted open shifts (no owner yet) — keyed by shift+day so a gap slot
+  // can show "already posted" instead of the post control once one exists.
   const openPostsByKey = new Map<string, AssignmentOut>();
   for (const a of summary?.assignments ?? []) {
     if (!a.staff_id && a.shift_id) {
@@ -544,19 +541,36 @@ export default function RotaPage() {
     }
   }
 
-  // Total unfilled slots across the week = Σ max(0, min_staff − assigned) per
-  // shift per day. Drives the fill-state banner and the publish gate. Only
-  // staffed assignments count (open posts have no staff_id).
-  const weekAssignments = summary?.assignments ?? [];
-  let gapsTotal = 0;
-  for (let d = 0; d < 7; d++) {
-    for (const sh of shifts) {
-      const assigned = weekAssignments.filter(
-        (a) => a.day_index === d && a.shift_id === sh.id && a.staff_id,
-      ).length;
-      gapsTotal += Math.max(0, sh.min_staff - assigned);
-    }
+  // The single source of truth for the coverage line, publish gate and sticky
+  // bar: the solver's own uncovered (nobody) + under-covered (short of minimum)
+  // slots. One problem slot = one "gap".
+  const coverageSlots: CoverageSlot[] = [];
+  for (const u of summary?.uncovered ?? []) {
+    const shift = shiftsById.get(u.shift_id);
+    coverageSlots.push({
+      key: `unc-${u.shift_id}-${u.day_index}`,
+      shiftName: shift?.name ?? "Shift",
+      dayIndex: u.day_index,
+      assigned: 0,
+      required: shift?.min_staff ?? 1,
+      severity: "uncovered",
+    });
   }
+  for (const u of summary?.under_covered ?? []) {
+    const shift = shiftsById.get(u.shift_id);
+    coverageSlots.push({
+      key: `und-${u.shift_id}-${u.day_index}`,
+      shiftName: shift?.name ?? "Shift",
+      dayIndex: u.day_index,
+      assigned: u.assigned,
+      required: u.required,
+      severity: "short",
+    });
+  }
+  coverageSlots.sort((a, b) => a.dayIndex - b.dayIndex || a.shiftName.localeCompare(b.shiftName));
+  const gapSlots = coverageSlots.length;
+
+  const hasAssignments = (summary?.assignments.filter((a) => a.staff_id).length ?? 0) > 0;
   const isLive = period?.status === "published" || period?.status === "confirmed";
   const statusLabel = period ? (STATUS_CONFIG[period.status]?.label ?? period.status) : "Not started";
 
@@ -608,9 +622,9 @@ export default function RotaPage() {
     return (
       <button
         onClick={() => openPostPicker(shiftId, dayIndex)}
-        className="rounded-lg border border-dashed border-hairline px-2.5 py-1.5 text-[12px] font-semibold text-accent"
+        className="flex items-center gap-1.5 rounded-lg border border-dashed border-hairline px-2.5 py-1.5 text-[12px] font-semibold text-accent"
       >
-        Post as open
+        <ManagerIcon name="plus" size={13} /> Post as open
       </button>
     );
   }
@@ -619,8 +633,10 @@ export default function RotaPage() {
     <div className="animate-fadeIn px-4 pb-28 pt-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="text-[23px] font-medium tracking-[-0.5px] text-ink">Rota</div>
-        <div className="flex items-center gap-2">
-          {(summary?.assignments.length ?? 0) === 0 && (
+        {/* Auto-fill / Copy stay prominent only on an empty week; on a built
+            week they move behind More (B5). */}
+        {period && !hasAssignments && (
+          <div className="flex items-center gap-2">
             <button
               onClick={handleCopyPrevious}
               disabled={copying}
@@ -628,15 +644,15 @@ export default function RotaPage() {
             >
               {copying ? "Copying…" : "Copy last week"}
             </button>
-          )}
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="cp-hairline rounded-[9px] bg-surface-card px-3 py-2 text-[12px] font-medium text-ink-muted disabled:opacity-60"
-          >
-            {generating ? "Generating…" : "Auto-fill"}
-          </button>
-        </div>
+            <button
+              onClick={handleGenerate}
+              disabled={generating}
+              className="rounded-[9px] bg-accent px-3 py-2 text-[12px] font-medium text-white disabled:opacity-60"
+            >
+              {generating ? "Generating…" : "Auto-fill"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Week switcher — plan up to 2 weeks ahead */}
@@ -669,30 +685,7 @@ export default function RotaPage() {
             Not started
           </span>
         )}
-        {summary && summary.conflicts > 0 && (
-          <div className="inline-flex items-center gap-2 rounded-full bg-cp-red-soft px-3 py-1 text-[11px] font-medium text-cp-red">
-            <span className="h-1.5 w-1.5 rounded-full bg-cp-red" />
-            {summary.conflicts} conflict{summary.conflicts === 1 ? "" : "s"}
-          </div>
-        )}
       </div>
-
-      {/* Fill-state banner — the reference's amber "N shifts unfilled" signal */}
-      {period && gapsTotal > 0 && (
-        <div className="mb-4 flex items-center gap-[11px] rounded-xl border-[0.5px] border-[rgba(255,193,7,0.3)] bg-cp-amber-soft px-[15px] py-[13px]">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(255,193,7,0.2)] text-cp-amber">
-            <ManagerIcon name="alert-triangle" size={16} />
-          </div>
-          <div className="flex-1">
-            <div className="text-[13px] font-medium text-ink">
-              {gapsTotal} shift{gapsTotal === 1 ? "" : "s"} unfilled
-            </div>
-            <div className="mt-px text-[11px] text-ink-muted">
-              Not enough available staff to cover every slot — review the gaps below.
-            </div>
-          </div>
-        </div>
-      )}
 
       {publishResult && (
         <div
@@ -740,66 +733,111 @@ export default function RotaPage() {
         </div>
       )}
 
-      {summary && uncoveredByShift.size > 0 && (
-        <div className="mb-5 rounded-panel border border-unavail-border bg-unavail-bg p-4">
-          <div className="mb-1 text-[13px] font-semibold text-unavail-text">Uncovered shifts</div>
-          <div className="mb-2 text-[12px] text-unavail-text">
-            Willing staff couldn&apos;t be scheduled — nobody assigned.
-          </div>
-          <div className="flex flex-col gap-2">
-            {Array.from(uncoveredByShift.entries()).flatMap(([shiftId, days]) => {
-              const shift = shiftsById.get(shiftId);
-              if (!shift) return [];
-              return days.map((d) => (
-                <div key={`${shiftId}-${d}`} className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="rounded-lg bg-surface-subtle px-2.5 py-1.5 text-[12px] font-medium text-unavail-text">
-                    {shift.name}: {DAY_LABELS[d]}
-                  </span>
-                  {renderOpenSlotControl(shiftId, d)}
-                </div>
-              ));
-            })}
-          </div>
+      {!period && (
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="mb-5 w-full rounded-[11px] bg-accent px-4 py-3 text-[13px] font-medium text-white disabled:opacity-60"
+        >
+          {generating ? "Generating…" : "Auto-fill this week"}
+        </button>
+      )}
+
+      {/* Approvals action-row — someone is waiting on you (B2) */}
+      {period && (
+        <ApprovalsRow
+          claims={claims}
+          swaps={swaps}
+          shifts={shifts}
+          claimBusyId={claimBusyId}
+          swapBusyId={swapBusyId}
+          onApproveClaim={handleApproveClaim}
+          onRejectClaim={handleRejectClaim}
+          onApproveSwap={handleApproveSwap}
+          onRejectSwap={handleRejectSwap}
+        />
+      )}
+
+      {/* One honest coverage line (B1) — replaces the three stacked cards */}
+      {period && summary && <CoverageSummary slots={coverageSlots} />}
+
+      {/* Under-18 legal block, its own distinct treatment (B4) */}
+      {period && summary && <U18LegalBlock warnings={summary.warnings} />}
+
+      {period && view === "matrix" && (
+        <button
+          onClick={() => setView("review")}
+          className="mb-3 flex items-center gap-1.5 text-[12px] font-medium text-accent"
+        >
+          <ManagerIcon name="arrow-left" size={14} /> Back to day view
+        </button>
+      )}
+
+      {period && (
+        <div className={rotaLoading ? "opacity-50 transition-opacity" : "transition-opacity"}>
+          {view === "review" ? (
+            <ManagerRotaReview
+              weekStart={selectedWeek}
+              shifts={shifts}
+              staff={staff}
+              assignments={summary?.assignments ?? []}
+              leave={summary?.leave ?? {}}
+              selectedDay={reviewDay}
+              onSelectDay={setReviewDay}
+              onAdd={handleAdd}
+              onRemove={handleRemove}
+              renderGapActions={renderOpenSlotControl}
+            />
+          ) : (
+            <ManagerRotaMatrix
+              weekStart={selectedWeek}
+              shifts={shifts}
+              staff={staff}
+              assignments={summary?.assignments ?? []}
+              leave={summary?.leave ?? {}}
+              orientation={orientation}
+              onAdd={handleAdd}
+              onRemove={handleRemove}
+            />
+          )}
         </div>
       )}
 
-      {summary && underCoveredByShift.size > 0 && (
-        <div className="mb-5 rounded-panel border border-warn-dot bg-warn-bg p-4">
-          <div className="mb-1 text-[13px] font-semibold text-warn-text">Under-staffed shifts</div>
-          <div className="mb-2 text-[12px] text-warn-text">
-            Below the minimum staffing you set — not enough available staff to reach it.
-          </div>
-          <div className="flex flex-col gap-2">
-            {Array.from(underCoveredByShift.entries()).flatMap(([shiftId, slots]) => {
-              const shift = shiftsById.get(shiftId);
-              if (!shift) return [];
-              return slots.map((s) => (
-                <div key={`${shiftId}-${s.day}`} className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="rounded-lg bg-surface-subtle px-2.5 py-1.5 text-[12px] font-medium text-warn-text">
-                    {shift.name}: {DAY_LABELS[s.day]} ({s.assigned}/{s.required})
-                  </span>
-                  {renderOpenSlotControl(shiftId, s.day)}
-                </div>
-              ));
-            })}
-          </div>
+      {/* Secondary bar: the whole-week grid is a demoted secondary, tools behind More */}
+      {period && (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {view === "review" && (
+            <button
+              onClick={() => setView("matrix")}
+              className="cp-hairline flex items-center gap-1.5 rounded-[9px] bg-surface-card px-3 py-2 text-[12px] font-medium text-ink-muted"
+            >
+              <ManagerIcon name="table" size={14} /> See the whole week
+            </button>
+          )}
+          <button
+            onClick={() => setMoreOpen(true)}
+            className="ml-auto flex items-center gap-1.5 rounded-[9px] px-3 py-2 text-[12px] font-medium text-ink-faint"
+          >
+            More <ManagerIcon name="dots" size={16} />
+          </button>
         </div>
       )}
 
-      {summary && summary.warnings.length > 0 && (
-        <div className="mb-5 rounded-panel border border-unavail-border bg-unavail-bg p-4">
-          <div className="mb-1 text-[13px] font-semibold text-unavail-text">Under-18 availability not usable</div>
-          <ul className="list-disc space-y-1 pl-4 text-[12px] text-unavail-text">
-            {summary.warnings.map((w, i) => (
-              <li key={i}>{w}</li>
-            ))}
-          </ul>
+      {/* Demoted panels — revealed on demand from the More sheet (B5) */}
+      {period && showAvailability && (
+        <div className="mt-4">
+          <AvailabilityPanel
+            shifts={shifts}
+            submissions={submissions}
+            clearingId={clearingId}
+            onRequestClear={requestClearSubmission}
+          />
         </div>
       )}
 
-      {summary && summary.info.length > 0 && (
-        <div className="mb-5 rounded-panel border border-hairline bg-surface-card p-4">
-          <div className="mb-1 text-[13px] font-semibold text-ink-label">Notes</div>
+      {period && showNotes && summary && summary.info.length > 0 && (
+        <div className="mt-4 rounded-panel border border-hairline bg-surface-card p-4">
+          <div className="mb-1 text-[13px] font-semibold text-ink-label">Solver notes</div>
           <ul className="list-disc space-y-1 pl-4 text-[12px] text-ink-faint">
             {summary.info.map((n, i) => (
               <li key={i}>{n}</li>
@@ -807,149 +845,6 @@ export default function RotaPage() {
           </ul>
         </div>
       )}
-
-      <ClaimsPanel
-        claims={claims}
-        shifts={shifts}
-        busyId={claimBusyId}
-        onApprove={handleApproveClaim}
-        onReject={handleRejectClaim}
-      />
-
-      <SwapsPanel
-        swaps={swaps}
-        shifts={shifts}
-        busyId={swapBusyId}
-        onApprove={handleApproveSwap}
-        onReject={handleRejectSwap}
-      />
-
-      {period && (
-        <AvailabilityPanel
-          shifts={shifts}
-          submissions={submissions}
-          clearingId={clearingId}
-          onRequestClear={requestClearSubmission}
-        />
-      )}
-
-      {/* View toggle: Review (day-focused) ↔ Matrix (whole week) */}
-      <div className="mb-3 flex items-center gap-2">
-        <div className="cp-hairline inline-flex rounded-[10px] bg-surface-card p-0.5">
-          {(
-            [
-              { value: "review", label: "Review" },
-              { value: "matrix", label: "Matrix" },
-            ] as const
-          ).map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setView(opt.value)}
-              className={`rounded-[8px] px-3.5 py-1.5 text-[12px] font-medium transition ${
-                view === opt.value ? "bg-accent text-white" : "text-ink-muted hover:!text-ink"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        {view === "matrix" && (
-          <>
-            <button
-              onClick={() => setOrientation((o) => (o === "staff-rows" ? "day-rows" : "staff-rows"))}
-              title="Swap rows and columns"
-              className="cp-hairline rounded-[9px] bg-surface-card px-2.5 py-1.5 text-[12px] font-medium text-ink-muted"
-            >
-              {orientation === "staff-rows" ? "Staff × Days" : "Days × Staff"}
-            </button>
-            <div className="relative ml-auto">
-              <button
-                onClick={() => setExportMenuOpen((o) => !o)}
-                disabled={!period}
-                className="flex items-center gap-1.5 rounded-[9px] bg-accent px-3 py-1.5 text-[12px] font-medium text-white disabled:opacity-50"
-              >
-                <ManagerIcon name="download" size={14} /> Export
-              </button>
-              {exportMenuOpen && (
-                <>
-                  <button
-                    aria-label="Close export menu"
-                    onClick={() => setExportMenuOpen(false)}
-                    className="fixed inset-0 z-10 cursor-default"
-                  />
-                  <div className="absolute right-0 top-[38px] z-20 min-w-[190px] cp-hairline rounded-xl bg-surface-card p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.4)]">
-                    {(
-                      [
-                        { key: "pdf", icon: "file-text", label: "PDF", sub: "Print-ready, branded" },
-                        { key: "xlsx", icon: "table", label: "Excel", sub: "Editable spreadsheet" },
-                      ] as const
-                    ).map((opt) => (
-                      <button
-                        key={opt.key}
-                        onClick={() => handleExport(opt.key)}
-                        disabled={exportingFmt !== null}
-                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-ink hover:bg-surface-subtle disabled:opacity-60"
-                      >
-                        <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-cp-icon text-accent">
-                          <ManagerIcon name={opt.icon} size={15} />
-                        </span>
-                        <span>
-                          {exportingFmt === opt.key ? "Preparing…" : opt.label}
-                          <span className="block text-[11px] font-normal text-ink-faint">{opt.sub}</span>
-                        </span>
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => {
-                        setImageViewOpen(true);
-                        setExportMenuOpen(false);
-                      }}
-                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-ink hover:bg-surface-subtle"
-                    >
-                      <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-cp-icon text-accent">
-                        <ManagerIcon name="photo" size={15} />
-                      </span>
-                      <span>
-                        Image
-                        <span className="block text-[11px] font-normal text-ink-faint">PNG for WhatsApp</span>
-                      </span>
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className={rotaLoading ? "opacity-50 transition-opacity" : "transition-opacity"}>
-        {view === "review" ? (
-          <ManagerRotaReview
-            weekStart={selectedWeek}
-            shifts={shifts}
-            staff={staff}
-            assignments={summary?.assignments ?? []}
-            leave={summary?.leave ?? {}}
-            selectedDay={reviewDay}
-            onSelectDay={setReviewDay}
-            onAdd={handleAdd}
-            onRemove={handleRemove}
-            onGap={openPostPicker}
-          />
-        ) : (
-          <ManagerRotaMatrix
-            weekStart={selectedWeek}
-            shifts={shifts}
-            staff={staff}
-            assignments={summary?.assignments ?? []}
-            leave={summary?.leave ?? {}}
-            orientation={orientation}
-            onAdd={handleAdd}
-            onRemove={handleRemove}
-          />
-        )}
-      </div>
 
       <PublishPanel
         open={panelOpen}
@@ -974,98 +869,43 @@ export default function RotaPage() {
         leave={summary?.leave ?? {}}
       />
 
-      {/* Risk popup: adult rule flagged by a manual add (rest gap / day-off-in-7) */}
-      {addRiskOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
-          <div className="w-full max-w-[440px] rounded-card border border-warn-dot bg-surface-card p-6">
-            <div className="mb-2 text-lg font-bold text-ink">This assignment breaks a rest rule</div>
-            <div className="mb-4 text-sm text-ink-muted">
-              {addRiskReason ?? "This assignment falls short of the venue's rest requirements."} Assign
-              anyway only if you&apos;re sure.
-            </div>
-            <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={() => {
-                  setAddRiskOpen(false);
-                  setPendingAdd(null);
-                }}
-                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmAdd}
-                disabled={addSaving}
-                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {addSaving ? "Saving…" : "Assign anyway"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RotaMoreSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        onExport={handleExport}
+        exportingFmt={exportingFmt}
+        onViewImage={() => setImageViewOpen(true)}
+        onRegenerate={handleGenerate}
+        generating={generating}
+        onCopyPrevious={handleCopyPrevious}
+        copying={copying}
+        canCopy={!hasAssignments}
+        orientation={orientation}
+        onToggleOrientation={() =>
+          setOrientation((o) => (o === "staff-rows" ? "day-rows" : "staff-rows"))
+        }
+        onToggleAvailability={() => setShowAvailability((v) => !v)}
+        availabilityOpen={showAvailability}
+        onToggleNotes={() => setShowNotes((v) => !v)}
+        notesOpen={showNotes}
+        notesCount={summary?.info.length ?? 0}
+      />
 
-      {/* Risk popup: adult rule flagged by approving a shift claim */}
-      {claimRiskOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
-          <div className="w-full max-w-[440px] rounded-card border border-warn-dot bg-surface-card p-6">
-            <div className="mb-2 text-lg font-bold text-ink">This claim breaks a rest rule</div>
-            <div className="mb-4 text-sm text-ink-muted">
-              {claimRiskReason ?? "This reassignment falls short of the venue's rest requirements."} Approve
-              anyway only if you&apos;re sure.
-            </div>
-            <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={() => {
-                  setClaimRiskOpen(false);
-                  setPendingApproveId(null);
-                }}
-                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmApproveClaim}
-                disabled={claimBusyId !== null}
-                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {claimBusyId ? "Saving…" : "Approve anyway"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Risk popup: adult rule flagged by approving a shift swap */}
-      {swapRiskOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
-          <div className="w-full max-w-[440px] rounded-card border border-warn-dot bg-surface-card p-6">
-            <div className="mb-2 text-lg font-bold text-ink">This swap breaks a rest rule</div>
-            <div className="mb-4 text-sm text-ink-muted">
-              {swapRiskReason ?? "One side of this swap falls short of the venue's rules."} Approve anyway only
-              if you&apos;re sure.
-            </div>
-            <div className="flex items-center justify-end gap-3">
-              <button
-                onClick={() => {
-                  setSwapRiskOpen(false);
-                  setPendingApproveSwapId(null);
-                }}
-                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmApproveSwap}
-                disabled={swapBusyId !== null}
-                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {swapBusyId ? "Saving…" : "Approve anyway"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* One unified risk modal — names the rule that fired (B7) */}
+      <RotaRiskModal
+        open={risk !== null}
+        kind={risk?.kind ?? "add"}
+        reason={risk?.reason ?? null}
+        busy={
+          risk?.kind === "add"
+            ? addSaving
+            : risk?.kind === "claim"
+              ? claimBusyId !== null
+              : swapBusyId !== null
+        }
+        onCancel={cancelRisk}
+        onConfirm={confirmRisk}
+      />
 
       {/* Confirm popup: clearing a staff member's whole submission for this period */}
       {clearTarget && (
@@ -1101,11 +941,11 @@ export default function RotaPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
           <div className="w-full max-w-[440px] cp-hairline rounded-card bg-surface-card p-6">
             <div className="mb-2 text-lg font-medium text-ink">
-              Publish with {gapsTotal} gap{gapsTotal === 1 ? "" : "s"}?
+              Publish with {gapSlots} gap{gapSlots === 1 ? "" : "s"}?
             </div>
             <div className="mb-4 text-sm text-ink-muted">
-              {gapsTotal} shift{gapsTotal === 1 ? " is" : "s are"} still unfilled. You can publish now and
-              fill {gapsTotal === 1 ? "it" : "them"} later, but staff will see an incomplete rota.
+              {gapSlots} shift{gapSlots === 1 ? " is" : "s are"} still unfilled. You can publish now and
+              fill {gapSlots === 1 ? "it" : "them"} later, but staff will see an incomplete rota.
             </div>
             <div className="flex items-center justify-end gap-3">
               <button
@@ -1134,14 +974,14 @@ export default function RotaPage() {
         <div className="sticky bottom-0 z-20 -mx-4 mt-6 flex items-center justify-between gap-3 border-t border-hairline bg-surface-card px-4 py-3.5">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[12px] font-medium text-ink">
-              {gapsTotal === 0 ? (
+              {gapSlots === 0 ? (
                 <>
                   <ManagerIcon name="circle-check" size={14} className="text-cp-green" /> All shifts covered
                 </>
               ) : (
                 <>
-                  <ManagerIcon name="alert-triangle" size={14} className="text-cp-amber" /> {gapsTotal} gap
-                  {gapsTotal === 1 ? "" : "s"} to fill
+                  <ManagerIcon name="alert-triangle" size={14} className="text-cp-amber" /> {gapSlots} gap
+                  {gapSlots === 1 ? "" : "s"} to fill
                 </>
               )}
             </div>
@@ -1156,7 +996,7 @@ export default function RotaPage() {
             </button>
           ) : (
             <button
-              onClick={() => (gapsTotal > 0 ? setPublishConfirmOpen(true) : handlePublish())}
+              onClick={() => (gapSlots > 0 ? setPublishConfirmOpen(true) : handlePublish())}
               disabled={publishing}
               className="flex shrink-0 items-center gap-1.5 rounded-[11px] bg-accent px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-50"
             >
