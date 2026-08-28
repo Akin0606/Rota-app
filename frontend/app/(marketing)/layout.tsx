@@ -6,9 +6,9 @@ import "./crewplan.css";
 import "./frames.css";
 
 export const metadata: Metadata = {
-  title: "Crewplan — rotas that write themselves",
+  title: "Crewplan — rota software for pubs and restaurants",
   description:
-    "Your team sends their week from a link. Crewplan works out the best rota it can from that — availability, holidays, the law — and emails it out.",
+    "Your team sends their week from one link — no app, no accounts. Crewplan solves the rota around their availability, approved holidays and UK working-time rules, then emails it out. Free while we're in pilot.",
 };
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {

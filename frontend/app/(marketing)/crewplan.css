@@ -412,6 +412,8 @@
   position: sticky;
   top: 0;
   z-index: 50;
+  /* `sticky` is a positioned value, so this is already the containing block
+     for the mobile menu panel that hangs off its bottom edge. */
   background: var(--material);
   backdrop-filter: var(--material-blur);
   -webkit-backdrop-filter: var(--material-blur);
@@ -467,12 +469,113 @@
     color: var(--ink);
   }
 }
+/* Burger + mobile menu.
+   Below 52rem the link row and the Log in button used to simply vanish, which
+   left a phone visitor with no way to reach pricing, the walkthrough — or to
+   log in at all. The bar keeps the one action that converts; everything else
+   moves into the panel. The theme toggle goes with it, because a preference
+   should never outrank a destination for the last 44px of a phone's width. */
+.crewplan .nav-burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-right: -0.5rem;
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.crewplan .nav-burger:active {
+  transform: scale(0.92);
+}
+
+.crewplan .nav-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(-0.5rem);
+  transform-origin: top center;
+  background: var(--material);
+  backdrop-filter: var(--material-blur);
+  -webkit-backdrop-filter: var(--material-blur);
+  border-bottom: 1px solid var(--material-edge);
+  box-shadow: var(--shadow-lg);
+  /* Only opacity and transform animate — both compositor-friendly. The panel
+     floats over the page rather than pushing it, so there's no layout property
+     in the transition and no magic max-height to outgrow. */
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-standard),
+    visibility 0s linear var(--dur);
+}
+.crewplan .nav-menu.is-open {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-standard),
+    visibility 0s;
+}
+.crewplan .nav-menu-inner {
+  display: flex;
+  flex-direction: column;
+  padding-block: 0.5rem 1.25rem;
+}
+.crewplan .nav-menu-inner a {
+  display: flex;
+  align-items: center;
+  min-height: 3rem;
+  font-size: 1rem;
+  color: var(--ink);
+  border-bottom: 1px solid var(--hairline);
+}
+.crewplan .nav-menu-inner a:active {
+  color: var(--accent-ink);
+}
+.crewplan .nav-menu-theme {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 1.125rem;
+}
+
+
 @media (max-width: 52rem) {
   .crewplan .nav-links {
     display: none;
   }
   .crewplan .nav-actions .nav-login {
     display: none;
+  }
+  .crewplan .nav-theme-bar {
+    display: none;
+  }
+  .crewplan .nav-burger {
+    display: inline-flex;
+  }
+  .crewplan .nav-inner {
+    gap: 0.75rem;
+  }
+  /* The wordmark takes the slack so the CTA and burger always fit. */
+  .crewplan .nav-inner .logo {
+    margin-right: auto;
+  }
+}
+
+/* Reduced motion: the panel still appears, it just doesn't travel. */
+@media (prefers-reduced-motion: reduce) {
+  .crewplan .nav-menu {
+    transform: none;
+  }
+  .crewplan .nav-burger:active {
+    transform: none;
   }
 }
 
@@ -1344,6 +1447,137 @@
 }
 @media (max-width: 56rem) {
   .crewplan .teaser {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   13 · VERSUS — the status quo beside the alternative
+   The Contrast Effect: an improvement is only vivid next to the thing it
+   replaces. The "now" column is deliberately dashed and unfilled — it reads as
+   the provisional, held-together-with-tape arrangement it describes, while the
+   "with Crewplan" column is a real filled surface. No new colour tokens: the
+   green/ink-3 pair is already contrast-checked in both themes.
+   -------------------------------------------------------------------------- */
+.crewplan .versus {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 2.5rem;
+}
+.crewplan .versus-col {
+  padding: clamp(1.5rem, 3vw, 2rem);
+  border-radius: var(--radius);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+}
+.crewplan .versus-col.is-now {
+  background: transparent;
+  border-style: dashed;
+}
+.crewplan .versus-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 1.375rem;
+}
+.crewplan .versus-col.is-new .versus-head {
+  color: var(--accent-ink);
+}
+.crewplan .versus ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9375rem;
+}
+.crewplan .versus li {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.crewplan .versus-mark {
+  flex-shrink: 0;
+  margin-top: 0.1875rem;
+  color: var(--ink-3);
+}
+.crewplan .versus-col.is-new .versus-mark {
+  color: var(--green);
+}
+@media (max-width: 52rem) {
+  .crewplan .versus {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   14 · PRICE
+   The number gets display-scale treatment because the number is the argument.
+   Tracking is size-specific per the type rules — tighter than any other figure
+   on the page because it is the largest thing on the page.
+   -------------------------------------------------------------------------- */
+.crewplan .price {
+  text-align: center;
+  padding: clamp(2.5rem, 6vw, 4rem) clamp(1.5rem, 4vw, 3rem);
+}
+.crewplan .price-fig {
+  font-family: var(--font-display), "Space Grotesk", system-ui, sans-serif;
+  font-size: clamp(3.5rem, 10vw, 5.5rem);
+  font-weight: 500;
+  letter-spacing: -0.048em;
+  line-height: 1;
+  color: var(--ink);
+  margin-bottom: 1rem;
+}
+.crewplan .price-fig i {
+  font-style: normal;
+  color: var(--ink-3);
+  font-size: 0.26em;
+  letter-spacing: 0;
+  vertical-align: 0.55em;
+}
+.crewplan .price-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 2rem;
+}
+.crewplan .price-list span {
+  padding: 0.5rem 0.875rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+}
+
+/* --------------------------------------------------------------------------
+   15 · TRUST — honest credibility in place of proof we haven't earned yet
+   -------------------------------------------------------------------------- */
+.crewplan .trust {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 2.5rem;
+}
+.crewplan .trust-item {
+  padding: 1.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+}
+.crewplan .trust-item .d4 {
+  margin-bottom: 0.4375rem;
+}
+@media (max-width: 52rem) {
+  .crewplan .trust {
     grid-template-columns: 1fr;
   }
 }

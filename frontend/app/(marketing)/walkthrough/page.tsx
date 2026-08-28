@@ -26,8 +26,9 @@ export default function WalkthroughPage() {
                 A week, start to finish.
               </h1>
               <p className="lede">
-                Five steps. Switch between what you see and what your team sees — the point is how
-                little they have to do, and how little you have to do once it&apos;s running.
+                Five steps, from the link going out to the rota landing in their phones. Switch
+                between what you see and what your team sees — the point is how little either of
+                you has to do once it&apos;s running.
               </p>
             </div>
           </div>
@@ -46,8 +47,9 @@ export default function WalkthroughPage() {
                 That&apos;s the whole week.
               </h2>
               <p className="lede" style={{ maxWidth: "34rem", margin: "0 auto 2rem" }}>
-                Give it your opening hours and your team, and you&apos;ll be looking at a real rota
-                for a real week in about three minutes.
+                Every step above happens whether you&apos;re behind the bar or not. Give it your
+                opening hours and your team once, and you&apos;re looking at a real rota for a real
+                week in about three minutes.
               </p>
               <div
                 style={{
@@ -58,7 +60,7 @@ export default function WalkthroughPage() {
                 }}
               >
                 <Link href="/#waitlist" className="btn btn-primary">
-                  Join the waitlist
+                  Claim a pilot place
                 </Link>
                 <Link href="/#features" className="btn btn-secondary">
                   See everything it does

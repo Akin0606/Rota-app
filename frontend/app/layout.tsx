@@ -7,7 +7,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Crewplan",
-  description: "Rotas that build themselves — scheduling for pubs and restaurants",
+  description: "Rotas that write themselves — scheduling for pubs and restaurants",
 };
 
 export default function RootLayout({

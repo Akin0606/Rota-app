@@ -93,7 +93,7 @@ const FEATURES: [string, string, string][] = [
   ],
   [
     "clock",
-    "The week runs itself",
+    "It chases them, not you",
     "Availability opens, closes, and the two who always forget get chased — on a timetable, whether you're behind the bar or not.",
   ],
   [
@@ -175,24 +175,61 @@ const ROADMAP: [string, string, "next" | "exploring"][] = [
 
 const FAQ: [string, string][] = [
   [
-    "Do my team need to download anything?",
-    "No. A link and a four-digit PIN is the whole login — nothing to install, no account to make, no password to reset at six on a Friday.",
+    "My team won't use it. They never use anything.",
+    "That's the objection we built the whole thing around. There is no app, no account and no password — a link in the group chat and four digits. If they can open a WhatsApp message they can send their week.",
   ],
   [
     "What if someone doesn't send theirs in?",
-    "They're chased by email automatically. If they still don't answer, a blank week counts as can't-work and the rota says so plainly, rather than assuming they're free.",
+    "They're chased by email automatically, so you're not the one nagging. If they still don't answer, a blank week counts as can't-work and the rota says so plainly, rather than quietly assuming they're free.",
   ],
   [
     "Can I overrule it?",
     "Yes — move anything you like, and it tells you what that breaks before you commit. The only exceptions are the under-18 legal limits, which are hard stops by design.",
   ],
   [
-    "What does it cost?",
-    "Nothing during the pilot, and there's no card on file to forget about. We'll talk to you long before that changes.",
+    "Do I have to move my spreadsheet across?",
+    "No. There's nothing to import and nothing to tidy up first. Answer eight short questions about your hours and your team and you're looking at a real week in about three minutes.",
   ],
   [
-    "My rota lives in a spreadsheet.",
-    "Then there's nothing to import. Answer eight short questions about your hours and your team, and you're looking at a real week in about three minutes.",
+    "What does it cost?",
+    "Nothing during the pilot, and there's no card on file to forget about. When that changes you'll hear it from us first — not from a bill.",
+  ],
+  [
+    "What if it doesn't suit how we run?",
+    "Then tell us and we'll either fix it or say plainly that we won't. You can stop using it whenever you like; there's no contract and nothing to cancel. We'd rather lose a venue than pretend it fits.",
+  ],
+];
+
+const VERSUS_NOW: string[] = [
+  "Eleven unread messages, none of them in one place",
+  "A paper diary, or a spreadsheet only you understand",
+  "You chase the same two people every single week",
+  "Rest gaps and under-18 hours checked in your head, if at all",
+  "Someone can't work Friday and it becomes your problem",
+  "You find out about a clash after the rota has gone out",
+];
+
+const VERSUS_NEW: string[] = [
+  "One link. Everyone answers in the same place",
+  "Availability opens and closes on a schedule you set",
+  "The two who forget get chased automatically, by email",
+  "The law is checked when it's built and on every change after",
+  "They drop, give or swap it between themselves",
+  "Gaps are ranked at the top before the week starts",
+];
+
+const TRUST: [string, string][] = [
+  [
+    "Built against a real week",
+    "Every rule in here was written against a working pub's actual roster — real staff, real availability, real published weeks. Not a demo dataset.",
+  ],
+  [
+    "Set up by hand, a few at a time",
+    "We onboard pilot venues personally rather than pointing you at a signup form. That's the only reason it ends up fitting how your place actually runs.",
+  ],
+  [
+    "We tell you what isn't built",
+    "The roadmap below lists what's missing as plainly as what's coming. You'll never discover a gap after you've committed to us.",
   ],
 ];
 
@@ -210,26 +247,100 @@ export default function Home() {
           <div className="wrap">
             <div className="pill rise" style={{ ["--i" as string]: 0 }}>
               <span className="pulse" aria-hidden="true" />
-              Taking pilot venues now
+              Taking pilot venues now — a few at a time
             </div>
             <h1 className="d1 rise" style={{ ["--i" as string]: 1 }}>
               Rotas that write themselves<span className="accent">.</span>
             </h1>
             <p className="lede rise" style={{ ["--i" as string]: 2 }}>
-              Your team sends their week from a link. Crewplan works out the best rota it can from
-              that — availability, holidays, the law — and emails it out.
+              Right now it&apos;s a group chat, a paper diary and your Sunday night. Crewplan takes
+              that off you — your team sends their week from one link, and a finished rota comes
+              back with availability, holidays and the law already worked out.
             </p>
             <div className="rise" style={{ ["--i" as string]: 3 }}>
               <WaitlistForm id="hero" />
             </div>
             <div className="proof rise" style={{ ["--i" as string]: 4 }}>
-              <div>No app for your team</div>
-              <div>Working-time rules built in</div>
-              <div>Live in about 3 minutes</div>
-              <div>Free while we&apos;re in pilot</div>
+              <div>Nothing for your team to install</div>
+              <div>Under-18 limits are hard blocks</div>
+              <div>First rota in about 3 minutes</div>
+              <div>Free for pilot venues</div>
             </div>
           </div>
         </header>
+
+        {/* ------------- The problem -------------
+            The hero states the transformation; this names the discomfort it
+            transforms. Without this beat a reader has a destination and no
+            reason to leave where they are. */}
+        <section className="section">
+          <div className="wrap">
+            <div className="section-head reveal">
+              <div className="eyebrow">The Sunday night problem</div>
+              <h2 className="d2">Nobody took on a pub to do admin.</h2>
+              <p className="lede">
+                You know the evening. Half the team have sent their week, three haven&apos;t, one
+                has changed theirs twice, and you&apos;re working out whether a sixteen-year-old can
+                legally close on Friday. It takes an hour you don&apos;t have — and next Sunday you
+                do the whole thing again.
+              </p>
+            </div>
+
+            <div className="versus reveal">
+              <div className="versus-col is-now">
+                <div className="versus-head">How next week gets written now</div>
+                <ul>
+                  {VERSUS_NOW.map((line) => (
+                    <li key={line}>
+                      <svg
+                        className="versus-mark"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M4 8h8"
+                          stroke="currentColor"
+                          strokeWidth="1.7"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="versus-col is-new">
+                <div className="versus-head">How it gets written with Crewplan</div>
+                <ul>
+                  {VERSUS_NEW.map((line) => (
+                    <li key={line}>
+                      <svg
+                        className="versus-mark"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M3 8.5 6.5 12 13 4.5"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* ------------- Walkthrough teaser ------------- */}
         <section className="section-tight">
@@ -244,12 +355,12 @@ export default function Home() {
                     A week, start to finish.
                   </h2>
                   <p className="body" style={{ marginBottom: "1.75rem", maxWidth: "30rem" }}>
-                    Five steps, side by side: what you do, what your team does, and the parts that
-                    happen without either of you. Switch between the two views — the gap between
-                    them is the whole product.
+                    Five steps, side by side: what you do, what your team does, and the parts
+                    that happen without either of you. Switch between the two views — the gap
+                    between them is how much of your week this gives back.
                   </p>
                   <Link href="/walkthrough" className="btn btn-primary">
-                    Open the walkthrough
+                    See a week, start to finish
                     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                       <path
                         d="M6 3l5 5-5 5"
@@ -459,6 +570,61 @@ export default function Home() {
           </div>
         </section>
 
+        {/* ------------- Trust -------------
+            We have no logos, no customer count and no testimonials, and inventing
+            any of them would be the fastest way to lose the one audience we want.
+            So this slot carries what is actually true instead. */}
+        <section className="section-tight">
+          <div className="wrap">
+            <div className="section-head reveal">
+              <div className="eyebrow">Why you can believe any of this</div>
+              <h2 className="d2">We&apos;re early, and we&apos;d rather say so.</h2>
+              <p className="lede">
+                No logos to show you and no customer count worth quoting yet. Here&apos;s what we
+                can honestly put behind it instead.
+              </p>
+            </div>
+            <div className="trust">
+              {TRUST.map(([title, copy], i) => (
+                <div className="trust-item reveal" style={{ ["--i" as string]: i }} key={title}>
+                  <div className="d4">{title}</div>
+                  <p className="body">{copy}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ------------- Pricing -------------
+            The price is the strongest single argument on the page right now, so
+            it gets a section and display-scale type rather than one FAQ row. */}
+        <section className="section" id="pricing">
+          <div className="wrap">
+            <div className="plate-sunken reveal">
+              <div className="price">
+                <div className="eyebrow" style={{ marginBottom: "1.25rem" }}>
+                  Pricing
+                </div>
+                <div className="price-fig">
+                  £0 <i>while we&apos;re in pilot</i>
+                </div>
+                <p className="lede" style={{ maxWidth: "34rem", margin: "0 auto" }}>
+                  No card, no trial clock, nothing to cancel. When we do start charging, pilot
+                  venues hear it from us first and get a say in what&apos;s fair — nobody wakes up
+                  to a bill.
+                </p>
+                <div className="price-list">
+                  <span>Every feature, no tiers</span>
+                  <span>Unlimited staff</span>
+                  <span>No card required</span>
+                  <span>No contract</span>
+                  <span>Stop whenever you like</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ------------- Roadmap ------------- */}
         <section className="section" id="roadmap">
           <div className="wrap">
@@ -532,12 +698,13 @@ export default function Home() {
           <div className="wrap cta">
             <div className="reveal">
               <div className="eyebrow" style={{ marginBottom: "0.875rem" }}>
-                Get started
+                Your turn
               </div>
-              <h2 className="d2">Be one of the first venues on Crewplan.</h2>
+              <h2 className="d2">Make this the last rota you write by hand.</h2>
               <p className="lede">
-                Give it your opening hours and your team. You&apos;ll be looking at a real rota for
-                a real week in about three minutes.
+                Tell us your venue and we&apos;ll come back to you to set it up. Opening hours, your
+                team, and you&apos;re looking at a real rota for a real week — about three minutes
+                of actual work.
               </p>
               <WaitlistForm id="cta" />
               <div className="arc" style={{ justifyContent: "center", marginTop: "2.5rem" }}>

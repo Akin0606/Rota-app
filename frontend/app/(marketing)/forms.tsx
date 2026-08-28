@@ -41,7 +41,7 @@ export function WaitlistForm({ id }: { id?: string }) {
           id={`${id ?? "wl"}-venue`}
           className="field"
           type="text"
-          placeholder="Your venue"
+          placeholder="Your venue's name"
           value={venueName}
           onChange={(e) => setVenueName(e.target.value)}
           required
@@ -53,13 +53,13 @@ export function WaitlistForm({ id }: { id?: string }) {
           id={`${id ?? "wl"}-email`}
           className="field"
           type="email"
-          placeholder="you@yourvenue.co.uk"
+          placeholder="Your email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
         />
         <button type="submit" className="btn btn-primary" disabled={submitting || done}>
-          {done ? "You're on the list" : submitting ? "Joining…" : "Join the waitlist"}
+          {done ? "Place requested ✓" : submitting ? "Sending…" : "Claim a pilot place"}
         </button>
       </form>
       {error ? (
@@ -67,7 +67,7 @@ export function WaitlistForm({ id }: { id?: string }) {
           {error}
         </p>
       ) : (
-        <p className="hero-note">Free while we&apos;re in pilot. No card, no commitment.</p>
+        <p className="hero-note">Free while we&apos;re in pilot. No card, no contract, no sales call.</p>
       )}
     </>
   );
@@ -115,7 +115,7 @@ export function SuggestionBox() {
               strokeLinejoin="round"
             />
           </svg>
-          Got it — thank you. We read every one.
+          Got it — thank you. A person reads every one of these.
         </div>
         <button
           type="button"
@@ -141,7 +141,7 @@ export function SuggestionBox() {
       <textarea
         id="suggest-msg"
         className="field"
-        placeholder="What would make this genuinely useful for your place?"
+        placeholder="What would make this genuinely useful for your place? Or what we've got wrong."
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         maxLength={2000}
@@ -160,7 +160,7 @@ export function SuggestionBox() {
           onChange={(e) => setEmail(e.target.value)}
         />
         <button type="submit" className="btn btn-primary" disabled={submitting}>
-          {submitting ? "Sending…" : "Send"}
+          {submitting ? "Sending…" : "Send it"}
         </button>
       </div>
       {error ? (
