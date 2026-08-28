@@ -16,6 +16,8 @@ from models.schemas import (
     AdminVenueUpdateRequest,
     RotaSummaryOut,
     StaffManagerOut,
+    SuggestionOut,
+    SuggestionUpdateRequest,
     WaitlistEntryOut,
 )
 from routers.rota import _build_summary, run_solver_for_period
@@ -26,6 +28,10 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 # A live venue with no activity in this many days counts as "stale".
 STALE_DAYS = 14
+
+# Mirrors the check constraint in migration 028 — kept here so a bad status is a
+# clean 400 rather than a Postgres constraint violation surfacing as a 500.
+_SUGGESTION_STATUSES = {"new", "read", "actioned", "archived"}
 
 
 def require_admin(x_admin_secret: str = Header(default="")) -> None:
@@ -260,6 +266,44 @@ def invite_waitlist_entry(entry_id: str):
     supabase.table("waitlist").update({"status": "invited"}).eq("id", entry_id).execute()
 
     return {"email": entry["email"], "status": "invited", "login_url": login_url}
+
+
+@router.get(
+    "/suggestions", response_model=list[SuggestionOut], dependencies=[Depends(require_admin)]
+)
+def list_suggestions():
+    supabase = get_supabase()
+    return (
+        supabase.table("suggestions")
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(200)
+        .execute()
+        .data
+    )
+
+
+@router.patch(
+    "/suggestions/{suggestion_id}",
+    response_model=SuggestionOut,
+    dependencies=[Depends(require_admin)],
+)
+def update_suggestion(suggestion_id: str, payload: SuggestionUpdateRequest):
+    if payload.status not in _SUGGESTION_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Status must be one of: {', '.join(sorted(_SUGGESTION_STATUSES))}",
+        )
+    supabase = get_supabase()
+    res = (
+        supabase.table("suggestions")
+        .update({"status": payload.status})
+        .eq("id", suggestion_id)
+        .execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    return res.data[0]
 
 
 @router.get(

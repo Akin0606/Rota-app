@@ -16,6 +16,7 @@ import {
 const NAV_ITEMS = [
   { key: "venues", label: "Venues", icon: "🏢", href: "/admin" },
   { key: "waitlist", label: "Waitlist", icon: "🎟️", href: "/admin/waitlist" },
+  { key: "suggestions", label: "Suggestions", icon: "💡", href: "/admin/suggestions" },
   { key: "activity", label: "Activity", icon: "🕒", href: "/admin/activity" },
 ];
 

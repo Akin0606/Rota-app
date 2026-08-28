@@ -17,6 +17,7 @@ from routers import (
     scheduler,
     shifts,
     staff,
+    suggestions,
     venue,
     waitlist,
 )
@@ -61,6 +62,7 @@ app.include_router(leave.router)
 app.include_router(admin.router)
 app.include_router(cron.router)
 app.include_router(waitlist.router)
+app.include_router(suggestions.router)
 app.include_router(onboarding.router)
 
 

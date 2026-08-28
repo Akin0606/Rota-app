@@ -196,6 +196,18 @@ export function joinWaitlist(
   });
 }
 
+/** Public suggestion box on the marketing site. Email is optional — an
+ *  anonymous suggestion is still worth having. */
+export function sendSuggestion(
+  message: string,
+  email?: string,
+): Promise<{ status: string }> {
+  return request(`/api/suggestions`, {
+    method: "POST",
+    body: JSON.stringify({ message, email: email || null }),
+  });
+}
+
 export function getVenueInfo(venueToken: string): Promise<VenueInfo> {
   return request(`/api/availability/${venueToken}`);
 }

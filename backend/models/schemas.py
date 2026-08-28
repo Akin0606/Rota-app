@@ -624,6 +624,26 @@ class WaitlistEntryOut(BaseModel):
     created_at: str
 
 
+class SuggestionRequest(BaseModel):
+    message: str = Field(min_length=1)
+    # Optional on purpose — asking for an email is the main reason people don't
+    # send feedback, and an anonymous suggestion is still worth having.
+    email: Optional[str] = None
+
+
+class SuggestionOut(BaseModel):
+    id: str
+    message: str
+    email: Optional[str] = None
+    source: str
+    status: str
+    created_at: str
+
+
+class SuggestionUpdateRequest(BaseModel):
+    status: str
+
+
 class AdminCreateManagerRequest(BaseModel):
     email: str = Field(min_length=3)
 

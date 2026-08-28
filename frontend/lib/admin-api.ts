@@ -135,6 +135,31 @@ export function inviteWaitlistEntry(id: string): Promise<AdminManager> {
   return adminRequest(`/api/admin/waitlist/${id}/invite`, { method: "POST" });
 }
 
+export type SuggestionStatus = "new" | "read" | "actioned" | "archived";
+
+export type Suggestion = {
+  id: string;
+  message: string;
+  email: string | null;
+  source: string;
+  status: SuggestionStatus;
+  created_at: string;
+};
+
+export function listSuggestions(): Promise<Suggestion[]> {
+  return adminRequest("/api/admin/suggestions");
+}
+
+export function setSuggestionStatus(
+  id: string,
+  status: SuggestionStatus,
+): Promise<Suggestion> {
+  return adminRequest(`/api/admin/suggestions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
 export function getAdminVenueDetail(id: string): Promise<AdminVenueDetail> {
   return adminRequest(`/api/admin/venues/${id}`);
 }
