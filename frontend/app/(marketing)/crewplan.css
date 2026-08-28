@@ -1,1020 +1,399 @@
-/* Crewplan marketing landing — full redesign (LANDING_REDESIGN_BRIEF.md).
-   Every rule is scoped under .crewplan so nothing leaks into the app UI.
-   Fonts arrive as --font-display / --font-body from the marketing layout via
-   next/font. Dark only — a marketing page has one lighting condition. */
+/* ==========================================================================
+   Crewplan marketing site — design system
+   Rebuilt on Apple's interface principles (materials & depth, optical
+   typography, spring motion, feedback on press). Scoped under .crewplan so
+   nothing reaches the app. Light + dark, following the visitor's system
+   setting until they choose.
+   ========================================================================== */
 
+/* --------------------------------------------------------------------------
+   1 · TOKENS
+   Dark is the base; light overrides only what changes. Both are defined on a
+   real selector (never only inside a media query) so the toggle wins in both
+   directions.
+   -------------------------------------------------------------------------- */
 .crewplan {
-  /* One ground for the whole page. Hierarchy comes from hairlines, spacing and
-     the presence of a card — never from a second background shade. */
-  --bg: #0d0d0d;
-  --card: #141414;
-  --border: #232323;
-  --border-strong: #2e2e2e;
+  color-scheme: dark;
 
-  /* Ink matched exactly to the product (--c-ink in the app). Three tiers, all
-     clearing WCAG AA (>=4.5:1) on the #0d0d0d ground — muted was #545452
-     (2.56:1) and carried real copy (proof row, hero note, FAQ), so it's lifted
-     to #7d7d7a (~4.6:1). */
-  --text-primary: #f0efe9;
-  --text-secondary: #8c8c8a;
-  --text-muted: #7d7d7a;
+  --bg: #0a0a0a;
+  --bg-sunken: #070707;
+  --plate: #101010;
+  --surface: #161616;
+  --surface-2: #1e1e1e;
 
-  --accent: #ff4d00;
+  --hairline: rgba(255, 255, 255, 0.08);
+  --hairline-strong: rgba(255, 255, 255, 0.14);
+
+  --ink: #f2f1ec;
+  --ink-2: #a3a29c;
+  --ink-3: #83827c;
+
+  --accent: #ff5a1f;
+  --accent-hover: #ff6f3d;
+  /* Near-black, not white. The accent is bright enough on dark that white
+     label text measures 3.12:1 — dark text on it is 6.3:1. Light mode uses a
+     much darker accent, so white is correct there. */
+  --accent-on: #12100c;
   --accent-ink: #ff9a5c;
-  --accent-dim: #7a2600;
-  --accent-bg: #1f1108;
+  --accent-wash: rgba(255, 90, 31, 0.12);
+  --accent-line: rgba(255, 90, 31, 0.32);
 
-  /* App semantic palette — imported verbatim from globals.css so the
-     walkthrough frames are honest portraits, not orange-washed lies. */
-  --green: #2ecc71;
-  --green-soft: rgba(46, 204, 113, 0.14);
-  --green-line: rgba(46, 204, 113, 0.4);
-  --amber: #e5a800;
-  --amber-soft: rgba(255, 193, 7, 0.14);
-  --amber-line: rgba(255, 193, 7, 0.4);
-  --red: #e5484d;
-  --red-soft: rgba(229, 72, 77, 0.12);
-  --red-line: rgba(229, 72, 77, 0.45);
+  --green: #35d07f;
+  --green-wash: rgba(53, 208, 127, 0.14);
+  --green-line: rgba(53, 208, 127, 0.36);
+  --amber: #f0b429;
+  --amber-wash: rgba(240, 180, 41, 0.14);
+  --amber-line: rgba(240, 180, 41, 0.38);
+  --red: #ff6166;
+  --red-wash: rgba(255, 97, 102, 0.13);
+  --red-line: rgba(255, 97, 102, 0.4);
 
-  /* Motion — exact values from the app's globals.css, not forked. */
+  /* Materials — translucent chrome that content scrolls under. */
+  --material: rgba(10, 10, 10, 0.72);
+  --material-blur: blur(24px) saturate(180%);
+  --material-edge: rgba(255, 255, 255, 0.06);
+
+  /* Depth. Bigger surfaces read as thicker: more blur, deeper shadow. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+
+  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 32px;
+
+  /* Motion. Critically-damped by default (no overshoot); the bounce curve is
+     reserved for moments a gesture carried momentum into. */
+  --ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-pop: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --dur-fast: 140ms;
+  --dur: 260ms;
+  --dur-slow: 420ms;
 
   background: var(--bg);
-  color: var(--text-primary);
-  font-family: var(--font-body), "IBM Plex Sans", -apple-system, sans-serif;
-  font-size: 15px;
-  line-height: 1.65;
+  color: var(--ink);
+  font-family: var(--font-body), "IBM Plex Sans", -apple-system, system-ui, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
+  text-rendering: optimizeLegibility;
+  min-height: 100dvh;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  /* Scoped to marketing routes only — crewplan.css is imported by
-     (marketing)/layout.tsx, so this never reaches the app. */
-  html {
-    scroll-behavior: smooth;
-  }
+:root[data-theme="light"] .crewplan {
+  color-scheme: light;
+
+  --bg: #fbfaf7;
+  --bg-sunken: #f2f0ea;
+  --plate: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f5f3ed;
+
+  --hairline: rgba(0, 0, 0, 0.09);
+  --hairline-strong: rgba(0, 0, 0, 0.16);
+
+  /* All of these are darkened past their "obvious" values so they clear
+     WCAG AA (4.5:1) as *text* on the light ground — and so white clears 4.5:1
+     on the accent, which is button-label contrast. The intuitive orange
+     (#dd4200) measured 4.15 against #fbfaf7 and 4.33 under white; both fail. */
+  --ink: #17150f;
+  --ink-2: #5c5a53;
+  --ink-3: #6a6860;
+
+  --accent: #ad3300;
+  --accent-hover: #8f2a00;
+  --accent-on: #ffffff;
+  --accent-ink: #ad3300;
+  --accent-wash: rgba(173, 51, 0, 0.09);
+  --accent-line: rgba(173, 51, 0, 0.3);
+
+  --green: #0c6c3c;
+  --green-wash: rgba(12, 108, 60, 0.11);
+  --green-line: rgba(12, 108, 60, 0.32);
+  --amber: #7a5400;
+  --amber-wash: rgba(122, 84, 0, 0.11);
+  --amber-line: rgba(122, 84, 0, 0.3);
+  --red: #b81d24;
+  --red-wash: rgba(184, 29, 36, 0.09);
+  --red-line: rgba(184, 29, 36, 0.3);
+
+  --material: rgba(251, 250, 247, 0.72);
+  --material-edge: rgba(255, 255, 255, 0.7);
+
+  --shadow-sm: 0 1px 2px rgba(23, 21, 15, 0.06);
+  --shadow-md: 0 4px 16px rgba(23, 21, 15, 0.08);
+  --shadow-lg: 0 24px 60px -20px rgba(23, 21, 15, 0.18);
 }
 
-.crewplan * {
+/* --------------------------------------------------------------------------
+   2 · BASE
+   -------------------------------------------------------------------------- */
+.crewplan *,
+.crewplan *::before,
+.crewplan *::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
-
 .crewplan a {
   color: inherit;
   text-decoration: none;
 }
-
 .crewplan button {
   font: inherit;
   color: inherit;
+  background: none;
+  border: none;
+}
+.crewplan img,
+.crewplan svg {
+  display: block;
+  max-width: 100%;
+}
+.crewplan ::selection {
+  background: var(--accent-wash);
 }
 
-/* ---------- TYPE SCALE ---------- */
-.crewplan .t-display-xl,
-.crewplan .t-display-l,
-.crewplan .t-display-m,
-.crewplan .t-quote {
-  font-family: var(--font-display), "Space Grotesk", sans-serif;
+/* Ease the theme flip rather than letting it jump — an abrupt brightness
+   change is exactly what the reduced-motion guidance warns about. Scoped to
+   the ground planes; transitioning every element would be a jank festival. */
+.crewplan,
+.crewplan .plate,
+.crewplan .card {
+  transition:
+    background-color var(--dur) var(--ease-standard),
+    border-color var(--dur) var(--ease-standard),
+    color var(--dur) var(--ease-standard);
+}
+
+/* --------------------------------------------------------------------------
+   3 · TYPOGRAPHY
+   Tracking is size-specific — large display text wants negative tracking,
+   body sits near zero. Leading tracks size inversely. Everything is in rem so
+   it scales with the visitor's own text-size setting.
+   -------------------------------------------------------------------------- */
+.crewplan .d1,
+.crewplan .d2,
+.crewplan .d3,
+.crewplan .d4 {
+  font-family: var(--font-display), "Space Grotesk", system-ui, sans-serif;
+  font-optical-sizing: auto;
+  text-wrap: balance;
+}
+.crewplan .d1 {
+  font-size: clamp(2.6rem, 6.4vw, 5rem);
+  font-weight: 600;
+  letter-spacing: -0.042em;
+  line-height: 1.02;
+}
+.crewplan .d2 {
+  font-size: clamp(1.9rem, 3.9vw, 3rem);
+  font-weight: 600;
+  letter-spacing: -0.032em;
+  line-height: 1.08;
+}
+.crewplan .d3 {
+  font-size: clamp(1.35rem, 2.2vw, 1.7rem);
   font-weight: 500;
-}
-.crewplan .t-display-xl {
-  font-size: clamp(38px, 5.6vw, 64px);
-  letter-spacing: -0.035em;
-  line-height: 1.04;
-}
-.crewplan .t-display-l {
-  font-size: clamp(27px, 3.4vw, 40px);
-  letter-spacing: -0.025em;
-  line-height: 1.12;
-}
-.crewplan .t-display-m {
-  font-size: 17px;
-  letter-spacing: -0.012em;
-  line-height: 1.3;
-}
-.crewplan .t-quote {
-  font-weight: 400; /* the one place the page whispers */
-  font-size: clamp(24px, 3.2vw, 34px);
-  letter-spacing: -0.02em;
-  line-height: 1.38;
-}
-.crewplan .t-body-l {
-  font-size: 17px;
-  line-height: 1.6;
-}
-.crewplan .t-small {
-  font-size: 13.5px;
-  line-height: 1.55;
-}
-.crewplan .t-micro {
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: -0.022em;
   line-height: 1.2;
+}
+.crewplan .d4 {
+  font-size: 1.0625rem;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  line-height: 1.32;
+}
+.crewplan .lede {
+  font-size: clamp(1.0625rem, 1.4vw, 1.1875rem);
+  line-height: 1.55;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+.crewplan .body {
+  font-size: 0.9375rem;
+  line-height: 1.62;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+.crewplan .small {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.crewplan .eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--accent);
+  line-height: 1.2;
+}
+.crewplan .ink {
+  color: var(--ink);
 }
 .crewplan .accent {
   color: var(--accent);
 }
-.crewplan .ink {
-  color: var(--text-primary);
-}
-.crewplan .muted {
-  color: var(--text-secondary);
+.crewplan .tnum {
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---------- REVEAL SYSTEM ----------
-   The hidden initial state lives INSIDE the no-preference query, so under
-   `reduce` — or if the observer never fires (JS off, throttled tab) — nothing
-   is ever invisible. This is the opposite failure mode to the old .fade-in. */
-@media (prefers-reduced-motion: no-preference) {
-  .crewplan .reveal {
-    opacity: 0;
-    transform: translateY(10px);
-    transition:
-      opacity 380ms var(--ease-out),
-      transform 380ms var(--ease-out);
-    transition-delay: calc(min(var(--i, 0), 6) * 50ms);
-  }
-  .crewplan .reveal.is-visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* ---------- WRAP / SECTION SHARED ---------- */
+/* --------------------------------------------------------------------------
+   4 · LAYOUT
+   -------------------------------------------------------------------------- */
 .crewplan .wrap {
-  max-width: 1120px;
-  margin: 0 auto;
-  /* longhand so it never clobbers a section's vertical padding when both
-     classes land on the same element */
-  padding-left: 32px;
-  padding-right: 32px;
+  width: 100%;
+  max-width: 76rem;
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 4vw, 2.5rem);
 }
-/* Vertical padding only — horizontal always comes from .wrap, so the two never
-   collide when both classes land on one <section>. */
-.crewplan section {
-  padding-top: 104px; /* Standard density */
-  padding-bottom: 104px;
+.crewplan .wrap-narrow {
+  max-width: 46rem;
 }
-.crewplan section.stage {
-  padding-top: 128px;
-  padding-bottom: 128px;
+.crewplan .section {
+  padding-block: clamp(4.5rem, 9vw, 8rem);
 }
-.crewplan section.band {
-  padding-top: 80px;
-  padding-bottom: 80px;
-  border-top: 0.5px solid var(--border);
-  border-bottom: 0.5px solid var(--border);
+.crewplan .section-tight {
+  padding-block: clamp(3.5rem, 6vw, 5.5rem);
+}
+
+/* A "plate" is a full-bleed rounded panel on a different ground. This is what
+   makes one section visibly a different place from the next — the old page
+   used one flat colour throughout and every section blurred into the last. */
+.crewplan .plate {
+  background: var(--plate);
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--hairline);
+}
+.crewplan .plate-sunken {
+  background: var(--bg-sunken);
+  border-radius: var(--radius-xl);
+}
+
+.crewplan .section-head {
+  max-width: 44rem;
+}
+.crewplan .section-head .eyebrow {
+  margin-bottom: 0.875rem;
+}
+.crewplan .section-head .d2 {
+  margin-bottom: 0.875rem;
+}
+.crewplan .section-head.center {
+  margin-inline: auto;
   text-align: center;
 }
-@media (max-width: 768px) {
-  .crewplan section {
-    padding-top: 64px;
-    padding-bottom: 64px;
-  }
-  .crewplan section.stage {
-    padding-top: 72px;
-    padding-bottom: 72px;
-  }
-  .crewplan section.band {
-    padding-top: 56px;
-    padding-bottom: 56px;
-  }
-  .crewplan .wrap {
-    padding-left: 20px;
-    padding-right: 20px;
-  }
-}
 
-.crewplan .eyebrow {
-  color: var(--text-muted);
-  margin-bottom: 14px;
-}
-.crewplan .section-head {
-  max-width: 680px;
-}
-.crewplan .section-head h2 {
-  margin-bottom: 16px;
-}
-.crewplan .section-sub {
-  color: var(--text-secondary);
-  font-size: 17px;
-  line-height: 1.6;
-  max-width: 560px;
-}
-
-/* ---------- NAV ---------- */
-.crewplan nav {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  background: rgba(13, 13, 13, 0.85);
-  backdrop-filter: blur(12px);
-  border-bottom: 0.5px solid var(--border);
-}
-.crewplan .nav-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 32px;
-  max-width: 1120px;
-  margin: 0 auto;
-}
-.crewplan .logo {
-  font-family: var(--font-display), "Space Grotesk", sans-serif;
-  font-weight: 500;
-  font-size: 20px;
-  letter-spacing: -0.04em;
+/* --------------------------------------------------------------------------
+   5 · CONTROLS
+   Feedback lives on the press, not the release.
+   -------------------------------------------------------------------------- */
+.crewplan .btn {
   display: inline-flex;
-  align-items: baseline;
-}
-.crewplan .logo .dot {
-  color: var(--accent);
-}
-.crewplan .nav-links {
-  display: flex;
-  gap: 34px;
-  font-size: 13.5px;
-  color: var(--text-secondary);
-}
-.crewplan .nav-links a {
-  transition: color 120ms var(--ease-out);
-}
-.crewplan .nav-links a:hover {
-  color: var(--text-primary);
-}
-.crewplan .nav-actions {
-  display: flex;
   align-items: center;
-  gap: 18px;
-}
-.crewplan .nav-login {
-  font-size: 13.5px;
-  color: var(--text-secondary);
-  transition: color 120ms var(--ease-out);
-}
-.crewplan .nav-login:hover {
-  color: var(--text-primary);
-}
-.crewplan .btn-accent {
-  background: var(--accent);
-  color: #fff;
-  font-size: 13.5px;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.9375rem;
   font-weight: 500;
-  padding: 9px 16px;
-  border-radius: 8px;
-  border: none;
+  letter-spacing: -0.008em;
+  padding: 0.8125rem 1.375rem;
+  border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;
+  min-height: 2.75rem;
   transition:
-    opacity 140ms var(--ease-out),
-    transform 140ms var(--ease-out);
+    background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
 }
-.crewplan .btn-accent:hover {
-  opacity: 0.9;
+.crewplan .btn:active {
+  transform: scale(0.97);
 }
-.crewplan .btn-accent:active {
-  transform: scale(0.98);
-}
-.crewplan .btn-accent:disabled {
-  cursor: default;
-  opacity: 0.7;
-}
-@media (max-width: 768px) {
-  .crewplan .nav-links,
-  .crewplan .nav-login {
-    display: none;
-  }
-  .crewplan .nav-inner {
-    padding: 14px 20px;
-  }
-}
-
-/* ---------- HERO ---------- */
-.crewplan .hero {
-  text-align: center;
-  padding-top: 92px;
-  padding-bottom: 40px;
-}
-.crewplan .badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--accent-bg);
-  border: 0.5px solid var(--accent-dim);
-  color: var(--accent-ink);
-  font-size: 12.5px;
-  padding: 6px 14px;
-  border-radius: 100px;
-  margin-bottom: 26px;
-}
-.crewplan .badge .pulse {
-  width: 6px;
-  height: 6px;
+.crewplan .btn-primary {
   background: var(--accent);
-  border-radius: 50%;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .crewplan .badge .pulse {
-    animation: cw-pulse 2s infinite;
-  }
-}
-@keyframes cw-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
-}
-.crewplan .hero h1 {
-  max-width: 800px;
-  margin: 0 auto 22px;
-}
-/* Hero entrance — staggered on mount. @starting-style + transition so the
-   resting state is visible: if the transition never runs the hero just shows. */
-@media (prefers-reduced-motion: no-preference) {
-  .crewplan .hero-in {
-    transition:
-      opacity 400ms var(--ease-out),
-      transform 400ms var(--ease-out);
-    transition-delay: calc(var(--i, 0) * 60ms);
-  }
-  @starting-style {
-    .crewplan .hero-in {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-  }
-}
-.crewplan .hero-sub {
-  color: var(--text-secondary);
-  font-size: 17px;
-  line-height: 1.6;
-  max-width: 560px;
-  margin: 0 auto 34px;
-}
-
-/* Waitlist form (behaviour unchanged) */
-.crewplan .waitlist-form {
-  display: flex;
-  gap: 10px;
-  max-width: 460px;
-  margin: 0 auto 14px;
-}
-.crewplan .waitlist-form input {
-  flex: 1;
-  min-width: 0;
-  background: var(--card);
-  border: 0.5px solid var(--border-strong);
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: 14px;
-  padding: 13px 16px;
-  border-radius: 8px;
-  outline: none;
-  transition: border-color 140ms var(--ease-out);
-}
-.crewplan .waitlist-form input::placeholder {
-  color: var(--text-muted);
-}
-.crewplan .waitlist-form input:focus {
-  border-color: var(--accent);
-}
-.crewplan .waitlist-form button {
-  padding: 13px 22px;
-}
-@media (max-width: 520px) {
-  .crewplan .waitlist-form {
-    flex-direction: column;
-  }
-}
-.crewplan .hero-note {
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
-
-/* Micro-proof row under the form */
-.crewplan .proof-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px 0;
-  margin: 32px auto 0;
-  max-width: 720px;
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
-.crewplan .proof-row span:not(:last-child)::after {
-  content: "·";
-  margin: 0 12px;
-  color: var(--border-strong);
-}
-
-/* ---------- THE LOOP (3 steps) ---------- */
-.crewplan .loop {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin-top: 48px;
-}
-.crewplan .loop .step {
-  padding: 0 28px;
-}
-.crewplan .loop .step:not(:first-child) {
-  border-left: 0.5px solid var(--border);
-}
-.crewplan .loop .step:first-child {
-  padding-left: 0;
-}
-.crewplan .loop .step-num {
-  color: var(--accent);
-  margin-bottom: 16px;
-}
-.crewplan .loop .step h3 {
-  margin-bottom: 8px;
-}
-.crewplan .loop .step p {
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.6;
-}
-@media (max-width: 800px) {
-  .crewplan .loop {
-    grid-template-columns: 1fr;
-    gap: 28px;
-  }
-  .crewplan .loop .step {
-    padding: 0;
-  }
-  .crewplan .loop .step:not(:first-child) {
-    border-left: none;
-    border-top: 0.5px solid var(--border);
-    padding-top: 28px;
-  }
-}
-
-/* ---------- SPLIT SECTIONS (for-team / for-you) ---------- */
-.crewplan .split {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 64px;
-  align-items: center;
-  margin-top: 44px;
-}
-.crewplan .split.mirror .split-media {
-  order: -1;
-}
-.crewplan .split-list {
-  margin-top: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.crewplan .split-list .item h3 {
-  font-family: var(--font-display), "Space Grotesk", sans-serif;
-  font-weight: 500;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-  margin-bottom: 3px;
-}
-.crewplan .split-list .item p {
-  color: var(--text-secondary);
-  font-size: 13.5px;
-  line-height: 1.55;
-}
-.crewplan .split-close {
-  margin-top: 22px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-.crewplan .split-media {
-  display: flex;
-  justify-content: center;
-}
-.crewplan .split-media .bezel {
-  max-width: 100%;
-}
-/* Static "still" frame used in S4/S5 — responsive, unlike the walkthrough
-   bezels which are fixed by design. */
-.crewplan .bezel-still {
-  width: 100%;
-  max-width: 440px;
-  aspect-ratio: 22 / 15;
-  border-radius: 12px;
-}
-.crewplan .split-media .bezel-phone {
-  aspect-ratio: 320 / 600;
-  height: auto;
-  max-width: 300px;
-}
-.crewplan .still-label {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  text-align: center;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-muted);
-}
-@media (max-width: 860px) {
-  .crewplan .split {
-    grid-template-columns: 1fr;
-    gap: 36px;
-  }
-  .crewplan .split.mirror .split-media,
-  .crewplan .split .split-media {
-    order: 0;
-  }
-}
-
-/* ---------- COMPLIANCE BAND ---------- */
-.crewplan .compliance {
-  max-width: 620px;
-  margin: 0 auto;
-}
-.crewplan .compliance h2 {
-  margin-bottom: 20px;
-}
-.crewplan .compliance p {
-  color: var(--text-secondary);
-  font-size: 17px;
-  line-height: 1.62;
-}
-
-/* ---------- SETUP STRIP ---------- */
-.crewplan .setup-arc {
-  margin-top: 36px;
-  border-top: 1px solid var(--accent-dim);
-  padding-top: 18px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 20px;
-}
-.crewplan .setup-arc span {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-.crewplan .setup-arc span:not(:last-child)::after {
-  content: "→";
-  margin-left: 20px;
-  color: var(--text-muted);
-}
-
-/* ---------- QUOTE BAND ---------- */
-.crewplan .quote-band {
-  max-width: 720px;
-  margin: 0 auto;
-}
-.crewplan .quote-band .attrib {
-  margin-top: 22px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-/* ---------- FEATURE INDEX ---------- */
-.crewplan .feature-cards {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  margin-top: 44px;
-}
-.crewplan .feature-card {
-  background: var(--card);
-  border: 0.5px solid var(--border);
-  border-radius: 12px;
-  padding: 24px;
-  transition: border-color 160ms var(--ease-out);
-}
-.crewplan .feature-card:hover {
-  border-color: var(--border-strong);
-}
-.crewplan .feature-card h3 {
-  margin-bottom: 8px;
-}
-.crewplan .feature-card p {
-  color: var(--text-secondary);
-  font-size: 13.5px;
-  line-height: 1.55;
-}
-.crewplan .feature-index {
-  margin-top: 28px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  column-gap: 40px;
-}
-.crewplan .feature-index .fi-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 11px 0;
-  border-top: 0.5px solid var(--border);
-  font-size: 13.5px;
-}
-.crewplan .feature-index .fi-row .fi-name {
-  color: var(--text-primary);
-}
-.crewplan .feature-index .fi-row .fi-note {
-  color: var(--text-muted);
-  text-align: right;
-  flex-shrink: 0;
-}
-@media (max-width: 800px) {
-  .crewplan .feature-cards,
-  .crewplan .feature-index {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ---------- ROADMAP ---------- */
-.crewplan .roadmap-list {
-  display: flex;
-  flex-direction: column;
-  margin-top: 44px;
-  border-top: 0.5px solid var(--border);
-}
-.crewplan .roadmap-item {
-  padding: 22px 0;
-  border-bottom: 0.5px solid var(--border);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-}
-.crewplan .roadmap-item h3 {
-  font-family: var(--font-display), "Space Grotesk", sans-serif;
-  font-weight: 500;
-  font-size: 15.5px;
-  letter-spacing: -0.01em;
-  margin-bottom: 4px;
-}
-.crewplan .roadmap-item p {
-  color: var(--text-secondary);
-  font-size: 13.5px;
-  line-height: 1.55;
-  max-width: 620px;
-}
-.crewplan .roadmap-tag {
-  flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 4px 11px;
-  border-radius: 100px;
-  background: var(--accent-bg);
-  color: var(--accent-ink);
-}
-.crewplan .roadmap-close {
-  margin-top: 22px;
-  font-size: 13.5px;
-  color: var(--text-muted);
-}
-@media (max-width: 600px) {
-  .crewplan .roadmap-item {
-    flex-direction: column;
-    gap: 10px;
-  }
-}
-
-/* ---------- FAQ ---------- */
-.crewplan .faq-list {
-  margin-top: 40px;
-  border-top: 0.5px solid var(--border);
-}
-.crewplan .faq-row {
-  padding: 22px 0;
-  border-bottom: 0.5px solid var(--border);
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 32px;
-}
-.crewplan .faq-row .q {
-  font-family: var(--font-display), "Space Grotesk", sans-serif;
-  font-weight: 500;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-}
-.crewplan .faq-row .a {
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.6;
-}
-@media (max-width: 700px) {
-  .crewplan .faq-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-}
-
-/* ---------- FINAL CTA ---------- */
-.crewplan .final-cta {
-  text-align: center;
-}
-.crewplan .final-cta .section-head {
-  max-width: 100%;
-  margin: 0 auto;
-}
-.crewplan .final-cta .section-sub {
-  margin: 14px auto 36px;
-}
-
-/* ---------- FOOTER ---------- */
-.crewplan footer {
-  border-top: 0.5px solid var(--border);
-  padding: 36px 0;
-}
-.crewplan .footer-inner {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 0 32px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-.crewplan .footer-links {
-  display: flex;
-  gap: 22px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-.crewplan .footer-links a {
-  transition: color 120ms var(--ease-out);
-}
-.crewplan .footer-links a:hover {
-  color: var(--text-secondary);
-}
-.crewplan .footer-copy {
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
-@media (max-width: 768px) {
-  .crewplan .footer-inner {
-    padding: 0 20px;
-  }
-}
-
-/* =====================================================================
-   WALKTHROUGH  (.wt)  — shell styles. Frame internals land in batch 2.
-   ===================================================================== */
-.crewplan .wt {
-  max-width: 1200px;
-  margin: 44px auto 0;
-}
-.crewplan .wt-toggles {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  height: 44px;
-  margin-bottom: 20px;
-}
-.crewplan .seg {
-  display: inline-flex;
-  position: relative;
-  border: 0.5px solid var(--border-strong);
-  border-radius: 8px;
-  padding: 3px;
-  gap: 2px;
-}
-.crewplan .seg button {
-  position: relative;
-  z-index: 1;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 12.5px;
-  font-weight: 500;
-  padding: 7px 16px;
-  border-radius: 6px;
-  color: var(--text-secondary);
-  transition: color 160ms var(--ease-out);
-  min-width: 82px;
-}
-.crewplan .seg button[aria-checked="true"] {
-  color: var(--accent-ink);
-}
-.crewplan .seg .seg-pill {
-  position: absolute;
-  z-index: 0;
-  top: 3px;
-  bottom: 3px;
-  border-radius: 6px;
-  background: var(--accent-bg);
-  transition: transform 180ms var(--ease-out);
-}
-
-.crewplan .wt-body {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 40px;
-}
-.crewplan .wt-rail {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.crewplan .wt-rail .rail-item {
-  position: relative;
-  text-align: left;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 12px 14px;
-  min-height: 44px;
-  font-size: 15px;
-  line-height: 1.35;
-  color: var(--text-secondary);
-  border-radius: 6px;
-  transition:
-    color 140ms var(--ease-out),
-    transform 100ms var(--ease-out);
-}
-.crewplan .wt-rail .rail-item .rail-num {
-  font-size: 11.5px;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  margin-right: 10px;
-}
-.crewplan .wt-rail .rail-item:hover {
-  color: var(--text-primary);
+  color: var(--accent-on);
+  box-shadow: var(--shadow-sm);
+}
+.crewplan .btn-secondary {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--hairline-strong);
+}
+.crewplan .btn-ghost {
+  color: var(--ink-2);
+  padding-inline: 0.75rem;
+}
+.crewplan .btn-sm {
+  font-size: 0.875rem;
+  padding: 0.5rem 0.9375rem;
+  min-height: 2.5rem;
+}
+.crewplan .btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.crewplan .btn:disabled:active {
+  transform: none;
 }
 @media (hover: hover) and (pointer: fine) {
-  .crewplan .wt-rail .rail-item:hover {
-    transform: translateX(2px);
+  .crewplan .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
   }
-}
-.crewplan .wt-rail .rail-item[aria-selected="true"] {
-  color: var(--text-primary);
-}
-.crewplan .wt-rail .rail-item[aria-selected="true"] .rail-num {
-  color: var(--accent);
-}
-.crewplan .wt-rail .rail-item .rail-bar {
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  background: var(--accent);
-  border-radius: 2px;
-  transform: scaleX(0);
-  transform-origin: left;
-  opacity: 0;
-}
-.crewplan .wt-rail .rail-item[aria-selected="true"] .rail-bar {
-  transform: scaleX(1);
-  opacity: 1;
-}
-.crewplan .wt-rail .rail-item[aria-selected="true"].is-autoplaying .rail-bar {
-  animation: wt-progress var(--dwell, 4500ms) linear both;
-}
-@keyframes wt-progress {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
+  .crewplan .btn-secondary:hover:not(:disabled),
+  .crewplan .btn-ghost:hover:not(:disabled) {
+    color: var(--ink);
+    border-color: var(--hairline-strong);
   }
 }
 
-.crewplan .wt-stage-wrap {
-  display: flex;
-  flex-direction: column;
-}
-.crewplan .wt-stage {
-  position: relative;
-  height: 620px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-.crewplan .wt-frame {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-/* Only the incoming frame is mounted (keyed remount). A step change slides;
-   a role/device change is a lens, so it only crossfades. @starting-style +
-   transition — the frame's natural state is fully visible, so motion is purely
-   additive: if the transition never runs (reduced motion, older browser) the
-   frame just appears. Direction/kind is read from data-attrs on the stage. */
-@media (prefers-reduced-motion: no-preference) {
-  .crewplan .wt-frame {
-    transition:
-      opacity 200ms var(--ease-out),
-      transform 220ms var(--ease-out);
-  }
-  @starting-style {
-    .crewplan .wt-stage[data-change="step"][data-dir="fwd"] .wt-frame {
-      opacity: 0;
-      transform: translateX(10px);
-    }
-    .crewplan .wt-stage[data-change="step"][data-dir="back"] .wt-frame {
-      opacity: 0;
-      transform: translateX(-10px);
-    }
-    .crewplan .wt-stage[data-change="lens"] .wt-frame {
-      opacity: 0;
-    }
-  }
-}
-
-/* Bezels */
-.crewplan .bezel {
-  border: 0.5px solid var(--border-strong);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  background: var(--bg);
-  overflow: hidden;
-}
-.crewplan .bezel-laptop {
+.crewplan .field {
   width: 100%;
-  max-width: 900px;
-  aspect-ratio: 3 / 2;
-  border-radius: 12px;
-}
-.crewplan .bezel-phone {
-  width: 320px;
-  height: 600px;
-  border-radius: 28px;
-  position: relative;
-  padding-top: 14px;
-}
-.crewplan .bezel-phone::before {
-  content: "";
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 36px;
-  height: 4px;
-  border-radius: 100px;
-  background: var(--border-strong);
-}
-
-.crewplan .wt-caption {
-  margin-top: 22px;
-  padding-top: 20px;
-  border-top: 0.5px solid var(--border);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-}
-.crewplan .wt-caption .cap-headline {
-  margin-bottom: 6px;
-}
-.crewplan .wt-caption .cap-line {
-  font-size: 13.5px;
-  color: var(--text-secondary);
-  max-width: 520px;
-}
-.crewplan .wt-nav {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.crewplan .wt-nav button {
-  width: 40px;
-  height: 40px;
-  border: 0.5px solid var(--border-strong);
-  background: none;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--hairline-strong);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  padding: 0.8125rem 1rem;
+  border-radius: var(--radius-sm);
+  outline: none;
+  min-height: 2.75rem;
   transition:
-    opacity 140ms var(--ease-out),
-    transform 140ms var(--ease-out),
-    border-color 140ms var(--ease-out);
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
-.crewplan .wt-nav button:hover:not(:disabled) {
-  border-color: var(--border-strong);
-  color: var(--text-primary);
+.crewplan .field::placeholder {
+  color: var(--ink-3);
 }
-.crewplan .wt-nav button:active:not(:disabled) {
-  transform: scale(0.96);
+.crewplan .field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
 }
-.crewplan .wt-nav button:disabled {
-  opacity: 0.4;
-  cursor: default;
+.crewplan textarea.field {
+  resize: vertical;
+  min-height: 6.5rem;
+  line-height: 1.55;
 }
 
-.crewplan .wt-sr {
+.crewplan .card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+}
+
+.crewplan a:focus-visible,
+.crewplan button:focus-visible,
+.crewplan .field:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+
+.crewplan .sr {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1026,716 +405,945 @@
   border: 0;
 }
 
-/* Mobile walkthrough */
-.crewplan .wt-strip {
-  display: none;
+/* --------------------------------------------------------------------------
+   6 · CHROME — translucent, content scrolls under it
+   -------------------------------------------------------------------------- */
+.crewplan .nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--material);
+  backdrop-filter: var(--material-blur);
+  -webkit-backdrop-filter: var(--material-blur);
+  border-bottom: 1px solid var(--material-edge);
 }
-@media (max-width: 900px) {
+.crewplan .nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  min-height: 3.75rem;
+}
+.crewplan .logo {
+  font-family: var(--font-display), "Space Grotesk", system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 1.25rem;
+  letter-spacing: -0.045em;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  cursor: pointer;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.crewplan .logo:active {
+  opacity: 0.6;
+}
+.crewplan .logo .dot {
+  color: var(--accent);
+}
+.crewplan .nav-links {
+  display: flex;
+  gap: 1.75rem;
+  margin-left: auto;
+  font-size: 0.875rem;
+  color: var(--ink-2);
+}
+.crewplan .nav-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.crewplan .nav-links a[aria-current="page"] {
+  color: var(--ink);
+}
+.crewplan .nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+@media (hover: hover) and (pointer: fine) {
+  .crewplan .nav-links a:hover {
+    color: var(--ink);
+  }
+}
+@media (max-width: 52rem) {
+  .crewplan .nav-links {
+    display: none;
+  }
+  .crewplan .nav-actions .nav-login {
+    display: none;
+  }
+}
+
+/* Theme toggle — a 2-up segmented pill, not a metaphor switch. */
+.crewplan .theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+}
+.crewplan .theme-toggle button {
+  position: relative;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+/* Keep the 32px visual but give it a 44px hit box — the target should be
+   forgiving even when the control is deliberately small. */
+.crewplan .theme-toggle button::before {
+  content: "";
+  position: absolute;
+  inset: -0.375rem;
+}
+.crewplan .theme-toggle button:active {
+  transform: scale(0.9);
+}
+.crewplan .theme-toggle button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+/* --------------------------------------------------------------------------
+   7 · HERO
+   -------------------------------------------------------------------------- */
+.crewplan .hero {
+  padding-block: clamp(3.5rem, 8vw, 6.5rem) clamp(3rem, 6vw, 4.5rem);
+  text-align: center;
+}
+.crewplan .hero .d1 {
+  max-width: 20ch;
+  margin-inline: auto;
+  margin-bottom: 1.25rem;
+}
+.crewplan .hero .lede {
+  max-width: 38rem;
+  margin-inline: auto;
+  margin-bottom: 2rem;
+}
+.crewplan .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--accent-wash);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 0.375rem 0.875rem;
+  border-radius: 999px;
+  margin-bottom: 1.5rem;
+}
+.crewplan .pulse {
+  width: 0.375rem;
+  height: 0.375rem;
+  background: currentColor;
+  border-radius: 50%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .crewplan .pulse {
+    animation: cw-pulse 2.4s ease-in-out infinite;
+  }
+}
+@keyframes cw-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.crewplan .hero-form {
+  display: flex;
+  gap: 0.5rem;
+  max-width: 30rem;
+  margin-inline: auto;
+}
+.crewplan .hero-note {
+  margin-top: 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+}
+@media (max-width: 34rem) {
+  .crewplan .hero-form {
+    flex-direction: column;
+  }
+}
+
+/* The four proof claims, as a real row of plates rather than a run-on line. */
+.crewplan .proof {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-top: 3rem;
+}
+.crewplan .proof div {
+  padding: 0.875rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  font-size: 0.8125rem;
+  color: var(--ink-2);
+  text-align: center;
+}
+@media (max-width: 46rem) {
+  .crewplan .proof {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   8 · CONTENT BLOCKS
+   -------------------------------------------------------------------------- */
+.crewplan .steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 3rem;
+}
+.crewplan .step {
+  padding: 1.75rem 1.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+}
+.crewplan .step-n {
+  font-family: var(--font-display), "Space Grotesk", system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin-bottom: 1.25rem;
+}
+.crewplan .step .d4 {
+  margin-bottom: 0.4375rem;
+}
+@media (max-width: 52rem) {
+  .crewplan .steps {
+    grid-template-columns: 1fr;
+  }
+}
+
+.crewplan .split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: center;
+}
+.crewplan .split.mirror .split-media {
+  order: -1;
+}
+.crewplan .split-list {
+  margin-top: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.crewplan .split-list .d4 {
+  margin-bottom: 0.25rem;
+}
+.crewplan .split-media {
+  display: flex;
+  justify-content: center;
+}
+@media (max-width: 56rem) {
+  .crewplan .split {
+    grid-template-columns: 1fr;
+  }
+  .crewplan .split.mirror .split-media,
+  .crewplan .split .split-media {
+    order: 0;
+  }
+}
+
+/* Compliance — the quiet, serious one. Restraint is the point. */
+.crewplan .compliance {
+  text-align: center;
+  max-width: 40rem;
+  margin-inline: auto;
+}
+.crewplan .compliance .d2 {
+  margin-bottom: 1.125rem;
+}
+.crewplan .compliance p {
+  font-size: clamp(1rem, 1.3vw, 1.125rem);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+/* Setup arc */
+.crewplan .arc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem;
+  margin-top: 2rem;
+}
+.crewplan .arc span {
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  padding: 0.5rem 0.875rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+}
+.crewplan .arc i {
+  color: var(--ink-3);
+  font-style: normal;
+}
+
+/* Quote */
+.crewplan .quote {
+  text-align: center;
+  max-width: 44rem;
+  margin-inline: auto;
+}
+.crewplan .quote p {
+  font-family: var(--font-display), "Space Grotesk", system-ui, sans-serif;
+  font-size: clamp(1.5rem, 3.2vw, 2.25rem);
+  font-weight: 400;
+  letter-spacing: -0.028em;
+  line-height: 1.28;
+  text-wrap: balance;
+}
+.crewplan .quote .attrib {
+  margin-top: 1.25rem;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+}
+
+/* Features */
+.crewplan .features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 3rem;
+}
+.crewplan .feature {
+  padding: 1.625rem 1.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  transition:
+    border-color var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-standard);
+}
+.crewplan .feature .d4 {
+  margin-bottom: 0.4375rem;
+}
+.crewplan .feature-mark {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--accent-wash);
+  color: var(--accent);
+  margin-bottom: 1.125rem;
+}
+@media (hover: hover) and (pointer: fine) {
+  .crewplan .feature:hover {
+    border-color: var(--hairline-strong);
+    transform: translateY(-2px);
+  }
+}
+@media (max-width: 60rem) {
+  .crewplan .features {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 40rem) {
+  .crewplan .features {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Feature index */
+.crewplan .index {
+  margin-top: 2.5rem;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  column-gap: 3rem;
+}
+.crewplan .index-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--hairline);
+  font-size: 0.875rem;
+}
+.crewplan .index-row span:first-child {
+  color: var(--ink);
+}
+.crewplan .index-row span:last-child {
+  color: var(--ink-3);
+  text-align: right;
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+}
+@media (max-width: 52rem) {
+  .crewplan .index {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Roadmap — three tiers, so it reads as considered not as a wish list. */
+.crewplan .road {
+  margin-top: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+.crewplan .road-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  padding: 1.375rem 1.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+}
+.crewplan .road-item .body {
+  max-width: 46rem;
+  margin-top: 0.25rem;
+}
+.crewplan .tag {
+  flex-shrink: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.3125rem 0.6875rem;
+  border-radius: 999px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.crewplan .tag-next {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.crewplan .tag-exploring {
+  background: var(--surface-2);
+  color: var(--ink-3);
+}
+.crewplan .road-close {
+  margin-top: 1.5rem;
+  font-size: 0.9375rem;
+  color: var(--ink-3);
+}
+@media (max-width: 40rem) {
+  .crewplan .road-item {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .crewplan .tag {
+    margin-left: 0;
+  }
+}
+
+/* FAQ */
+.crewplan .faq {
+  margin-top: 2.5rem;
+}
+.crewplan .faq-row {
+  display: grid;
+  grid-template-columns: 17rem 1fr;
+  gap: 2rem;
+  padding: 1.375rem 0;
+  border-top: 1px solid var(--hairline);
+}
+@media (max-width: 48rem) {
+  .crewplan .faq-row {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+}
+
+/* Suggestion box */
+.crewplan .suggest {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 34rem;
+  margin-top: 2rem;
+}
+.crewplan .suggest-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.crewplan .suggest-row .field {
+  flex: 1;
+}
+@media (max-width: 34rem) {
+  .crewplan .suggest-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+.crewplan .suggest-done {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.125rem 1.25rem;
+  border-radius: var(--radius);
+  background: var(--green-wash);
+  border: 1px solid var(--green-line);
+  color: var(--green);
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+.crewplan .form-error {
+  font-size: 0.8125rem;
+  color: var(--red);
+}
+
+/* CTA + footer */
+.crewplan .cta {
+  text-align: center;
+}
+.crewplan .cta .lede {
+  margin: 0.875rem auto 2rem;
+  max-width: 34rem;
+}
+.crewplan .footer {
+  border-top: 1px solid var(--hairline);
+  padding-block: 2.25rem;
+}
+.crewplan .footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.crewplan .footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--ink-3);
+  margin-inline: -0.5rem;
+}
+/* Padding rather than a bare inline link, so each one is a comfortable tap
+   target on a phone without changing how the row looks. */
+.crewplan .footer-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-inline: 0.5rem;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .crewplan .footer-links a:hover {
+    color: var(--ink-2);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   9 · REVEAL
+   The hidden state lives inside no-preference, so under `reduce` — or if the
+   observer never fires at all — nothing is ever invisible.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  .crewplan .reveal {
+    opacity: 0;
+    transform: translateY(0.75rem);
+    transition:
+      opacity var(--dur-slow) var(--ease-out),
+      transform var(--dur-slow) var(--ease-standard);
+    transition-delay: calc(min(var(--i, 0), 6) * 55ms);
+  }
+  .crewplan .reveal.in {
+    opacity: 1;
+    transform: none;
+  }
+  .crewplan .rise {
+    transition:
+      opacity var(--dur-slow) var(--ease-out),
+      transform var(--dur-slow) var(--ease-standard);
+    transition-delay: calc(min(var(--i, 0), 8) * 55ms);
+  }
+  @starting-style {
+    .crewplan .rise {
+      opacity: 0;
+      transform: translateY(0.625rem);
+    }
+  }
+}
+
+/* --------------------------------------------------------------------------
+   10 · ACCESSIBILITY PREFERENCES
+   Reduced motion means gentler, not none. Reduced transparency means frostier.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .crewplan *,
+  .crewplan *::before,
+  .crewplan *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 120ms !important;
+    scroll-behavior: auto !important;
+  }
+  .crewplan .btn:active,
+  .crewplan .feature:hover,
+  .crewplan .theme-toggle button:active {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .crewplan .nav {
+    background: var(--bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .crewplan {
+    --hairline: rgba(255, 255, 255, 0.28);
+    --hairline-strong: rgba(255, 255, 255, 0.45);
+    --ink-2: #d2d1cb;
+    --ink-3: #b4b3ad;
+  }
+  :root[data-theme="light"] .crewplan {
+    --hairline: rgba(0, 0, 0, 0.3);
+    --hairline-strong: rgba(0, 0, 0, 0.5);
+    --ink-2: #33312b;
+    --ink-3: #46443e;
+  }
+  .crewplan .nav {
+    background: var(--bg);
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* ==========================================================================
+   11 · WALKTHROUGH  (.wt)
+   Lives on its own page. Step / role / device are three independent states.
+   ========================================================================== */
+.crewplan .wt {
+  --stage-h: 40rem;
+}
+.crewplan .wt-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.crewplan .seg {
+  position: relative;
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+}
+.crewplan .seg button {
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 0.5rem 1.125rem;
+  border-radius: 999px;
+  color: var(--ink-3);
+  min-height: 2.25rem;
+  transition:
+    color var(--dur) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.crewplan .seg button:active {
+  transform: scale(0.96);
+}
+.crewplan .seg button[aria-checked="true"] {
+  color: var(--accent);
+}
+.crewplan .seg-pill {
+  position: absolute;
+  z-index: 0;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 999px;
+  background: var(--accent-wash);
+  transition: transform var(--dur) var(--ease-standard);
+}
+
+.crewplan .wt-body {
+  display: grid;
+  grid-template-columns: 16.5rem 1fr;
+  gap: clamp(1.5rem, 3vw, 2.75rem);
+  align-items: start;
+}
+.crewplan .wt-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 5rem;
+}
+.crewplan .rail-item {
+  position: relative;
+  text-align: left;
+  cursor: pointer;
+  padding: 0.75rem 0.875rem 0.75rem 1.125rem;
+  min-height: 2.75rem;
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+  font-size: 0.9375rem;
+  line-height: 1.35;
+  transition:
+    color var(--dur) var(--ease-out),
+    background-color var(--dur) var(--ease-out);
+}
+.crewplan .rail-item .rail-n {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  display: block;
+  margin-bottom: 0.1875rem;
+  transition: color var(--dur) var(--ease-out);
+}
+.crewplan .rail-item[aria-selected="true"] {
+  color: var(--ink);
+  background: var(--surface);
+}
+.crewplan .rail-item[aria-selected="true"] .rail-n {
+  color: var(--accent);
+}
+.crewplan .rail-bar {
+  position: absolute;
+  left: 0;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform var(--dur) var(--ease-standard);
+}
+.crewplan .rail-item[aria-selected="true"] .rail-bar {
+  transform: scaleY(1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .crewplan .rail-item:hover {
+    color: var(--ink);
+  }
+}
+
+.crewplan .wt-stage {
+  position: relative;
+  height: var(--stage-h);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.crewplan .wt-frame {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .crewplan .wt-frame {
+    transition:
+      opacity 220ms var(--ease-out),
+      transform 300ms var(--ease-standard);
+  }
+  @starting-style {
+    .crewplan .wt-stage[data-kind="step"][data-dir="fwd"] .wt-frame {
+      opacity: 0;
+      transform: translate3d(2rem, 0, 0);
+    }
+    .crewplan .wt-stage[data-kind="step"][data-dir="back"] .wt-frame {
+      opacity: 0;
+      transform: translate3d(-2rem, 0, 0);
+    }
+    .crewplan .wt-stage[data-kind="lens"] .wt-frame {
+      opacity: 0;
+      transform: scale(0.985);
+    }
+  }
+}
+
+/* Bezels. No fake OS chrome — the frame is a bezel, the content is the app. */
+.crewplan .bezel {
+  position: relative;
+  background: var(--bg);
+  border: 1px solid var(--hairline-strong);
+  box-shadow:
+    var(--shadow-lg),
+    inset 0 1px 0 var(--material-edge);
+  overflow: hidden;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.crewplan .bezel-laptop {
+  width: 100%;
+  max-width: 54rem;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius-lg);
+}
+.crewplan .bezel-phone {
+  width: 19rem;
+  height: 38rem;
+  border-radius: 2.25rem;
+  padding-top: 0.75rem;
+}
+.crewplan .bezel-phone::before {
+  content: "";
+  position: absolute;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2.25rem;
+  height: 0.25rem;
+  border-radius: 999px;
+  background: var(--hairline-strong);
+}
+.crewplan .bezel-still {
+  width: 100%;
+  max-width: 28rem;
+  aspect-ratio: 16 / 11;
+  border-radius: var(--radius-lg);
+}
+.crewplan .split-media .bezel-phone {
+  width: 100%;
+  max-width: 17rem;
+  height: auto;
+  aspect-ratio: 19 / 38;
+}
+
+.crewplan .wt-caption {
+  margin-top: 1.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+.crewplan .wt-caption .body {
+  max-width: 34rem;
+  margin-top: 0.25rem;
+}
+.crewplan .wt-nav {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.crewplan .wt-nav button {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline-strong);
+  color: var(--ink-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.crewplan .wt-nav button:active:not(:disabled) {
+  transform: scale(0.92);
+}
+.crewplan .wt-nav button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.crewplan .wt-dots {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+.crewplan .wt-dots button {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--hairline-strong);
+  cursor: pointer;
+  transition:
+    background-color var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-standard);
+}
+.crewplan .wt-dots button[aria-selected="true"] {
+  background: var(--accent);
+  transform: scale(1.3);
+}
+
+@media (max-width: 60rem) {
+  .crewplan .wt {
+    --stage-h: 36rem;
+  }
   .crewplan .wt-body {
     grid-template-columns: 1fr;
-    gap: 24px;
   }
   .crewplan .wt-rail {
     display: none;
   }
-  .crewplan .wt-toggles {
+  .crewplan .wt-controls {
     justify-content: center;
-  }
-  .crewplan .wt-stage {
-    height: 564px;
-  }
-  .crewplan .wt .bezel-phone {
-    width: min(320px, 100% - 48px);
-    height: 540px;
   }
   .crewplan .wt-caption {
     flex-direction: column;
     align-items: center;
     text-align: center;
   }
-  .crewplan .wt-strip {
+  .crewplan .wt-dots {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 18px;
   }
-  .crewplan .wt-strip .dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--border-strong);
-    border: none;
-    padding: 0;
-    cursor: pointer;
-  }
-  .crewplan .wt-strip .dot[aria-current="true"] {
-    background: var(--accent);
-  }
-  .crewplan .wt-strip .strip-label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-left: 8px;
+  .crewplan .bezel-phone {
+    width: min(19rem, 100% - 2rem);
+    height: 34rem;
   }
 }
 
-/* ---------- REDUCED MOTION ---------- */
-@media (prefers-reduced-motion: reduce) {
-  /* Frame enter animations are gated behind no-preference, so under reduce the
-     frame simply appears. Kill the remaining transform-based motion. */
-  .crewplan .wt-rail .rail-item[aria-selected="true"].is-autoplaying .rail-bar {
-    animation: none;
-  }
-  .crewplan .seg .seg-pill,
-  .crewplan .wt-rail .rail-item {
-    transition: none;
-  }
-  .crewplan .badge .pulse {
-    animation: none;
-  }
-}
-
-/* ---------- FOCUS ---------- */
-.crewplan a:focus-visible,
-.crewplan button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* =====================================================================
-   WALKTHROUGH FRAME INTERNALS
-   Vocabulary mirrors crewplan-manager-reference.html / -staff-reference.html.
-   Static depiction only — no :hover, no interaction. Prefixed .f- and
-   scoped under .wt so it can't reach the app or the marketing base.
-   ===================================================================== */
-.crewplan .wt .bezel {
-  color: var(--text-primary);
-  font-family: var(--font-body), "IBM Plex Sans", sans-serif;
-  font-size: 12px;
-  line-height: 1.45;
-}
-.crewplan .wt .f-scroll {
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-.crewplan .wt .f-pad {
-  padding: 18px;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-/* Staff frames are phone-native; in a laptop bezel they stay a narrow column
-   rather than stretching to 960px. */
-.crewplan .wt .f-staff-body {
-  width: 100%;
-  max-width: 340px;
-  margin: 0 auto;
-  height: 100%;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-}
-
-.crewplan .wt .f-card {
-  background: var(--card);
-  border: 0.5px solid var(--border);
-  border-radius: 12px;
-  padding: 13px 14px;
-}
-.crewplan .wt .f-title {
-  font-family: var(--font-display), "Space Grotesk", sans-serif;
-  font-weight: 500;
-  font-size: 18px;
-  letter-spacing: -0.02em;
-}
-.crewplan .wt .f-sub {
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-.crewplan .wt .f-label {
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.crewplan .wt .f-av {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--accent-bg);
-  color: var(--accent-ink);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 500;
-  flex-shrink: 0;
-}
-.crewplan .wt .f-u18 {
-  font-size: 8px;
-  font-weight: 600;
-  color: var(--accent-ink);
-  background: var(--accent-bg);
-  padding: 2px 5px;
-  border-radius: 4px;
-}
-.crewplan .wt .f-pill {
-  font-size: 10.5px;
-  font-weight: 500;
-  padding: 3px 9px;
-  border-radius: 100px;
-  white-space: nowrap;
-}
-.crewplan .wt .f-pill.green {
-  background: var(--green-soft);
-  color: var(--green);
-}
-.crewplan .wt .f-pill.amber {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-.crewplan .wt .f-pill.red {
-  background: var(--red-soft);
-  color: var(--red);
-}
-.crewplan .wt .f-chip-btn {
-  font-size: 10.5px;
-  font-weight: 500;
-  padding: 4px 9px;
-  border-radius: 7px;
-  border: 0.5px solid var(--border-strong);
-  color: var(--text-secondary);
-}
-.crewplan .wt .f-chip-btn.accent {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-.crewplan .wt .f-x {
-  color: var(--text-muted);
-}
-
-/* laptop chrome */
-.crewplan .wt .f-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 0.5px solid var(--border);
-  flex-shrink: 0;
-}
-.crewplan .wt .f-wordmark {
-  font-family: var(--font-display), "Space Grotesk", sans-serif;
-  font-weight: 500;
-  font-size: 14px;
-  letter-spacing: -0.03em;
-}
-.crewplan .wt .f-wordmark span {
-  color: var(--accent);
-}
-.crewplan .wt .f-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 9px 12px;
-  border-bottom: 0.5px solid var(--border);
-  flex-shrink: 0;
-}
-.crewplan .wt .f-tab {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 5px 11px;
-  border-radius: 7px;
-  color: var(--text-muted);
-}
-.crewplan .wt .f-tab.active {
-  background: var(--accent);
-  color: #fff;
-}
-
-/* roster rows */
-.crewplan .wt .f-row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 0;
-  border-top: 0.5px solid var(--border);
-  font-size: 12px;
-}
-.crewplan .wt .f-row:first-child {
-  border-top: none;
-}
-.crewplan .wt .f-row .f-right {
-  margin-left: auto;
-  color: var(--text-muted);
-  font-size: 10.5px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.crewplan .wt .f-row.join {
-  background: var(--amber-soft);
-  border: 0.5px solid var(--amber-line);
-  border-radius: 10px;
-  padding: 9px 11px;
-  margin-bottom: 8px;
-}
-
-/* staff availability */
-.crewplan .wt .f-avday {
-  background: var(--card);
-  border: 0.5px solid var(--border);
-  border-radius: 10px;
-  padding: 9px 11px;
-  margin-bottom: 6px;
-}
-.crewplan .wt .f-avday-head {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  margin-bottom: 7px;
-  font-size: 12px;
-  font-weight: 500;
-}
-.crewplan .wt .f-avday-head .date {
-  font-size: 10px;
-  color: var(--text-muted);
-  font-weight: 400;
-}
-.crewplan .wt .f-avslots {
-  display: flex;
-  gap: 6px;
-}
-.crewplan .wt .f-avslot {
-  flex: 1;
-  text-align: center;
-  padding: 7px 3px;
-  border-radius: 7px;
-  border: 0.5px solid var(--border);
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-.crewplan .wt .f-avslot.yes {
-  background: var(--green-soft);
-  border-color: var(--green-line);
-  color: var(--green);
-}
-.crewplan .wt .f-avslot.maybe {
-  background: var(--amber-soft);
-  border-color: var(--amber-line);
-  color: var(--amber);
-}
-.crewplan .wt .f-avslot.no {
-  background: var(--red-soft);
-  border-color: var(--red-line);
-  color: var(--red);
-}
-.crewplan .wt .f-avslot.unset {
-  border-style: dashed;
-  border-color: var(--border-strong);
-  color: var(--text-muted);
-}
-.crewplan .wt .f-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  padding: 9px 11px;
-  background: var(--card);
-  border: 0.5px solid var(--border);
-  border-radius: 10px;
-  margin-bottom: 9px;
-  font-size: 10.5px;
-  color: var(--text-secondary);
-}
-.crewplan .wt .f-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.crewplan .wt .f-sw {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-}
-.crewplan .wt .f-sw.yes {
-  background: var(--green);
-}
-.crewplan .wt .f-sw.maybe {
-  background: var(--amber);
-}
-.crewplan .wt .f-sw.no {
-  background: var(--red);
-}
-.crewplan .wt .f-sw.unset {
-  border: 1px dashed var(--border-strong);
-}
-
-/* sticky bars */
-.crewplan .wt .f-sticky {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 11px 14px;
-  background: var(--card);
-  border-top: 0.5px solid var(--border);
-  font-size: 10.5px;
-  color: var(--text-secondary);
-}
-.crewplan .wt .f-sticky .f-cta {
-  background: var(--accent);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 500;
-  padding: 7px 14px;
-  border-radius: 8px;
-  white-space: nowrap;
-}
-.crewplan .wt .f-progress {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-}
-.crewplan .wt .f-progress .track {
-  flex: 1;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border-strong);
-  overflow: hidden;
-}
-.crewplan .wt .f-progress .fill {
-  height: 100%;
-  background: var(--accent);
-}
-
-/* generate / result */
-.crewplan .wt .f-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  text-align: center;
-  padding: 24px;
-  gap: 6px;
-}
-.crewplan .wt .f-check {
-  width: 52px;
-  height: 52px;
-  border-radius: 15px;
-  background: var(--green-soft);
-  color: var(--green);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 8px;
-}
-.crewplan .wt .f-pop {
-  animation: wt-pop 320ms var(--ease-pop) both;
-}
-@keyframes wt-pop {
-  from {
-    opacity: 0;
-    transform: scale(0.85);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-.crewplan .wt .f-quiet-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  padding: 4px 0;
-}
-.crewplan .wt .f-tick {
-  color: var(--green);
-  flex-shrink: 0;
-}
-
-/* mini matrix */
-.crewplan .wt .f-matrix {
+/* Home-page teaser into the walkthrough */
+.crewplan .teaser {
   display: grid;
-  grid-template-columns: 58px repeat(7, 1fr);
-  gap: 4px;
-  font-size: 9px;
-}
-.crewplan .wt .f-mx-h {
-  color: var(--text-muted);
-  text-align: center;
-  padding: 3px 0;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.crewplan .wt .f-mx-name {
-  color: var(--text-secondary);
-  display: flex;
+  grid-template-columns: 1fr 1.15fr;
+  gap: clamp(2rem, 5vw, 4rem);
   align-items: center;
-  font-size: 9.5px;
 }
-.crewplan .wt .f-mx-cell {
-  background: var(--accent-bg);
-  color: var(--accent-ink);
-  border-radius: 5px;
-  padding: 6px 2px;
-  text-align: center;
-  font-weight: 500;
-}
-.crewplan .wt .f-mx-cell.off {
-  background: transparent;
-  color: var(--text-muted);
-}
-.crewplan .wt .f-mx-cell.gap {
-  background: transparent;
-  border: 1px dashed var(--red-line);
-  color: var(--red);
-}
-
-/* coverage line / legal block / approvals */
-.crewplan .wt .f-coverage {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 13px;
-  border-radius: 10px;
-  background: var(--red-soft);
-  border: 0.5px solid var(--red-line);
-}
-.crewplan .wt .f-coverage .n {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--red);
-}
-.crewplan .wt .f-coverage .t {
-  font-size: 10.5px;
-  color: var(--text-secondary);
-  margin-top: 1px;
-}
-.crewplan .wt .f-legal {
-  display: flex;
-  gap: 10px;
-  padding: 11px 13px;
-  border-radius: 10px;
-  background: var(--card);
-  border: 0.5px solid var(--border);
-  border-left: 2px solid var(--red);
-}
-.crewplan .wt .f-legal .lock {
-  color: var(--red);
-  flex-shrink: 0;
-}
-.crewplan .wt .f-approval {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 11px;
-  border-radius: 10px;
-  background: var(--card);
-  border: 0.5px solid var(--border);
-  font-size: 11.5px;
-}
-.crewplan .wt .f-daystrip {
-  display: flex;
-  gap: 5px;
-}
-.crewplan .wt .f-daystrip .d {
-  flex: 1;
-  text-align: center;
-  padding: 6px 0;
-  border-radius: 7px;
-  border: 0.5px solid var(--border);
-  font-size: 9.5px;
-  color: var(--text-muted);
-}
-.crewplan .wt .f-daystrip .d .dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  margin: 4px auto 0;
-}
-.crewplan .wt .f-daystrip .d .dot.g {
-  background: var(--green);
-}
-.crewplan .wt .f-daystrip .d .dot.a {
-  background: var(--amber);
-}
-.crewplan .wt .f-daystrip .d .dot.r {
-  background: var(--red);
-}
-
-/* staff my-shifts timeline */
-.crewplan .wt .f-timeline {
+.crewplan .teaser-media {
   position: relative;
 }
-.crewplan .wt .f-timeline::before {
-  content: "";
-  position: absolute;
-  left: 19px;
-  top: 8px;
-  bottom: 8px;
-  width: 1.5px;
-  background: var(--border-strong);
-}
-.crewplan .wt .f-tl-row {
-  display: flex;
-  gap: 11px;
-  margin-bottom: 7px;
-  position: relative;
-}
-.crewplan .wt .f-tl-node {
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-  background: var(--card);
-  border: 0.5px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  z-index: 1;
-}
-.crewplan .wt .f-tl-node .dow {
-  font-size: 8px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-}
-.crewplan .wt .f-tl-node .num {
-  font-size: 13px;
-  font-weight: 500;
-}
-.crewplan .wt .f-tl-row.working .f-tl-node {
-  background: var(--accent-bg);
-  border-color: var(--accent-dim);
-}
-.crewplan .wt .f-tl-row.working .f-tl-node .num {
-  color: var(--accent-ink);
-}
-.crewplan .wt .f-tl-shift {
-  flex: 1;
-  background: var(--card);
-  border: 0.5px solid var(--border);
-  border-radius: 11px;
-  padding: 9px 11px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.crewplan .wt .f-tl-shift .body {
-  flex: 1;
-}
-.crewplan .wt .f-tl-shift .time {
-  font-size: 12px;
-  font-weight: 500;
-}
-.crewplan .wt .f-tl-shift .role {
-  font-size: 10.5px;
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 1px;
-}
-.crewplan .wt .f-tl-shift .dur {
-  font-size: 10.5px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: var(--border-strong);
-  padding: 2px 7px;
-  border-radius: 6px;
-}
-.crewplan .wt .f-tl-off {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  padding: 9px 11px;
-  font-size: 11.5px;
-  color: var(--text-muted);
-}
-.crewplan .wt .f-sheet {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--card);
-  border-top: 0.5px solid var(--border-strong);
-  border-radius: 16px 16px 0 0;
-  padding: 12px 14px 16px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-.crewplan .wt .f-sheet .grab {
-  width: 32px;
-  height: 4px;
-  border-radius: 100px;
-  background: var(--border-strong);
-  margin: 0 auto 11px;
-}
-.crewplan .wt .f-sheet-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 7px;
-  margin-bottom: 8px;
-}
-.crewplan .wt .f-sheet-act {
-  text-align: center;
-  padding: 11px 5px;
-  border-radius: 9px;
-  border: 0.5px solid var(--border);
-  font-size: 10.5px;
-  font-weight: 500;
-}
-.crewplan .wt .f-faded {
-  opacity: 0.5;
-}
-
-/* PIN entry */
-.crewplan .wt .f-pin {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 13px;
-  text-align: center;
-  padding: 24px;
-}
-.crewplan .wt .f-pin-boxes {
-  display: flex;
-  gap: 9px;
-}
-.crewplan .wt .f-pin-box {
-  width: 42px;
-  height: 50px;
-  border-radius: 10px;
-  border: 0.5px solid var(--border-strong);
-  background: var(--card);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 19px;
-  font-weight: 500;
-}
-.crewplan .wt .f-pin-box.filled {
-  border-color: var(--accent-dim);
-}
-.crewplan .wt .f-pin-box.caret {
-  border-color: var(--accent);
-}
-.crewplan .wt .f-link {
-  font-size: 11.5px;
-  color: var(--accent-ink);
+@media (max-width: 56rem) {
+  .crewplan .teaser {
+    grid-template-columns: 1fr;
+  }
 }

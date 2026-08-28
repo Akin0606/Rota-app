@@ -16,7 +16,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the pre-paint script below stamps `data-theme`
+    // on this element before React hydrates, which React would otherwise flag
+    // as a server/client attribute mismatch. It only suppresses the warning for
+    // this one element's own attributes, not for its subtree.
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Apply the saved theme before first paint to avoid a flash. Dark is
             the default; only "light" needs the attribute.
@@ -31,7 +35,7 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{var p=location.pathname;var m=p.match(/^\\/v\\/([^/]+)/);var mgr=/^\\/(login|onboarding|dashboard|rota|scheduler|team|leave|settings)(\\/|$)/.test(p);var k=m?'crewplan-theme:'+m[1]:(mgr?'crewplan-theme:manager':'crewplan_theme');if(localStorage.getItem(k)==='light')document.documentElement.setAttribute('data-theme','light')}catch(e){}",
+              "try{var p=location.pathname;var m=p.match(/^\\/v\\/([^/]+)/);var mgr=/^\\/(login|onboarding|dashboard|rota|scheduler|team|leave|settings)(\\/|$)/.test(p);var site=/^\\/(walkthrough)?$/.test(p);var k=m?'crewplan-theme:'+m[1]:(mgr?'crewplan-theme:manager':(site?'crewplan-theme:site':'crewplan_theme'));var v=localStorage.getItem(k);if(v==='light'){document.documentElement.setAttribute('data-theme','light')}else if(!v&&site&&window.matchMedia('(prefers-color-scheme: light)').matches){document.documentElement.setAttribute('data-theme','light')}}catch(e){}",
           }}
         />
       </head>

@@ -1,0 +1,578 @@
+/* ==========================================================================
+   Product frames (.f-*) — static depictions of the real app, built from the
+   reference markup. Every control-looking element is a div/span: nothing here
+   is interactive and nothing enters the tab order. Scoped under .crewplan.
+   ========================================================================== */
+.crewplan .f-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+.crewplan .f-pad {
+  padding: 1.125rem;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Staff screens are phone-native — in a laptop bezel they stay a column
+   rather than stretching to the full 54rem. */
+.crewplan .f-phone-col {
+  width: 100%;
+  max-width: 21rem;
+  margin-inline: auto;
+  height: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.crewplan .f-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--hairline);
+  flex-shrink: 0;
+}
+.crewplan .f-mark {
+  font-family: var(--font-display), "Space Grotesk", system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 0.875rem;
+  letter-spacing: -0.04em;
+}
+.crewplan .f-mark span {
+  color: var(--accent);
+}
+.crewplan .f-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--hairline);
+  flex-shrink: 0;
+}
+.crewplan .f-tab {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 0.3125rem 0.6875rem;
+  border-radius: 0.4375rem;
+  color: var(--ink-3);
+}
+.crewplan .f-tab.on {
+  background: var(--accent);
+  color: var(--accent-on);
+}
+.crewplan .f-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.875rem;
+}
+.crewplan .f-h {
+  font-family: var(--font-display), "Space Grotesk", system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 1.0625rem;
+  letter-spacing: -0.022em;
+}
+.crewplan .f-sub {
+  font-size: 0.6875rem;
+  color: var(--ink-2);
+  margin-top: 0.125rem;
+}
+.crewplan .f-label {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.crewplan .f-dim {
+  color: var(--ink-3);
+}
+.crewplan .f-av {
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 999px;
+  background: var(--accent-wash);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.crewplan .f-u18 {
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-wash);
+  padding: 0.125rem 0.3125rem;
+  border-radius: 0.25rem;
+}
+.crewplan .f-pill {
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 0.1875rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.crewplan .f-pill.g {
+  background: var(--green-wash);
+  color: var(--green);
+}
+.crewplan .f-pill.a {
+  background: var(--amber-wash);
+  color: var(--amber);
+}
+.crewplan .f-pill.r {
+  background: var(--red-wash);
+  color: var(--red);
+}
+.crewplan .f-btn {
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5625rem;
+  border-radius: 0.4375rem;
+  border: 1px solid var(--hairline-strong);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.crewplan .f-btn.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-on);
+}
+.crewplan .f-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--hairline);
+  font-size: 0.6875rem;
+}
+.crewplan .f-row:first-child {
+  border-top: none;
+}
+.crewplan .f-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink-3);
+  font-size: 0.625rem;
+}
+.crewplan .f-row.join {
+  background: var(--amber-wash);
+  border: 1px solid var(--amber-line);
+  border-radius: 0.625rem;
+  padding: 0.5rem 0.625rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Availability grid */
+.crewplan .f-day {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 0.625rem;
+  padding: 0.5rem 0.625rem;
+  margin-bottom: 0.375rem;
+}
+.crewplan .f-day-h {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4375rem;
+  margin-bottom: 0.4375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+.crewplan .f-slots {
+  display: flex;
+  gap: 0.375rem;
+}
+.crewplan .f-slot {
+  flex: 1;
+  text-align: center;
+  padding: 0.4375rem 0.1875rem;
+  border-radius: 0.4375rem;
+  border: 1px solid var(--hairline);
+  font-size: 0.5625rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.crewplan .f-slot.yes {
+  background: var(--green-wash);
+  border-color: var(--green-line);
+  color: var(--green);
+}
+.crewplan .f-slot.maybe {
+  background: var(--amber-wash);
+  border-color: var(--amber-line);
+  color: var(--amber);
+}
+.crewplan .f-slot.no {
+  background: var(--red-wash);
+  border-color: var(--red-line);
+  color: var(--red);
+}
+.crewplan .f-slot.unset {
+  border-style: dashed;
+  border-color: var(--hairline-strong);
+  color: var(--ink-3);
+}
+.crewplan .f-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4375rem 0.75rem;
+  padding: 0.5rem 0.625rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 0.625rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.5625rem;
+  color: var(--ink-2);
+}
+.crewplan .f-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+}
+.crewplan .f-sw {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 0.1875rem;
+}
+.crewplan .f-sw.yes {
+  background: var(--green);
+}
+.crewplan .f-sw.maybe {
+  background: var(--amber);
+}
+.crewplan .f-sw.no {
+  background: var(--red);
+}
+.crewplan .f-sw.unset {
+  border: 1px dashed var(--hairline-strong);
+}
+
+/* Sticky bars + sheets */
+.crewplan .f-sticky {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.625rem;
+  padding: 0.625rem 0.875rem;
+  background: var(--surface);
+  border-top: 1px solid var(--hairline);
+  font-size: 0.625rem;
+  color: var(--ink-2);
+}
+.crewplan .f-cta {
+  background: var(--accent);
+  color: var(--accent-on);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 0.4375rem 0.875rem;
+  border-radius: 0.5rem;
+  white-space: nowrap;
+}
+.crewplan .f-prog {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+.crewplan .f-track {
+  flex: 1;
+  height: 0.25rem;
+  border-radius: 999px;
+  background: var(--hairline-strong);
+  overflow: hidden;
+}
+.crewplan .f-fill {
+  height: 100%;
+  background: var(--accent);
+}
+.crewplan .f-sheet {
+  position: absolute;
+  inset: auto 0 0 0;
+  background: var(--surface);
+  border-top: 1px solid var(--hairline-strong);
+  border-radius: 1rem 1rem 0 0;
+  padding: 0.75rem 0.875rem 1rem;
+  box-shadow: 0 -12px 32px -12px rgba(0, 0, 0, 0.4);
+}
+.crewplan .f-grab {
+  width: 2rem;
+  height: 0.25rem;
+  border-radius: 999px;
+  background: var(--hairline-strong);
+  margin: 0 auto 0.625rem;
+}
+.crewplan .f-acts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4375rem;
+  margin-bottom: 0.5rem;
+}
+.crewplan .f-act {
+  text-align: center;
+  padding: 0.625rem 0.3125rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--hairline);
+  font-size: 0.625rem;
+  font-weight: 600;
+}
+
+/* Solve result */
+.crewplan .f-mid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  padding: 1.5rem;
+  gap: 0.3125rem;
+}
+.crewplan .f-check {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.9375rem;
+  background: var(--green-wash);
+  color: var(--green);
+  display: grid;
+  place-items: center;
+  margin-bottom: 0.5rem;
+}
+.crewplan .f-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--ink-2);
+  padding: 0.1875rem 0;
+}
+.crewplan .f-tick {
+  color: var(--green);
+  flex-shrink: 0;
+}
+
+/* Mini matrix */
+.crewplan .f-mx {
+  display: grid;
+  grid-template-columns: 3.25rem repeat(7, 1fr);
+  gap: 0.1875rem;
+  font-size: 0.5rem;
+}
+.crewplan .f-mx-h {
+  color: var(--ink-3);
+  text-align: center;
+  padding: 0.1875rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.crewplan .f-mx-n {
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  font-size: 0.5625rem;
+}
+.crewplan .f-mx-c {
+  background: var(--accent-wash);
+  color: var(--accent);
+  border-radius: 0.25rem;
+  padding: 0.375rem 0.125rem;
+  text-align: center;
+  font-weight: 600;
+}
+.crewplan .f-mx-c.off {
+  background: transparent;
+  color: var(--ink-3);
+}
+.crewplan .f-mx-c.gap {
+  background: transparent;
+  border: 1px dashed var(--red-line);
+  color: var(--red);
+}
+
+/* Review surfaces */
+.crewplan .f-cov {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.625rem;
+  background: var(--red-wash);
+  border: 1px solid var(--red-line);
+}
+.crewplan .f-legal {
+  display: flex;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.625rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-left: 2px solid var(--red);
+}
+.crewplan .f-appr {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.625rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  font-size: 0.6875rem;
+}
+.crewplan .f-strip {
+  display: flex;
+  gap: 0.25rem;
+}
+.crewplan .f-strip > div {
+  flex: 1;
+  text-align: center;
+  padding: 0.3125rem 0;
+  border-radius: 0.4375rem;
+  border: 1px solid var(--hairline);
+  font-size: 0.5rem;
+  color: var(--ink-3);
+}
+.crewplan .f-dot {
+  width: 0.25rem;
+  height: 0.25rem;
+  border-radius: 999px;
+  margin: 0.1875rem auto 0;
+}
+.crewplan .f-dot.g {
+  background: var(--green);
+}
+.crewplan .f-dot.a {
+  background: var(--amber);
+}
+.crewplan .f-dot.r {
+  background: var(--red);
+}
+
+/* Staff timeline */
+.crewplan .f-tl {
+  position: relative;
+}
+.crewplan .f-tl::before {
+  content: "";
+  position: absolute;
+  left: 1.1875rem;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 1.5px;
+  background: var(--hairline-strong);
+}
+.crewplan .f-tl-row {
+  display: flex;
+  gap: 0.625rem;
+  margin-bottom: 0.375rem;
+  position: relative;
+}
+.crewplan .f-node {
+  width: 2.375rem;
+  height: 2.375rem;
+  border-radius: 0.625rem;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 1;
+}
+.crewplan .f-node .dw {
+  font-size: 0.4375rem;
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+.crewplan .f-node .nm {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.crewplan .f-tl-row.on .f-node {
+  background: var(--accent-wash);
+  border-color: var(--accent-line);
+}
+.crewplan .f-tl-row.on .f-node .nm {
+  color: var(--accent);
+}
+.crewplan .f-shift {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 0.625rem;
+  padding: 0.5rem 0.625rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.crewplan .f-shift .t {
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+.crewplan .f-shift .r {
+  font-size: 0.5625rem;
+  color: var(--ink-3);
+  margin-top: 0.0625rem;
+}
+.crewplan .f-dur {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.3125rem;
+  margin-left: auto;
+}
+.crewplan .f-off {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.625rem;
+  color: var(--ink-3);
+}
+.crewplan .f-faded {
+  opacity: 0.45;
+}
+
+/* PIN entry */
+.crewplan .f-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 0.75rem;
+  text-align: center;
+  padding: 1.5rem;
+}
+.crewplan .f-boxes {
+  display: flex;
+  gap: 0.5rem;
+}
+.crewplan .f-box {
+  width: 2.375rem;
+  height: 2.875rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+.crewplan .f-box.fill {
+  border-color: var(--accent-line);
+}
+.crewplan .f-box.car {
+  border-color: var(--accent);
+}
