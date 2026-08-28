@@ -103,6 +103,38 @@ def _get_period_or_404(venue_id: str, period_id: str) -> dict:
     return res.data[0]
 
 
+def _submission_demand_slots(
+    submissions: list[dict],
+    shifts_by_id: dict,
+    shift_days_idx: dict,
+) -> set[tuple[int, str]]:
+    """(day_index, shift_id) pairs a submission asks for staff on — gated to
+    shift-days that actually run.
+
+    A staffer can still mark themselves available on a (day, shift) the manager
+    has since closed in the per-day editor (the availability grid offered it, or
+    the row was carried forward). Without this gate that submission becomes a
+    demand slot with nobody assigned, i.e. a phantom "uncovered" gap on the
+    manager's rota that can't be cleared from the manager side. The solver's own
+    demand calc already gates the same way (services/solver.generate_rota); this
+    keeps _build_summary — what the manager surface actually reads — consistent.
+
+    A submission for a since-*deleted* shift (unknown id) is kept, resolved with
+    the existing required=1 default downstream — unchanged behaviour.
+    """
+    slots: set[tuple[int, str]] = set()
+    for s in submissions:
+        if not s["shift_id"] or s["status"] not in (AVAILABLE, PREFERRED):
+            continue
+        shift = shifts_by_id.get(s["shift_id"])
+        if shift is not None and not shift_bounds.exists_on_day(
+            shift, s["day_index"], shift_days_idx
+        ):
+            continue
+        slots.add((s["day_index"], s["shift_id"]))
+    return slots
+
+
 def _build_summary(
     venue_id: str,
     period: dict,
@@ -165,11 +197,7 @@ def _build_summary(
         for d in open_days:
             if shift_bounds.staffing_for(s, d, shift_days_idx)[0] > 0:
                 demanded_from_shifts.add((d, s["id"]))
-    demanded_from_avail = {
-        (s["day_index"], s["shift_id"])
-        for s in submissions
-        if s["shift_id"] and s["status"] in (AVAILABLE, PREFERRED)
-    }
+    demanded_from_avail = _submission_demand_slots(submissions, shifts_by_id, shift_days_idx)
     demand_slots = demanded_from_shifts | demanded_from_avail
     # A manager-posted open shift (staff_id null) hasn't actually been picked
     # up by anyone yet, so it doesn't count as real coverage — otherwise it'd

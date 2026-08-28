@@ -245,11 +245,32 @@ export function submitAvailability(
   });
 }
 
+// One day a shift runs, with its real per-day hours (via shift_days).
+export type WeekShiftDay = {
+  day_index: number;
+  start_time: string;
+  end_time: string;
+};
+
+// A shift as the availability grid needs it: which days it runs and the real
+// time on each. A closed day is absent from `days`. No staffing fields — the
+// grid doesn't need them.
+export type WeekShift = {
+  id: string;
+  name: string;
+  color: string;
+  sort_order: number;
+  days: WeekShiftDay[];
+};
+
 export type WeekAvailability = {
   week_start: string;
   period: { id: string; week_start: string; status: string } | null;
   editable: boolean;
   submissions: AvailabilityEntry[];
+  // Per-day shift definitions for this week's grid. Prefer this over the
+  // shift-level `shifts` on /auth so a per-day (or closed) day shows correctly.
+  shifts: WeekShift[];
   prefilled: boolean;
   // The cron auto-copied this week's pattern (§6b); drives a heads-up banner.
   auto_submitted: boolean;

@@ -175,3 +175,54 @@ def test_solver_unreadable_time_is_skipped_not_crashed():
     # Solve completes; the junk shift is dropped with a warning rather than 500.
     assert any("unreadable time" in w for w in result["warnings"])
     assert all(a["shift_id"] != "junk" for a in result["assignments"])
+
+
+# --------------------------------------------------------------------------- #
+# Batch A — the manual paths get the same closed-day existence gate            #
+# --------------------------------------------------------------------------- #
+
+def test_manual_assignment_blocked_on_closed_day():
+    # Monday has no shift_days row -> the shift doesn't run -> hard block, so a
+    # manager's "+ Add", a claim, a give-accept or a swap can't land there.
+    res = check_manual_assignment(
+        ADULT, MON, EVE, [], {"eve": EVE}, RULES, shift_days_by_key=SHIFT_DAYS
+    )
+    assert res["severity"] == "block"
+    assert "doesn't run on Monday" in res["reason"]
+
+
+def test_manual_assignment_not_blocked_on_open_day_by_existence_gate():
+    # Sunday runs (8h, night-safe) — the existence gate must not over-block it.
+    res = check_manual_assignment(
+        ADULT, SUN, EVE, [], {"eve": EVE}, RULES, shift_days_by_key=SHIFT_DAYS
+    )
+    assert res["severity"] == "ok"
+
+
+def test_manual_assignment_no_index_keeps_old_behaviour():
+    # With no shift_days index the gate is inert — every day is assumed to run,
+    # exactly the pre-per-day model.
+    res = check_manual_assignment(ADULT, MON, EVE, [], {"eve": EVE}, RULES)
+    assert res["severity"] == "ok"
+
+
+# --------------------------------------------------------------------------- #
+# Batch A — _build_summary demand no longer counts closed-day submissions      #
+# --------------------------------------------------------------------------- #
+
+def test_submission_demand_slots_drops_closed_day():
+    from routers.rota import _submission_demand_slots
+
+    subs = [
+        {"day_index": FRI, "shift_id": "eve", "status": 3},  # runs -> demand
+        {"day_index": SUN, "shift_id": "eve", "status": 1},  # runs -> demand
+        {"day_index": MON, "shift_id": "eve", "status": 3},  # closed -> dropped
+        {"day_index": SAT, "shift_id": "eve", "status": 2},  # can't-work -> not demand
+        {"day_index": FRI, "shift_id": "ghost", "status": 3},  # deleted shift -> kept
+    ]
+    slots = _submission_demand_slots(subs, {"eve": EVE}, SHIFT_DAYS)
+    assert (FRI, "eve") in slots
+    assert (SUN, "eve") in slots
+    assert (MON, "eve") not in slots      # the phantom-gap fix
+    assert (SAT, "eve") not in slots
+    assert (FRI, "ghost") in slots        # unknown shift still counts (required=1)

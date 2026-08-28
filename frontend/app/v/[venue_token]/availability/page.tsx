@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Icon from "@/components/staff/icon";
@@ -13,6 +13,7 @@ import {
   ApiError,
   AvailabilityEntry,
   PinAuthData,
+  WeekShift,
   authenticatePin,
   getWeekAvailability,
   setAutoSubmit,
@@ -141,6 +142,10 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   const [selectedWeek, setSelectedWeek] = useState<string>(WEEK_OPTIONS[0].weekStart);
   const [editable, setEditable] = useState(true);
   const [weekLoading, setWeekLoading] = useState(false);
+  // Per-day shift definitions for the selected week (which shifts run on which
+  // days, at what real time). Authoritative once /week has resolved; until then
+  // the render falls back to the shift-level list from /auth (see effectiveShifts).
+  const [weekShifts, setWeekShifts] = useState<WeekShift[]>([]);
   const [prefilled, setPrefilled] = useState(false);
   // Prefilled cells render as a lighter echo until the first touch commits the
   // whole grid to solid (§6a). A non-prefilled week is committed from the start.
@@ -207,6 +212,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
         }
         setGrid(g);
         setNotes(n);
+        setWeekShifts(res.shifts ?? []);
         setEditable(res.editable);
         setPrefilled(res.prefilled);
         // A prefilled week starts uncommitted (echo cells); a real saved week
@@ -218,6 +224,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
         if (!cancelled) {
           setGrid({});
           setNotes({});
+          setWeekShifts([]);
           setEditable(true);
           setPrefilled(false);
           setCommitted(true);
@@ -236,6 +243,42 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
   }
+
+  // Per-day slot list: for each weekday 0-6, the shifts that actually run that
+  // day with their real per-day time. Sourced from /week's per-day definitions
+  // once loaded; until then (or if /week ever returns none) it falls back to the
+  // shift-level list from /auth treated as running every day, so the grid never
+  // flashes empty and pre-per-day venues render exactly as before.
+  const shiftsByDay = useMemo(() => {
+    const map: Record<number, { id: string; name: string; start_time: string; end_time: string }[]> = {
+      0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [],
+    };
+    if (weekShifts.length > 0) {
+      for (const s of weekShifts) {
+        for (const d of s.days) {
+          if (d.day_index >= 0 && d.day_index <= 6) {
+            map[d.day_index].push({
+              id: s.id,
+              name: s.name,
+              start_time: d.start_time,
+              end_time: d.end_time,
+            });
+          }
+        }
+      }
+    } else if (data) {
+      for (const s of data.shifts) {
+        for (let d = 0; d < 7; d += 1) {
+          map[d].push({ id: s.id, name: s.name, start_time: s.start_time, end_time: s.end_time });
+        }
+      }
+    }
+    return map;
+  }, [weekShifts, data]);
+
+  // Days the venue actually opens this week — the denominator for progress and
+  // the submit guard, so a Monday-closed venue isn't stuck at "6 of 7" forever.
+  const openDayCount = DAY_LABELS.filter((_, d) => shiftsByDay[d].length > 0).length;
 
   async function handleToggleAutoSubmit() {
     if (!pin) return;
@@ -263,11 +306,11 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   }
 
   function setAllDay(dayIndex: number) {
-    if (!editable || !data) return;
+    if (!editable) return;
     setCommitted(true);
     setGrid((prev) => {
       const row: Record<string, number> = { ...(prev[dayIndex] || {}) };
-      for (const shift of data.shifts) row[shift.id] = AVAILABLE;
+      for (const shift of shiftsByDay[dayIndex]) row[shift.id] = AVAILABLE;
       return { ...prev, [dayIndex]: row };
     });
   }
@@ -276,13 +319,13 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   // is the deliberate way to say "I'm off the whole week", distinct from leaving
   // the grid blank (which trips the guard). One answered, negative week.
   function setCantWorkWeek() {
-    if (!editable || !data) return;
+    if (!editable) return;
     setCommitted(true);
     setGrid(() => {
       const g: Grid = {};
       for (let di = 0; di < DAY_LABELS.length; di += 1) {
         const row: Record<string, number> = {};
-        for (const shift of data.shifts) row[shift.id] = CANT_WORK;
+        for (const shift of shiftsByDay[di]) row[shift.id] = CANT_WORK;
         g[di] = row;
       }
       return g;
@@ -304,10 +347,13 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
     });
   }
 
-  // A day is blank when every one of its slots is still unanswered.
+  // A day is blank when it opens and every one of its slots is still unanswered.
+  // A closed day has nothing to answer, so it's never "blank" (and never counts
+  // toward progress) — otherwise the guard would fire on every submit.
   function dayIsBlank(dayIndex: number): boolean {
-    if (!data) return false;
-    return data.shifts.every((s) => toState(grid[dayIndex]?.[s.id]) === "unset");
+    const slots = shiftsByDay[dayIndex];
+    if (slots.length === 0) return false;
+    return slots.every((s) => toState(grid[dayIndex]?.[s.id]) === "unset");
   }
 
   function handleSubmit() {
@@ -332,7 +378,9 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
     // (blank counts as can't-work); "yes"/"maybe" carry the two positive tiers.
     const submissions: AvailabilityEntry[] = [];
     for (let di = 0; di < DAY_LABELS.length; di += 1) {
-      for (const shift of data.shifts) {
+      // Only the (day, shift) pairs that actually run — a closed day emits no
+      // rows, so a carried-over answer for a since-closed slot is dropped here.
+      for (const shift of shiftsByDay[di]) {
         const state = toState(grid[di]?.[shift.id]);
         const status = state === "yes" ? AVAILABLE : state === "maybe" ? IF_NEEDED : CANT_WORK;
         submissions.push({ day_index: di, shift_id: shift.id, status: status as 1 | 2 | 3, note: null });
@@ -359,9 +407,10 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   const weekStart = parseISODate(selectedWeek);
   // A day counts as answered once it has *any* non-unset slot — including an
   // explicit can't-work. Progress and the submit guard key off the same thing,
-  // so they never disagree (a fully-blank day is neither "done" nor guard-free).
+  // so they never disagree (a fully-blank open day is neither "done" nor
+  // guard-free). Closed days are excluded from both — see dayIsBlank.
   const blankDayLabels = DAY_LABELS.filter((_, di) => dayIsBlank(di));
-  const answeredDays = DAY_LABELS.length - blankDayLabels.length;
+  const answeredDays = openDayCount - blankDayLabels.length;
 
   return (
     <StaffScreen>
@@ -436,6 +485,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
       <div className={!editable || weekLoading ? "pointer-events-none opacity-50" : ""}>
         {DAY_LABELS.map((_, dayIndex) => {
           const date = addDays(weekStart, dayIndex);
+          const slots = shiftsByDay[dayIndex];
           return (
             <div
               key={dayIndex}
@@ -449,51 +499,59 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                     {date.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}
                   </span>
                 </div>
-                <button
-                  onClick={() => setAllDay(dayIndex)}
-                  className="-my-2 -mr-2 inline-flex min-h-[44px] shrink-0 items-center px-2 text-[11px] text-ink-muted transition-colors hover:text-accent"
-                >
-                  All day
-                </button>
+                {slots.length > 0 && (
+                  <button
+                    onClick={() => setAllDay(dayIndex)}
+                    className="-my-2 -mr-2 inline-flex min-h-[44px] shrink-0 items-center px-2 text-[11px] text-ink-muted transition-colors hover:text-accent"
+                  >
+                    All day
+                  </button>
+                )}
               </div>
-              <div className="flex gap-2">
-                {data.shifts.map((shift) => {
-                  const state = toState(grid[dayIndex]?.[shift.id]);
-                  const style = SLOT_STYLE[state];
-                  // Carried-over cells echo (lighter) until first touch commits.
-                  const boxClass = prefilled && !committed ? style.echo : style.box;
-                  return (
-                    <button
-                      key={shift.id}
-                      onClick={() => cycleSlot(dayIndex, shift.id)}
-                      aria-label={`${shift.name} on ${DAY_NAMES[dayIndex]}: ${
-                        state === "yes"
-                          ? "available"
-                          : state === "maybe"
-                            ? "if needed"
-                            : state === "no"
-                              ? "can't work"
-                              : "no answer yet"
-                      }`}
-                      // ~180ms colour settle (kept from before) + a light press-
-                      // scale (apple-design: respond on press). transform/opacity
-                      // only; no transition-all. Reduced-motion is handled globally
-                      // by the .cp-staff * rule in globals.css.
-                      className={`min-w-0 flex-1 rounded-cp-slot px-2 py-2.5 text-center transition-[background-color,border-color,color,transform] duration-[180ms] active:scale-[0.97] ${boxClass}`}
-                    >
-                      <div className={`flex items-center justify-center gap-1 transition-colors ${style.label}`}>
-                        {STATE_GLYPH[state] && (
-                          <Icon name={STATE_GLYPH[state]!} size={11} strokeWidth={2.5} />
-                        )}
-                        <span className="truncate text-[12px] font-medium">{shift.name}</span>
-                      </div>
-                      <div className="mt-0.5 truncate text-[11px] text-ink-muted transition-colors duration-[350ms]">
-                        {compactTimeRange(shift.start_time, shift.end_time)}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              {slots.length === 0 ? (
+                <div className="rounded-cp-slot border-[0.5px] border-dashed border-[var(--c-hairline)] px-2 py-3 text-center text-[12px] text-ink-muted">
+                  Closed
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  {slots.map((shift) => {
+                    const state = toState(grid[dayIndex]?.[shift.id]);
+                    const style = SLOT_STYLE[state];
+                    // Carried-over cells echo (lighter) until first touch commits.
+                    const boxClass = prefilled && !committed ? style.echo : style.box;
+                    return (
+                      <button
+                        key={shift.id}
+                        onClick={() => cycleSlot(dayIndex, shift.id)}
+                        aria-label={`${shift.name} on ${DAY_NAMES[dayIndex]}: ${
+                          state === "yes"
+                            ? "available"
+                            : state === "maybe"
+                              ? "if needed"
+                              : state === "no"
+                                ? "can't work"
+                                : "no answer yet"
+                        }`}
+                        // ~180ms colour settle (kept from before) + a light press-
+                        // scale (apple-design: respond on press). transform/opacity
+                        // only; no transition-all. Reduced-motion is handled globally
+                        // by the .cp-staff * rule in globals.css.
+                        className={`min-w-0 flex-1 rounded-cp-slot px-2 py-2.5 text-center transition-[background-color,border-color,color,transform] duration-[180ms] active:scale-[0.97] ${boxClass}`}
+                      >
+                        <div className={`flex items-center justify-center gap-1 transition-colors ${style.label}`}>
+                          {STATE_GLYPH[state] && (
+                            <Icon name={STATE_GLYPH[state]!} size={11} strokeWidth={2.5} />
+                          )}
+                          <span className="truncate text-[12px] font-medium">{shift.name}</span>
+                        </div>
+                        <div className="mt-0.5 truncate text-[11px] text-ink-muted transition-colors duration-[350ms]">
+                          {compactTimeRange(shift.start_time, shift.end_time)}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
@@ -622,10 +680,14 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
       <Modal
         open={guardOpen}
         onClose={() => setGuardOpen(false)}
-        title={blankDayLabels.length === 7 ? "You haven't marked any days" : "Some days are still blank"}
+        title={
+          blankDayLabels.length >= openDayCount
+            ? "You haven't marked any days"
+            : "Some days are still blank"
+        }
       >
         <p className="mb-1.5 text-[14px] leading-[1.5] text-ink-muted">
-          {blankDayLabels.length === 7 ? (
+          {blankDayLabels.length >= openDayCount ? (
             <>You haven&apos;t answered any day yet. </>
           ) : (
             <>
@@ -672,8 +734,8 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
       >
         <div className="mx-auto w-full max-w-[440px] px-[22px] pb-3 pt-3">
           <ProgressBar
-            value={answeredDays / 7}
-            label={`${answeredDays} of 7 days`}
+            value={openDayCount ? answeredDays / openDayCount : 1}
+            label={`${answeredDays} of ${openDayCount} ${openDayCount === 1 ? "day" : "days"}`}
             ariaLabel="Days answered this week"
             className="mb-2.5"
           />

@@ -100,6 +100,20 @@ def check_manual_assignment(
     name = staff.get("name") or "Staff member"
     under18 = bool(staff.get("is_under_18"))
 
+    # Existence gate: the shift doesn't run this day (a closed day in the
+    # per-day model). generate_rota already refuses to build a variable here;
+    # this is the matching guard for the manual paths that share this check —
+    # manual add, claim, give-accept, swap. A closed day is a fact about the
+    # venue, not manager discretion, so it's a hard block with no confirm path.
+    if shift_days_by_key is not None and not shift_bounds.exists_on_day(
+        shift, day_index, shift_days_by_key
+    ):
+        day_label = DAY_NAMES[day_index] if 0 <= day_index <= 6 else f"day {day_index}"
+        return {
+            "severity": "block",
+            "reason": f"'{shift['name']}' doesn't run on {day_label}.",
+        }
+
     days_worked: dict[int, str] = {
         a["day_index"]: a["shift_id"] for a in other_assignments if a.get("shift_id")
     }

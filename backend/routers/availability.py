@@ -252,6 +252,35 @@ def _get_shifts(venue_id: str) -> list[dict]:
     )
 
 
+def _week_shifts(venue_id: str) -> list[dict]:
+    """Per-day shift definitions for the availability grid: each shift plus the
+    list of days it actually runs and the real per-day start/end times. A closed
+    day is omitted. An unmigrated shift (no `shift_days` rows) falls back to
+    running all 7 days at the shift-level time via `shift_bounds`, so the payload
+    is byte-identical to the old shift-level grid until a manager diverges a
+    shift in the per-day editor."""
+    shifts = _get_shifts(venue_id)
+    idx = _load_shift_days_index([s["id"] for s in shifts])
+    out: list[dict] = []
+    for s in shifts:
+        days = []
+        for d in range(7):
+            if not shift_bounds.exists_on_day(s, d, idx):
+                continue
+            start, end = shift_bounds.bounds_for(s, d, idx)
+            days.append({"day_index": d, "start_time": start, "end_time": end})
+        out.append(
+            {
+                "id": s["id"],
+                "name": s["name"],
+                "color": s["color"],
+                "sort_order": s["sort_order"],
+                "days": days,
+            }
+        )
+    return out
+
+
 def _get_rules(venue_id: str) -> dict:
     """Staff-facing close deadline (day + time) for the week currently open. The
     close is derived from that week's notice window, so it stays accurate as the
@@ -463,10 +492,36 @@ def join_team(venue_token: str, payload: StaffJoinRequest, request: Request):
     }
 
 
+def _filter_pattern_to_open_days(venue_id: str, rows: list[dict]) -> list[dict]:
+    """Drop carried-forward submission rows for a (shift, day) that no longer
+    runs — the shift was deleted, or the manager has since closed that day in the
+    per-day editor. Without this, prefill and auto-submit keep reasserting
+    availability on days the venue is shut, which then surface as phantom
+    uncovered gaps on the manager's rota (see rota._submission_demand_slots).
+    Note rows (shift_id NULL) are always kept."""
+    shifts = _get_shifts(venue_id)
+    shifts_by_id = {s["id"]: s for s in shifts}
+    idx = _load_shift_days_index([s["id"] for s in shifts])
+    kept: list[dict] = []
+    for r in rows:
+        if not r.get("shift_id"):
+            kept.append(r)
+            continue
+        shift = shifts_by_id.get(r["shift_id"])
+        if shift is None:
+            continue  # shift deleted since this pattern was submitted
+        if not shift_bounds.exists_on_day(shift, r["day_index"], idx):
+            continue  # that day has since been closed for this shift
+        kept.append(r)
+    return kept
+
+
 def _most_recent_submission_pattern(venue_id: str, staff_id: str, before_monday: "date") -> list[dict]:
     """This staff member's most recent prior week's submission rows (any
     period earlier than `before_monday`), or [] if they've never submitted.
-    Used to pre-fill a blank week and to auto-carry-forward on open."""
+    Used to pre-fill a blank week and to auto-carry-forward on open. Rows for a
+    (shift, day) that no longer runs are filtered out (see
+    _filter_pattern_to_open_days)."""
     supabase = get_supabase()
     earlier_periods = (
         supabase.table("availability_periods")
@@ -488,7 +543,7 @@ def _most_recent_submission_pattern(venue_id: str, staff_id: str, before_monday:
             .data
         )
         if rows:
-            return rows
+            return _filter_pattern_to_open_days(venue_id, rows)
     return []
 
 
@@ -542,6 +597,7 @@ def get_week_availability(venue_token: str, payload: WeekAvailabilityRequest):
         ),
         "editable": editable,
         "submissions": submissions,
+        "shifts": _week_shifts(venue["id"]),
     }
 
 

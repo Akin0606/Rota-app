@@ -102,11 +102,38 @@ class WeekAvailabilityRequest(BaseModel):
     week_start: str
 
 
+class WeekShiftDayOut(BaseModel):
+    """One OPEN day of a shift, with the real per-day hours resolved through
+    `shift_days`. A day the shift doesn't run is simply absent from
+    WeekShiftOut.days."""
+    day_index: int
+    start_time: str
+    end_time: str
+
+
+class WeekShiftOut(BaseModel):
+    """A shift as the availability grid needs it: which days it runs and the
+    real time on each. Replaces the shift-level ShiftOut for that screen so a
+    shift running different hours (or not at all) on different days shows
+    correctly. Staffing (min/max) is deliberately omitted — it's manager-only
+    operational data with no use on the staff grid."""
+    id: str
+    name: str
+    color: str
+    sort_order: int
+    days: list[WeekShiftDayOut] = []
+
+
 class WeekAvailabilityOut(BaseModel):
     week_start: str
     period: Optional[PeriodOut] = None
     editable: bool
     submissions: list[AvailabilityEntryOut] = []
+    # Per-day shift definitions for this week's grid — which shifts run on which
+    # days and the real hours on each. Week-independent (shift_days has no date),
+    # but carried on /week (not /auth) so a manager's hours edit reaches an
+    # already-open staff session — /auth is cached, /week isn't.
+    shifts: list[WeekShiftOut] = []
     # True when `submissions` wasn't actually saved for this week yet, but is
     # the staff member's most recent prior pattern shown as a starting point.
     prefilled: bool = False
