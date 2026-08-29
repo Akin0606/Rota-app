@@ -10,6 +10,20 @@
  *
  * The wheel is one arc of seven. Seven segments = the days of a week; `rota` is
  * Latin for wheel. Sized in `em` so it scales with whatever font-size is set.
+ *
+ * Two things here are measured against Archivo's real metrics, not guessed:
+ *
+ * 1. The viewBox is cropped to the circle's true bounds (55..457 of the 512
+ *    grid). A full-grid viewBox carries 10.7% dead padding a side, which reads
+ *    as "r o tally"; cancelling that with a negative margin stacks with the
+ *    container's -0.05em tracking and the r collides with the wheel. Cropped,
+ *    the mark has honest metrics and takes a normal positive sidebearing.
+ * 2. `align-items: center` centres the wheel on the line box, but a lowercase
+ *    o lives on the x-height band — measured 0.0625em higher than it should
+ *    be. translateY seats it without disturbing the line box.
+ *
+ * Both constants are Archivo-specific (x-height 0.529em) and assume the
+ * leading-none line-height set below. Re-measure if either changes.
  */
 export default function Wordmark({ className = "" }: { className?: string }) {
   return (
@@ -20,8 +34,8 @@ export default function Wordmark({ className = "" }: { className?: string }) {
       r
       <svg
         aria-hidden="true"
-        viewBox="0 0 512 512"
-        className="mx-[-0.06em] block h-[0.86em] w-[0.86em]"
+        viewBox="55 55 402 402"
+        className="mx-[0.02em] block h-[0.675em] w-[0.675em] translate-y-[0.0625em]"
       >
         <g transform="rotate(-90 256 256)" fill="none">
           <circle

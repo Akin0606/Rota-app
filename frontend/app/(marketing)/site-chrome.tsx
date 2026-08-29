@@ -170,7 +170,7 @@ export function SiteNav() {
     <header className="nav">
       <div className="wrap nav-inner">
         <Link href="/" className="logo" onClick={handleLogo} aria-label="Rotally — back to top">
-          r<svg className="wheel" viewBox="0 0 512 512" aria-hidden="true"><g transform="rotate(-90 256 256)" fill="none"><circle cx="256" cy="256" r="170" stroke="currentColor" strokeOpacity="0.28" strokeWidth="62" strokeDasharray="112.59 40" /><circle cx="256" cy="256" r="170" stroke="var(--accent)" strokeWidth="62" strokeDasharray="112.59 955.55" strokeDashoffset="-610.37" /></g></svg>ta<span className="tail">lly</span>
+          r<svg className="wheel" viewBox="55 55 402 402" aria-hidden="true"><g transform="rotate(-90 256 256)" fill="none"><circle cx="256" cy="256" r="170" stroke="currentColor" strokeOpacity="0.28" strokeWidth="62" strokeDasharray="112.59 40" /><circle cx="256" cy="256" r="170" stroke="var(--accent)" strokeWidth="62" strokeDasharray="112.59 955.55" strokeDashoffset="-610.37" /></g></svg>ta<span className="tail">lly</span>
         </Link>
         <nav className="nav-links" aria-label="Main">
           {NAV_LINKS.map(([href, label]) => (
@@ -255,7 +255,7 @@ export function SiteFooter() {
     <footer className="footer">
       <div className="wrap footer-inner">
         <Link href="/" className="logo" style={{ fontSize: "1rem" }} aria-label="Rotally">
-          r<svg className="wheel" viewBox="0 0 512 512" aria-hidden="true"><g transform="rotate(-90 256 256)" fill="none"><circle cx="256" cy="256" r="170" stroke="currentColor" strokeOpacity="0.28" strokeWidth="62" strokeDasharray="112.59 40" /><circle cx="256" cy="256" r="170" stroke="var(--accent)" strokeWidth="62" strokeDasharray="112.59 955.55" strokeDashoffset="-610.37" /></g></svg>ta<span className="tail">lly</span>
+          r<svg className="wheel" viewBox="55 55 402 402" aria-hidden="true"><g transform="rotate(-90 256 256)" fill="none"><circle cx="256" cy="256" r="170" stroke="currentColor" strokeOpacity="0.28" strokeWidth="62" strokeDasharray="112.59 40" /><circle cx="256" cy="256" r="170" stroke="var(--accent)" strokeWidth="62" strokeDasharray="112.59 955.55" strokeDashoffset="-610.37" /></g></svg>ta<span className="tail">lly</span>
         </Link>
         <div className="footer-links">
           <Link href="/walkthrough">Walkthrough</Link>

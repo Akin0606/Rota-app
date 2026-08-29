@@ -441,12 +441,15 @@
   opacity: 0.6;
 }
 .rotally .logo .wheel {
-  /* Seven segments = a week; `rota` is Latin for wheel. Sized in em so it
-     tracks the logo's font-size, with negative sidebearing because the SVG
-     carries ~11% internal padding and would otherwise read as "r o tally". */
-  width: 0.86em;
-  height: 0.86em;
-  margin: 0 -0.06em;
+  /* Cropped viewBox (55..457 of 512) so the mark has honest metrics — the full
+     grid carries 10.7% dead padding a side, and cancelling that with a negative
+     margin stacks with the -0.05em tracking into a collision with the r.
+     translateY seats it on the x-height band, where a lowercase o lives;
+     align-items:center would otherwise float it 0.0625em high. */
+  width: 0.675em;
+  height: 0.675em;
+  margin: 0 0.02em;
+  transform: translateY(0.0625em);
   display: block;
   flex: none;
 }
