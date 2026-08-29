@@ -11,6 +11,7 @@ const config: Config = {
       fontFamily: {
         sans: ["var(--font-body)", "IBM Plex Sans", "system-ui", "sans-serif"],
         display: ["var(--font-display)", "Space Grotesk", "sans-serif"],
+        mark: ["var(--font-mark)", "Archivo", "system-ui", "sans-serif"],
       },
       colors: {
         background: "var(--background)",
@@ -21,6 +22,9 @@ const config: Config = {
         accent: {
           DEFAULT: "var(--c-accent)",
           hover: "var(--c-accent-hover)",
+          // Foreground for content sitting ON an accent surface. White fails
+          // AA on the accent (2.86:1); this resolves per theme in globals.css.
+          on: "var(--c-accent-on)",
           light: "var(--c-accent-light)",
           border: "var(--c-accent-border)",
         },

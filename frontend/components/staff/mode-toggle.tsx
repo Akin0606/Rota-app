@@ -6,7 +6,7 @@ import Icon from "./icon";
 // so the light/dark choice is keyed to the venue link the staff member opened.
 // The pre-paint script in app/layout.tsx reads the same key.
 export function staffThemeKey(venueToken: string): string {
-  return `crewplan-theme:${venueToken}`;
+  return `rotally-theme:${venueToken}`;
 }
 
 export default function ModeToggle({ venueToken }: { venueToken: string }) {
@@ -35,7 +35,7 @@ export default function ModeToggle({ venueToken }: { venueToken: string }) {
       // clears the touch-target minimum without changing the look.
       className="cp-hairline relative h-7 w-[52px] shrink-0 rounded-full bg-cp-icon transition-colors duration-[350ms] before:absolute before:-inset-2 before:content-['']"
     >
-      <span className="cp-knob absolute left-[2.5px] top-[2.5px] flex h-[22px] w-[22px] items-center justify-center rounded-full bg-accent text-white">
+      <span className="cp-knob absolute left-[2.5px] top-[2.5px] flex h-[22px] w-[22px] items-center justify-center rounded-full bg-accent text-accent-on">
         <Icon name="moon" size={13} className="cp-knob-moon" />
         <Icon name="sun" size={13} className="cp-knob-sun" />
       </span>

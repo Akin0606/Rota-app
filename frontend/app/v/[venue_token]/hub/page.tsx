@@ -429,7 +429,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
               <button
                 onClick={confirmAccept}
                 disabled={resolving}
-                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-on disabled:opacity-60"
               >
                 {resolving ? "Accepting…" : "Accept shift"}
               </button>
@@ -456,7 +456,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
               <button
                 onClick={confirmAcceptSwap}
                 disabled={resolvingSwap}
-                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-on disabled:opacity-60"
               >
                 {resolvingSwap ? "Accepting…" : "Accept swap"}
               </button>
@@ -502,7 +502,7 @@ function ActionBanner({
         <button
           onClick={onAccept}
           disabled={busy}
-          className="flex-1 rounded-cp-slot bg-accent py-3 text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="flex-1 rounded-cp-slot bg-accent py-3 text-[13px] font-medium text-accent-on transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           Accept
         </button>

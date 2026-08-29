@@ -185,7 +185,7 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, onDelete, show
             type="button"
             onClick={handleSave}
             disabled={saving || loading || openCount === 0}
-            className="flex-1 rounded-xl bg-accent py-3 text-sm font-medium text-white disabled:opacity-50"
+            className="flex-1 rounded-xl bg-accent py-3 text-sm font-medium text-accent-on disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save shift"}
           </button>

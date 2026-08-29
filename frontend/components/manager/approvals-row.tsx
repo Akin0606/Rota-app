@@ -58,7 +58,7 @@ export default function ApprovalsRow({
   return (
     <div className="mb-3 rounded-[12px] border-[0.5px] border-accent-border bg-accent-light px-3.5 py-3">
       <div className="flex items-center gap-2.5">
-        <span className="flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-accent px-1.5 text-[12px] font-medium text-white">
+        <span className="flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-accent px-1.5 text-[12px] font-medium text-accent-on">
           {total}
         </span>
         <div className="min-w-0">

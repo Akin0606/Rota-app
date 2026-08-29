@@ -635,7 +635,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                 </button>
                 <button
                   onClick={saveNote}
-                  className="flex-1 rounded-cp-slot bg-accent py-2 text-[12px] font-medium text-white"
+                  className="flex-1 rounded-cp-slot bg-accent py-2 text-[12px] font-medium text-accent-on"
                 >
                   Save
                 </button>
@@ -711,7 +711,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
           <button
             onClick={() => void doSubmit()}
             disabled={submitting}
-            className="flex-1 rounded-cp-slot bg-accent py-3 text-[13px] font-medium text-white transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
+            className="flex-1 rounded-cp-slot bg-accent py-3 text-[13px] font-medium text-accent-on transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
           >
             {submitting ? "Submitting…" : "Submit anyway"}
           </button>
@@ -743,7 +743,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
             <button
               onClick={handleSubmit}
               disabled={submitting || weekLoading}
-              className="w-full rounded-cp-panel bg-accent py-[13px] text-[15px] font-medium tracking-[-0.1px] text-white transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-[0.99] disabled:opacity-60"
+              className="w-full rounded-cp-panel bg-accent py-[13px] text-[15px] font-medium tracking-[-0.1px] text-accent-on transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-[0.99] disabled:opacity-60"
             >
               {submitting ? "Submitting…" : "Submit availability"}
             </button>

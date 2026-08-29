@@ -62,7 +62,7 @@ export function PrimaryHubTile({
       href={href}
       className="group col-span-2 flex items-center gap-3.5 overflow-hidden rounded-cp-card border-[0.5px] border-[rgba(255,77,0,0.25)] bg-accent-light p-[18px] transition-[background-color,border-color,transform] duration-200 hover:-translate-y-0.5 active:translate-y-0"
     >
-      <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-cp-control bg-accent text-white">
+      <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-cp-control bg-accent text-accent-on">
         <Icon name={icon} size={19} />
       </span>
       <span className="min-w-0 flex-1">

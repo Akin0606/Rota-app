@@ -183,7 +183,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
                     setJoinCode("");
                     setJoinName("");
                   }}
-                  className="w-full rounded-cp-control bg-accent py-4 text-center text-base font-medium text-white transition-transform duration-150 active:scale-[0.98]"
+                  className="w-full rounded-cp-control bg-accent py-4 text-center text-base font-medium text-accent-on transition-transform duration-150 active:scale-[0.98]"
                 >
                   First time? Register
                 </button>
@@ -236,7 +236,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
                 <button
                   onClick={handleContinue}
                   disabled={submitting}
-                  className="w-full rounded-cp-control bg-accent py-4 text-center text-base font-medium text-white transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
+                  className="w-full rounded-cp-control bg-accent py-4 text-center text-base font-medium text-accent-on transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
                 >
                   {submitting ? "Checking…" : "Continue"}
                 </button>
@@ -298,7 +298,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
                 <button
                   onClick={handleJoin}
                   disabled={joining}
-                  className="w-full rounded-cp-control bg-accent py-4 text-center text-base font-medium text-white transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
+                  className="w-full rounded-cp-control bg-accent py-4 text-center text-base font-medium text-accent-on transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
                 >
                   {joining ? "Joining…" : "Join the team"}
                 </button>
@@ -347,7 +347,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
 
                 <button
                   onClick={() => router.push(`/v/${venue_token}/availability`)}
-                  className="w-full rounded-cp-control bg-accent py-4 text-center text-base font-medium text-white transition-transform duration-150 active:scale-[0.98]"
+                  className="w-full rounded-cp-control bg-accent py-4 text-center text-base font-medium text-accent-on transition-transform duration-150 active:scale-[0.98]"
                 >
                   Continue to availability
                 </button>

@@ -118,7 +118,7 @@ export default function AdminWaitlistPage() {
               <button
                 onClick={() => handleInvite(e)}
                 disabled={e.status === "invited" || invitingId === e.id}
-                className="rounded-lg bg-accent px-3.5 py-2 text-[13px] font-semibold text-white disabled:opacity-50"
+                className="rounded-lg bg-accent px-3.5 py-2 text-[13px] font-semibold text-accent-on disabled:opacity-50"
               >
                 {e.status === "invited"
                   ? "Invited"

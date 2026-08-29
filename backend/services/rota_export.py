@@ -6,7 +6,7 @@ chosen in the app:
   - "day-rows"  (inverted): days down the left, staff across the top
 
 Each cell shows the shift name and a compact time range, e.g. "Day 2–6pm".
-The PDF is branded (venue + week header, Crewplan wordmark in the corner) so
+The PDF is branded (venue + week header, Rotally wordmark in the corner) so
 it can be shared outside the app.
 """
 
@@ -23,7 +23,7 @@ from services import shift_bounds
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-ACCENT = (255, 77, 0)  # #FF4D00
+ACCENT = (176, 77, 11)  # #B04D0B — the light-ground accent; the PDF is white
 INK = (17, 24, 39)  # #111827
 INK_MUTED = (107, 114, 128)  # #6b7280
 HAIRLINE = (229, 231, 235)  # #e5e7eb
@@ -137,20 +137,23 @@ class _RotaPDF(FPDF):
         self.ln(3)
 
     def footer(self):
-        # Crewplan wordmark in the bottom-right corner — this doc is shared
-        # outside the app, so it carries the brand.
+        # Rotally wordmark in the bottom-right corner — this doc is shared
+        # outside the app, so it carries the brand. The seven-segment wheel is
+        # deliberately omitted here: it would have to be drawn as a dashed arc
+        # in fpdf2 and reads as noise at 11pt. Letters are ink on white and the
+        # tail takes the light-ground accent, per the polarity rule.
         self.set_y(-14)
         self.set_font("Helvetica", "B", 11)
-        wordmark = "crewplan"
-        dot = "."
-        w_word = self.get_string_width(wordmark)
-        w_dot = self.get_string_width(dot)
-        x = self.w - 12 - (w_word + w_dot)
+        stem = "rota"
+        tail = "lly"
+        w_stem = self.get_string_width(stem)
+        w_tail = self.get_string_width(tail)
+        x = self.w - 12 - (w_stem + w_tail)
         self.set_x(x)
         self.set_text_color(*INK)
-        self.cell(w_word, 6, wordmark, new_x="RIGHT", new_y="TOP")
+        self.cell(w_stem, 6, stem, new_x="RIGHT", new_y="TOP")
         self.set_text_color(*ACCENT)
-        self.cell(w_dot, 6, dot)
+        self.cell(w_tail, 6, tail)
 
 
 def _name_with_tag(person: dict) -> str:

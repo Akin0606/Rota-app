@@ -172,7 +172,7 @@ export default function AdminVenuesPage() {
         </div>
         <button
           onClick={openModal}
-          className="rounded-[10px] bg-accent px-4 py-2.5 text-[13px] font-semibold text-white transition hover:bg-accent-hover"
+          className="rounded-[10px] bg-accent px-4 py-2.5 text-[13px] font-semibold text-accent-on transition hover:bg-accent-hover"
         >
           + Add manager
         </button>
@@ -301,7 +301,7 @@ export default function AdminVenuesPage() {
             </div>
             <button
               onClick={() => setModalOpen(false)}
-              className="w-full rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-white"
+              className="w-full rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-accent-on"
             >
               Done
             </button>
@@ -333,7 +333,7 @@ export default function AdminVenuesPage() {
               <button
                 onClick={handleCreate}
                 disabled={saving}
-                className="flex-1 rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
+                className="flex-1 rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-accent-on disabled:opacity-60"
               >
                 {saving ? "Creating…" : "Create account"}
               </button>

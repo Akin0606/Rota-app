@@ -214,7 +214,7 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
 
       <button
         onClick={openRequest}
-        className="mb-6 flex w-full items-center justify-center gap-2 rounded-cp-panel bg-accent p-3.5 text-[14px] font-medium tracking-[-0.1px] text-white transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-[0.99]"
+        className="mb-6 flex w-full items-center justify-center gap-2 rounded-cp-panel bg-accent p-3.5 text-[14px] font-medium tracking-[-0.1px] text-accent-on transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-[0.99]"
       >
         <Icon name="plus" size={17} />
         Request time off
@@ -296,7 +296,7 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
           <button
             onClick={submitRequest}
             disabled={submitting || !startDate || !endDate}
-            className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-white disabled:opacity-50"
+            className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-50"
           >
             {submitting ? "Sending…" : "Send request"}
           </button>

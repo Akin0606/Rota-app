@@ -518,7 +518,7 @@ export default function RotaPage() {
         Something went wrong loading the rota.
         <button
           onClick={() => setReloadToken((n) => n + 1)}
-          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-white"
+          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-accent-on"
         >
           Try again
         </button>
@@ -609,7 +609,7 @@ export default function RotaPage() {
           <button
             onClick={() => handlePostOpen(dayIndex, shiftId)}
             disabled={posting}
-            className="rounded-md bg-accent px-2 py-1 text-[12px] font-semibold text-white disabled:opacity-60"
+            className="rounded-md bg-accent px-2 py-1 text-[12px] font-semibold text-accent-on disabled:opacity-60"
           >
             {posting ? "…" : "Post"}
           </button>
@@ -647,7 +647,7 @@ export default function RotaPage() {
             <button
               onClick={handleGenerate}
               disabled={generating}
-              className="rounded-[9px] bg-accent px-3 py-2 text-[12px] font-medium text-white disabled:opacity-60"
+              className="rounded-[9px] bg-accent px-3 py-2 text-[12px] font-medium text-accent-on disabled:opacity-60"
             >
               {generating ? "Generating…" : "Auto-fill"}
             </button>
@@ -737,7 +737,7 @@ export default function RotaPage() {
         <button
           onClick={handleGenerate}
           disabled={generating}
-          className="mb-5 w-full rounded-[11px] bg-accent px-4 py-3 text-[13px] font-medium text-white disabled:opacity-60"
+          className="mb-5 w-full rounded-[11px] bg-accent px-4 py-3 text-[13px] font-medium text-accent-on disabled:opacity-60"
         >
           {generating ? "Generating…" : "Auto-fill this week"}
         </button>
@@ -960,7 +960,7 @@ export default function RotaPage() {
                   handlePublish();
                 }}
                 disabled={publishing}
-                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-accent-on disabled:opacity-60"
               >
                 {publishing ? "Publishing…" : "Publish anyway"}
               </button>
@@ -990,7 +990,7 @@ export default function RotaPage() {
           {isLive ? (
             <button
               onClick={() => setPanelOpen(true)}
-              className="flex shrink-0 items-center gap-1.5 rounded-[11px] bg-accent px-4 py-2.5 text-[13px] font-medium text-white"
+              className="flex shrink-0 items-center gap-1.5 rounded-[11px] bg-accent px-4 py-2.5 text-[13px] font-medium text-accent-on"
             >
               <ManagerIcon name="send" size={15} /> Share / Export
             </button>
@@ -998,7 +998,7 @@ export default function RotaPage() {
             <button
               onClick={() => (gapSlots > 0 ? setPublishConfirmOpen(true) : handlePublish())}
               disabled={publishing}
-              className="flex shrink-0 items-center gap-1.5 rounded-[11px] bg-accent px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1.5 rounded-[11px] bg-accent px-4 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-50"
             >
               <ManagerIcon name="send" size={15} /> {publishing ? "Publishing…" : "Publish"}
             </button>

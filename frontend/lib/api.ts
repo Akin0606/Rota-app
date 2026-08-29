@@ -533,7 +533,7 @@ export async function requestLoginCode(email: string): Promise<{ status: string 
 
     let message: string;
     if (signupsDisabled) {
-      message = "This email isn't registered — contact your Crewplan admin.";
+      message = "This email isn't registered — contact your Rotally admin.";
     } else if (retryable) {
       message = "Couldn't reach the server — please try again in a moment.";
     } else if (emptyMessage) {

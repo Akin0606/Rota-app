@@ -313,7 +313,7 @@ export default function SchedulerPage() {
         Something went wrong loading the scheduler.
         <button
           onClick={() => setReloadToken((n) => n + 1)}
-          className="rounded-cp-control bg-accent px-4 py-2 text-[13px] font-medium text-white"
+          className="rounded-cp-control bg-accent px-4 py-2 text-[13px] font-medium text-accent-on"
         >
           Try again
         </button>
@@ -471,7 +471,7 @@ export default function SchedulerPage() {
           <button
             onClick={() => submitOverride(false)}
             disabled={savingOverride || !overrideWeek}
-            className="rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
+            className="rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-60"
           >
             {savingOverride ? "Saving…" : "Save close time"}
           </button>
@@ -536,7 +536,7 @@ export default function SchedulerPage() {
           <button
             onClick={handleGenerate}
             disabled={!config.has_shifts || !genWeek}
-            className="flex shrink-0 items-center gap-1.5 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1.5 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-50"
           >
             <ManagerIcon name="sparkles" size={15} /> Generate
           </button>
@@ -747,7 +747,7 @@ function SaveButton({ onClick, busy, label }: { onClick: () => void; busy: boole
     <button
       onClick={onClick}
       disabled={busy}
-      className="mt-3.5 rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
+      className="mt-3.5 rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-60"
     >
       {busy ? "Saving…" : label}
     </button>

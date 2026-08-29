@@ -158,7 +158,7 @@ const ROADMAP: [string, string, "next" | "exploring"][] = [
   ],
   [
     "Cover finder — for when someone calls in sick",
-    "One tap on the shift that's gone missing. Crewplan ranks who could legally and realistically take it, asks the top few, and the first to accept gets it.",
+    "One tap on the shift that's gone missing. Rotally ranks who could legally and realistically take it, asks the top few, and the first to accept gets it.",
     "exploring",
   ],
   [
@@ -250,10 +250,10 @@ export default function Home() {
               Taking pilot venues now — a few at a time
             </div>
             <h1 className="d1 rise" style={{ ["--i" as string]: 1 }}>
-              Rotas that write themselves<span className="accent">.</span>
+              Rotas that write themselves.
             </h1>
             <p className="lede rise" style={{ ["--i" as string]: 2 }}>
-              Right now it&apos;s a group chat, a paper diary and your Sunday night. Crewplan takes
+              Right now it&apos;s a group chat, a paper diary and your Sunday night. Rotally takes
               that off you — your team sends their week from one link, and a finished rota comes
               back with availability, holidays and the law already worked out.
             </p>
@@ -313,7 +313,7 @@ export default function Home() {
                 </ul>
               </div>
               <div className="versus-col is-new">
-                <div className="versus-head">How it gets written with Crewplan</div>
+                <div className="versus-head">How it gets written with Rotally</div>
                 <ul>
                   {VERSUS_NEW.map((line) => (
                     <li key={line}>
@@ -462,7 +462,7 @@ export default function Home() {
                   Check what&apos;s wrong, not what&apos;s right.
                 </h2>
                 <p className="body">
-                  A finished rota is thirty-odd decisions and twenty-nine of them are fine. Crewplan
+                  A finished rota is thirty-odd decisions and twenty-nine of them are fine. Rotally
                   shows you the ones that aren&apos;t, then gets out of the way.
                 </p>
                 <div className="split-list">
@@ -562,10 +562,10 @@ export default function Home() {
           <div className="wrap">
             <div className="quote reveal">
               <p>
-                Built for the pub with eight staff and one manager<span className="accent">.</span>{" "}
+                Built for the pub with eight staff and one manager.{" "}
                 Not the chain with a scheduling department.
               </p>
-              <p className="attrib">— why we&apos;re building Crewplan</p>
+              <p className="attrib">— why we&apos;re building Rotally</p>
             </div>
           </div>
         </section>
@@ -630,7 +630,7 @@ export default function Home() {
           <div className="wrap">
             <div className="section-head reveal">
               <div className="eyebrow">What&apos;s next</div>
-              <h2 className="d2">Where Crewplan is heading.</h2>
+              <h2 className="d2">Where Rotally is heading.</h2>
               <p className="lede">
                 Everything below either takes a job off you or does it better than a person guessing
                 at eleven at night. That&apos;s the whole filter.

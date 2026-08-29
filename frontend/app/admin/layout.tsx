@@ -89,7 +89,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <button
             onClick={handleLogin}
             disabled={verifying}
-            className="w-full rounded-control bg-accent py-3 text-sm font-semibold text-white disabled:opacity-60"
+            className="w-full rounded-control bg-accent py-3 text-sm font-semibold text-accent-on disabled:opacity-60"
           >
             {verifying ? "Checking…" : "Enter"}
           </button>

@@ -171,7 +171,7 @@ export default function PublishPanel({
                   onViewImage();
                   onClose();
                 }}
-                className="shrink-0 rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-semibold text-white"
+                className="shrink-0 rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-semibold text-accent-on"
               >
                 View
               </button>
@@ -187,7 +187,7 @@ export default function PublishPanel({
                 <button
                   onClick={a.onClick}
                   disabled={a.state.status === "loading"}
-                  className="shrink-0 rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-semibold text-white disabled:opacity-50"
+                  className="shrink-0 rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-semibold text-accent-on disabled:opacity-50"
                 >
                   {a.state.status === "loading" ? "…" : a.cta}
                 </button>

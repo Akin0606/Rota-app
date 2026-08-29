@@ -21,13 +21,21 @@ import {
 
 // Neither an hourly rate nor a weekly target exists anywhere in the schema —
 // both are staff-set and live client-side only, keyed per venue like the
-// theme. No migration, and nothing here is ever sent to the backend.
-const rateKey = (token: string) => `crewplan-rate:${token}`;
-const targetKey = (token: string) => `crewplan-target:${token}`;
+// theme. Nothing here is ever sent to the backend.
+const rateKey = (token: string) => `rotally-rate:${token}`;
+const targetKey = (token: string) => `rotally-target:${token}`;
+// Pre-rebrand keys. These hold real numbers a staff member typed in, so the
+// Crewplan → Rotally rename reads through to the old key once and copies the
+// value forward rather than silently wiping someone's pay rate.
+const legacyKey = (key: string) => key.replace(/^rotally-/, "crewplan-");
 
 function readNumber(key: string): number | null {
   try {
-    const raw = localStorage.getItem(key);
+    let raw = localStorage.getItem(key);
+    if (!raw) {
+      raw = localStorage.getItem(legacyKey(key));
+      if (raw) localStorage.setItem(key, raw); // migrate forward, once
+    }
     if (!raw) return null;
     const n = Number(raw);
     return Number.isFinite(n) && n > 0 ? n : null;
@@ -319,7 +327,7 @@ export default function StaffHoursPage({ params }: { params: { venue_token: stri
           </button>
           <button
             onClick={saveEditor}
-            className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-white"
+            className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-accent-on"
           >
             Save
           </button>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 512" role="img" aria-label="Rotally">
+  <title>Rotally wordmark — on dark grounds</title>
+  <desc>Letters #F4F4F2, accent #FF6B00. Type must be outlined before production use.</desc>
+  <g id="wordmark" font-family="Archivo, Helvetica, Arial, sans-serif" font-weight="700"
+     font-size="200" letter-spacing="-10">
+    <text x="196" y="322" fill="#F4F4F2" text-anchor="end">r</text>
+    <text x="392" y="322" fill="#F4F4F2">ta</text>
+    <text x="612" y="322" fill="#FF6B00">lly</text>
+  </g>
+  <g id="icon" transform="translate(196 106) scale(0.4)" fill="none">
+    <g transform="rotate(-90 256 256)">
+      <circle cx="256" cy="256" r="170" stroke="#4A4A4E" stroke-width="62" stroke-dasharray="112.59 40"/>
+      <circle cx="256" cy="256" r="170" stroke="#FF6B00" stroke-width="62" stroke-dasharray="112.59 955.55" stroke-dashoffset="-610.37"/>
+    </g>
+  </g>
+</svg>

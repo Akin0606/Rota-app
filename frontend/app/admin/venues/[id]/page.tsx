@@ -239,7 +239,7 @@ export default function AdminVenueDetailPage() {
             {typeof window !== "undefined" ? `${window.location.origin}/v/${venue.link_token}` : venue.link_token}
           </div>
         </div>
-        <button onClick={copyLink} className="rounded-lg bg-accent px-3.5 py-2 text-xs font-semibold text-white">
+        <button onClick={copyLink} className="rounded-lg bg-accent px-3.5 py-2 text-xs font-semibold text-accent-on">
           Copy
         </button>
         <button
@@ -282,7 +282,7 @@ export default function AdminVenueDetailPage() {
             <button
               onClick={handleSaveNotes}
               disabled={savingNotes}
-              className="rounded-lg bg-accent px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60"
+              className="rounded-lg bg-accent px-3 py-1.5 text-[11px] font-semibold text-accent-on disabled:opacity-60"
             >
               {savingNotes ? "Saving…" : "Save notes"}
             </button>
@@ -406,7 +406,7 @@ export default function AdminVenueDetailPage() {
               if (loginLink) navigator.clipboard.writeText(loginLink);
               showToast("Link copied");
             }}
-            className="flex-1 rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-white"
+            className="flex-1 rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-accent-on"
           >
             Copy link
           </button>

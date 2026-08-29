@@ -70,7 +70,7 @@ export default function ForgotPinPage({ params }: { params: { venue_token: strin
               <button
                 onClick={handleSend}
                 disabled={sending}
-                className="w-full rounded-control bg-accent py-4 text-center text-base font-semibold text-white disabled:opacity-60"
+                className="w-full rounded-control bg-accent py-4 text-center text-base font-semibold text-accent-on disabled:opacity-60"
               >
                 {sending ? "Sending…" : "Send my PIN"}
               </button>

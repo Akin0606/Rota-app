@@ -512,7 +512,7 @@ function OnboardingWizard() {
   async function copyInvite() {
     const link = venueToken ? `${window.location.origin}/v/${venueToken}` : "";
     const text = joinPin
-      ? `Join our team on Crewplan: ${link}\nVenue PIN: ${joinPin}`
+      ? `Join our team on Rotally: ${link}\nVenue PIN: ${joinPin}`
       : link;
     await navigator.clipboard.writeText(text).catch(() => {});
     showToast("Link & PIN copied — paste it to your team");
@@ -1090,9 +1090,9 @@ function ResendWall() {
         <div className="ob-ring" style={{ marginBottom: 20 }}><OIcon name="info-circle" size={30} /></div>
         <div className="ob-h">This link has expired</div>
         <div className="ob-p" style={{ maxWidth: 300 }}>
-          Setup links work once and for 7 days. Ask your Crewplan contact to send a fresh one, and you&apos;ll be set up in a few minutes.
+          Setup links work once and for 7 days. Ask your Rotally contact to send a fresh one, and you&apos;ll be set up in a few minutes.
         </div>
-        <a className="ob-btn" style={{ maxWidth: 300 }} href="mailto:hello@crewplan.app?subject=Resend%20my%20setup%20link">Request a new link</a>
+        <a className="ob-btn" style={{ maxWidth: 300 }} href="mailto:hello@rotally.co.uk?subject=Resend%20my%20setup%20link">Request a new link</a>
       </div>
     </div>
   );

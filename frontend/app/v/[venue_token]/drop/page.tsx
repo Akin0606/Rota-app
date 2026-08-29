@@ -459,7 +459,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
               footer = (
                 <button
                   onClick={() => setClaimTarget(a)}
-                  className="w-full rounded-cp-control bg-accent py-3 text-center text-[13px] font-medium text-white transition-[background-color,transform] duration-150 hover:bg-accent-hover active:scale-[0.98]"
+                  className="w-full rounded-cp-control bg-accent py-3 text-center text-[13px] font-medium text-accent-on transition-[background-color,transform] duration-150 hover:bg-accent-hover active:scale-[0.98]"
                 >
                   Claim this shift
                 </button>
@@ -551,7 +551,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
               <button
                 onClick={confirmGive}
                 disabled={giving || !giveeId}
-                className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-white disabled:opacity-50"
+                className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-50"
               >
                 {giving ? "Sending…" : "Give shift"}
               </button>
@@ -661,7 +661,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                     <button
                       onClick={confirmSwap}
                       disabled={swapping || !swapTheirAssignmentId}
-                      className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-white disabled:opacity-50"
+                      className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-50"
                     >
                       {swapping ? "Sending…" : "Propose swap"}
                     </button>
@@ -690,7 +690,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
               <button
                 onClick={confirmClaim}
                 disabled={claiming}
-                className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
+                className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-60"
               >
                 {claiming ? "Claiming…" : "Claim shift"}
               </button>

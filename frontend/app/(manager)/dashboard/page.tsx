@@ -38,7 +38,7 @@ import {
   startsWithName,
 } from "@/lib/utils";
 
-const CACHE_KEY = "crewplan_dashboard_snapshot";
+const CACHE_KEY = "rotally_dashboard_snapshot";
 
 export default function DashboardPage() {
   const [venue, setVenue] = useState<Venue | null>(null);
@@ -201,7 +201,7 @@ export default function DashboardPage() {
         Something went wrong loading your dashboard.
         <button
           onClick={() => setReloadToken((n) => n + 1)}
-          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-white"
+          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-accent-on"
         >
           Try again
         </button>
@@ -233,7 +233,7 @@ export default function DashboardPage() {
           )}
           <Link
             href="/rota"
-            className="rounded-[10px] bg-accent px-4 py-2.5 text-[13px] font-semibold text-white"
+            className="rounded-[10px] bg-accent px-4 py-2.5 text-[13px] font-semibold text-accent-on"
           >
             Open Rota Builder
           </Link>
@@ -477,7 +477,7 @@ function StaffModal({
         <button
           onClick={() => onResetPin(member)}
           disabled={busy}
-          className="flex-1 rounded-xl bg-accent py-3 text-center text-sm font-semibold text-white disabled:opacity-60"
+          className="flex-1 rounded-xl bg-accent py-3 text-center text-sm font-semibold text-accent-on disabled:opacity-60"
         >
           Reset PIN
         </button>

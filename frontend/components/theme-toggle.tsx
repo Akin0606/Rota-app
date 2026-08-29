@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type Theme = "dark" | "light";
 
-export const THEME_KEY = "crewplan_theme";
+export const THEME_KEY = "rotally_theme";
 
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>("dark");

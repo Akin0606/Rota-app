@@ -23,7 +23,7 @@ def _shell(preheader: str, footer_note: str, body_html: str) -> str:
 <tr><td align="center">
 <table role="presentation" width="100%" style="max-width:480px;background:#ffffff;border-radius:16px;border:1px solid rgba(0,0,0,0.04);overflow:hidden;" cellpadding="0" cellspacing="0">
 <tr><td style="padding:24px 32px;border-bottom:1px solid rgba(0,0,0,0.04);">
-<span style="font-size:16px;font-weight:700;color:#111827;letter-spacing:-0.02em;">crewplan<span style="color:#FF4D00;">.</span></span>
+<span style="font-size:16px;font-weight:700;color:#111827;letter-spacing:-0.03em;">rota<span style="color:#B04D0B;">lly</span></span>
 </td></tr>
 <tr><td style="padding:32px;color:#111827;font-size:15px;line-height:1.6;">
 {body_html}
@@ -99,7 +99,7 @@ def send_magic_link_email(to_email: str, venue_name: str, magic_link_url: str) -
 {_button("Log in", magic_link_url)}
 <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">This link expires shortly and can only be used once. If you didn't request it, you can ignore this email.</p>
 """
-    html = _shell(f"Your login link for {venue_name}", f"Sent because you have a manager account for {venue_name} on Crewplan.", body)
+    html = _shell(f"Your login link for {venue_name}", f"Sent because you have a manager account for {venue_name} on Rotally.", body)
     return _send(to_email, subject, html)
 
 
@@ -112,7 +112,7 @@ def send_activation_email(to_email: str, activation_url: str) -> dict:
 {_button("Set up my venue", activation_url)}
 <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">This link works for 7 days and signs you in once. If you didn't request it, you can ignore this email.</p>
 """
-    html = _shell("You're in — set up your venue", "Your Crewplan invite is ready — set up your venue in about 3 minutes.", body)
+    html = _shell("You're in — set up your venue", "Your Rotally invite is ready — set up your venue in about 3 minutes.", body)
     return _send(to_email, subject, html)
 
 
@@ -127,7 +127,7 @@ def send_staff_welcome_email(to_email: str, name: str, venue_name: str, pin: str
 {_button("Go to " + venue_name, venue_link_url)}
 <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">Keep this PIN private — it's how the rota identifies you.</p>
 """
-    html = _shell(f"Your PIN for {venue_name} is {pin}", f"Sent because you were added to the {venue_name} team on Crewplan.", body)
+    html = _shell(f"Your PIN for {venue_name} is {pin}", f"Sent because you were added to the {venue_name} team on Rotally.", body)
     return _send(to_email, subject, html)
 
 
@@ -148,7 +148,7 @@ def _pin_email_html(name: str, venue_name: str, pin: str, venue_link_url: str, *
 {_button("Go to " + venue_name, venue_link_url)}
 <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">Keep this PIN private — it's how the rota identifies you.</p>
 """
-    html = _shell(subject, f"Sent because you're part of the {venue_name} team on Crewplan.", body)
+    html = _shell(subject, f"Sent because you're part of the {venue_name} team on Rotally.", body)
     return subject, html
 
 
@@ -181,7 +181,7 @@ def send_availability_reminder_email(
 <p style="margin:0 0 16px;font-size:13px;color:#6b7280;">Deadline: <strong>{deadline_label}</strong></p>
 {_button("Submit availability", venue_link_url)}
 """
-    html = _shell(f"Availability needed for {week_label}", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
+    html = _shell(f"Availability needed for {week_label}", f"Sent because you're part of the {venue_name} team on Rotally.", body)
     return _send(to_email, subject, html)
 
 
@@ -204,7 +204,7 @@ def send_auto_submit_email(
 {_pin_badge(pin) if pin else ""}
 {_button("Change my availability", venue_link_url)}
 """
-    html = _shell(f"Your usual availability was sent for {week_label}", f"Sent because auto-submit is on for your {venue_name} account on Crewplan.", body)
+    html = _shell(f"Your usual availability was sent for {week_label}", f"Sent because auto-submit is on for your {venue_name} account on Rotally.", body)
     return _send(to_email, subject, html)
 
 
@@ -227,7 +227,7 @@ def send_availability_open_email(
 <p style="margin:0 0 16px;font-size:13px;color:#6b7280;">Please submit by <strong>{deadline_label}</strong>.</p>
 {_button("Log your availability", venue_link_url)}
 """
-    html = _shell(f"Availability open for {week_label}", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
+    html = _shell(f"Availability open for {week_label}", f"Sent because you're part of the {venue_name} team on Rotally.", body)
     return _send(to_email, subject, html)
 
 
@@ -246,7 +246,7 @@ def send_availability_closed_email(
 <p style="margin:0 0 16px;">Availability for <strong>{week_label}</strong> at {venue_name} has closed and the rota is now locked. You'll be notified once it's published.</p>
 {_button("View the rota", rota_link_url)}
 """
-    html = _shell(f"Availability closed for {week_label}", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
+    html = _shell(f"Availability closed for {week_label}", f"Sent because you're part of the {venue_name} team on Rotally.", body)
     return _send(to_email, subject, html)
 
 
@@ -275,7 +275,7 @@ def send_manager_review_email(
 {conflicts_line}
 {_button("Review rota", review_link_url)}
 """
-    html = _shell(f"Rota ready to review for {week_label}", f"Sent because you manage {venue_name} on Crewplan.", body)
+    html = _shell(f"Rota ready to review for {week_label}", f"Sent because you manage {venue_name} on Rotally.", body)
     return _send(to_email, subject, html)
 
 
@@ -310,7 +310,7 @@ def send_published_rota_email(
 </table>
 {_button("View full rota", rota_link_url)}
 """
-    html = _shell(f"Your rota for {week_label}", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
+    html = _shell(f"Your rota for {week_label}", f"Sent because you're part of the {venue_name} team on Rotally.", body)
     return _send(to_email, subject, html, attachments=attachments)
 
 
@@ -328,9 +328,9 @@ def send_manager_rota_email(
     body = f"""
 <p style="margin:0 0 16px;">Here's the published rota for <strong>{week_label}</strong> at {venue_name}.</p>
 <p style="margin:0 0 16px;font-size:13px;color:#6b7280;">{total_shifts} shift{"s" if total_shifts != 1 else ""} assigned. The full rota is attached as a PDF.</p>
-{_button("Open in Crewplan", dashboard_link_url)}
+{_button("Open in Rotally", dashboard_link_url)}
 """
-    html = _shell(f"Rota for {week_label}", f"Sent because you manage {venue_name} on Crewplan.", body)
+    html = _shell(f"Rota for {week_label}", f"Sent because you manage {venue_name} on Rotally.", body)
     return _send(to_email, subject, html, attachments=attachments)
 
 
@@ -350,7 +350,7 @@ def send_shift_give_email(
 <p style="margin:0 0 16px;"><strong>{giver_name}</strong> has offered you their <strong>{shift_label}</strong> shift at {venue_name}. Open your hub to accept or decline.</p>
 {_button("Open your hub", venue_link_url)}
 """
-    html = _shell(f"{giver_name} wants to give you a shift", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
+    html = _shell(f"{giver_name} wants to give you a shift", f"Sent because you're part of the {venue_name} team on Rotally.", body)
     return _send(to_email, subject, html)
 
 
@@ -371,7 +371,7 @@ def send_shift_swap_email(
 <p style="margin:0 0 16px;"><strong>{initiator_name}</strong> wants to swap their <strong>{their_shift_label}</strong> shift for your <strong>{my_shift_label}</strong> shift at {venue_name}. Open your hub to accept or decline.</p>
 {_button("Open your hub", venue_link_url)}
 """
-    html = _shell(f"{initiator_name} wants to swap shifts with you", f"Sent because you're part of the {venue_name} team on Crewplan.", body)
+    html = _shell(f"{initiator_name} wants to swap shifts with you", f"Sent because you're part of the {venue_name} team on Rotally.", body)
     return _send(to_email, subject, html)
 
 
@@ -389,5 +389,5 @@ def send_bulk_reminder_email(
 <p style="margin:0 0 16px;">Reminder: <strong>{pending_count}</strong> staff haven't submitted their availability yet.</p>
 {_button("Go to dashboard", dashboard_link_url)}
 """
-    html = _shell(f"{pending_count} staff haven't submitted availability", "Sent because you manage a venue on Crewplan.", body)
+    html = _shell(f"{pending_count} staff haven't submitted availability", "Sent because you manage a venue on Rotally.", body)
     return _send(to_email, subject, html)

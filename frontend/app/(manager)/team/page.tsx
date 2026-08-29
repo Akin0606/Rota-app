@@ -145,7 +145,7 @@ export default function TeamPage() {
     // One invite: the vanity link + the join code together, matching onboarding.
     const link = `${window.location.origin}/v/${venue.slug ?? venue.link_token}`;
     const text = venue.join_pin
-      ? `Join our team on Crewplan: ${link}\nJoin code: ${venue.join_pin}`
+      ? `Join our team on Rotally: ${link}\nJoin code: ${venue.join_pin}`
       : link;
     navigator.clipboard.writeText(text);
     showToast(venue.join_pin ? "Link & join code copied" : "Link copied!");
@@ -379,7 +379,7 @@ export default function TeamPage() {
         Something went wrong loading your team.
         <button
           onClick={() => setReloadToken((n) => n + 1)}
-          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-white"
+          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-accent-on"
         >
           Try again
         </button>
@@ -401,7 +401,7 @@ export default function TeamPage() {
           </button>
           <button
             onClick={openAdd}
-            className="flex items-center gap-1.5 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-semibold text-white"
+            className="flex items-center gap-1.5 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-semibold text-accent-on"
           >
             <ManagerIcon name="plus" size={14} />
             Add team member
@@ -448,7 +448,7 @@ export default function TeamPage() {
             <button
               onClick={() => handleJoinCode("rotate")}
               disabled={joinBusy}
-              className="shrink-0 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-60"
+              className="shrink-0 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-semibold text-accent-on disabled:opacity-60"
             >
               Turn on joining
             </button>
@@ -606,7 +606,7 @@ export default function TeamPage() {
               <button
                 onClick={handleApprove}
                 disabled={saving}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-accent-on disabled:opacity-60"
               >
                 <ManagerIcon name="check" size={15} />
                 {saving ? "Saving…" : "Approve & add"}
@@ -623,7 +623,7 @@ export default function TeamPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-accent-on disabled:opacity-60"
               >
                 <ManagerIcon name="check" size={15} />
                 {saving ? "Saving…" : sheetMode === "add" ? "Add to team" : "Save changes"}

@@ -119,7 +119,7 @@ export default function RoleSheet({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-accent-on disabled:opacity-60"
           >
             <ManagerIcon name="check" size={15} />
             {saving ? "Saving…" : editing ? "Save changes" : "Add role"}

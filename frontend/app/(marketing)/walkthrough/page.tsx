@@ -5,9 +5,9 @@ import { SiteFooter, SiteNav } from "../site-chrome";
 import Walkthrough from "../walkthrough";
 
 export const metadata: Metadata = {
-  title: "Walkthrough — Crewplan",
+  title: "Walkthrough — Rotally",
   description:
-    "A week, start to finish: what you do, what your team does, and what Crewplan does on its own.",
+    "A week, start to finish: what you do, what your team does, and what Rotally does on its own.",
 };
 
 export default function WalkthroughPage() {

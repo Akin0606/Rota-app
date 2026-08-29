@@ -246,7 +246,7 @@ function ResultState({
         </button>
         <button
           onClick={onReviewRota}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3 text-[13px] font-medium text-white"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3 text-[13px] font-medium text-accent-on"
         >
           <ManagerIcon name="eye" size={14} /> Review rota
         </button>

@@ -8,12 +8,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
    menu and the footer. Shared by the home page and /walkthrough so they can't
    drift apart.
 
-   Theme key is `crewplan-theme:site` — deliberately its own key, not the app's.
+   Theme key is `rotally-theme:site` — deliberately its own key, not the app's.
    A visitor's choice about a marketing page shouldn't follow them into the
    product, and vice versa. The pre-paint script in the root layout reads the
    same key and falls back to the system setting when nothing is stored. */
 
-const THEME_KEY = "crewplan-theme:site";
+const THEME_KEY = "rotally-theme:site";
 
 type Mode = "light" | "dark";
 
@@ -169,8 +169,8 @@ export function SiteNav() {
   return (
     <header className="nav">
       <div className="wrap nav-inner">
-        <Link href="/" className="logo" onClick={handleLogo} aria-label="Crewplan — back to top">
-          crewplan<span className="dot">.</span>
+        <Link href="/" className="logo" onClick={handleLogo} aria-label="Rotally — back to top">
+          r<svg className="wheel" viewBox="0 0 512 512" aria-hidden="true"><g transform="rotate(-90 256 256)" fill="none"><circle cx="256" cy="256" r="170" stroke="currentColor" strokeOpacity="0.28" strokeWidth="62" strokeDasharray="112.59 40" /><circle cx="256" cy="256" r="170" stroke="var(--accent)" strokeWidth="62" strokeDasharray="112.59 955.55" strokeDashoffset="-610.37" /></g></svg>ta<span className="tail">lly</span>
         </Link>
         <nav className="nav-links" aria-label="Main">
           {NAV_LINKS.map(([href, label]) => (
@@ -254,8 +254,8 @@ export function SiteFooter() {
   return (
     <footer className="footer">
       <div className="wrap footer-inner">
-        <Link href="/" className="logo" style={{ fontSize: "1rem" }}>
-          crewplan<span className="dot">.</span>
+        <Link href="/" className="logo" style={{ fontSize: "1rem" }} aria-label="Rotally">
+          r<svg className="wheel" viewBox="0 0 512 512" aria-hidden="true"><g transform="rotate(-90 256 256)" fill="none"><circle cx="256" cy="256" r="170" stroke="currentColor" strokeOpacity="0.28" strokeWidth="62" strokeDasharray="112.59 40" /><circle cx="256" cy="256" r="170" stroke="var(--accent)" strokeWidth="62" strokeDasharray="112.59 955.55" strokeDashoffset="-610.37" /></g></svg>ta<span className="tail">lly</span>
         </Link>
         <div className="footer-links">
           <Link href="/walkthrough">Walkthrough</Link>
@@ -266,7 +266,7 @@ export function SiteFooter() {
           <Link href="/#suggest">Tell us something</Link>
           <Link href="/login">Log in</Link>
         </div>
-        <div className="small">© 2026 Crewplan. Made for pubs.</div>
+        <div className="small">© 2026 Rotally. Made for pubs.</div>
       </div>
     </footer>
   );

@@ -57,7 +57,7 @@ export default function SwapsPanel({ swaps, shifts, busyId, onApprove, onReject 
                   <button
                     onClick={() => onApprove(swap.id)}
                     disabled={busy}
-                    className="rounded-lg bg-accent px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+                    className="rounded-lg bg-accent px-3 py-1.5 text-[12px] font-semibold text-accent-on disabled:opacity-50"
                   >
                     {busy ? "Working…" : "Approve"}
                   </button>

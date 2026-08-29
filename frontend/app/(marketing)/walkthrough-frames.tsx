@@ -70,7 +70,7 @@ function Chrome({ right }: { right?: React.ReactNode }) {
   return (
     <div className="f-bar">
       <span className="f-mark">
-        crewplan<span>.</span>
+        r<svg viewBox="0 0 512 512" aria-hidden="true"><g transform="rotate(-90 256 256)" fill="none"><circle cx="256" cy="256" r="170" stroke="currentColor" strokeOpacity="0.28" strokeWidth="62" strokeDasharray="112.59 40" /><circle cx="256" cy="256" r="170" stroke="var(--accent)" strokeWidth="62" strokeDasharray="112.59 955.55" strokeDashoffset="-610.37" /></g></svg>ta<span>lly</span>
       </span>
       {right ?? <span className="f-sub">The Anchor</span>}
     </div>
@@ -96,7 +96,7 @@ export function Step1Manager({ device }: FrameProps) {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
             <span style={{ fontSize: "0.6875rem", color: "var(--ink-2)" }}>
-              crewplan.app/v/the-anchor
+              rotally.co.uk/anchor
             </span>
             <span className="f-btn on">Copied</span>
             <span className="f-btn">Code 4821</span>
@@ -139,7 +139,7 @@ export function Step1Staff({ device }: FrameProps) {
     <Bezel device={device}>
       <div className="f-pin">
         <span className="f-mark" style={{ fontSize: "1.125rem" }}>
-          crewplan<span>.</span>
+          r<svg viewBox="0 0 512 512" aria-hidden="true"><g transform="rotate(-90 256 256)" fill="none"><circle cx="256" cy="256" r="170" stroke="currentColor" strokeOpacity="0.28" strokeWidth="62" strokeDasharray="112.59 40" /><circle cx="256" cy="256" r="170" stroke="var(--accent)" strokeWidth="62" strokeDasharray="112.59 955.55" strokeDashoffset="-610.37" /></g></svg>ta<span>lly</span>
         </span>
         <div>
           <div style={{ fontWeight: 600, fontSize: "0.8125rem" }}>The Anchor</div>

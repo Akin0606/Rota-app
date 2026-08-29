@@ -6,18 +6,18 @@
    the opt-in via data-theme="light" on <html>. Tailwind tokens reference
    these (see tailwind.config.ts). ---- */
 :root {
-  --c-bg: #0d0d0d;
-  --c-fg: #f5f5f4;
-  --c-accent: #ff4d00;
-  --c-accent-hover: #e64500;
-  --c-accent-light: #1f1108;
-  --c-accent-border: #7a2600;
-  --c-ink: #f5f5f4;
+  --c-bg: #0c0c0d;
+  --c-fg: #f4f4f2;
+  --c-accent: #ff6b00;
+  --c-accent-hover: #e65f00;
+  --c-accent-light: #21140a;
+  --c-accent-border: #8a3a00;
+  --c-ink: #f4f4f2;
   --c-ink-label: #c9c9c7;
   --c-ink-muted: #8c8c8a;
   --c-ink-faint: #545452;
   --c-surface: #141414;
-  --c-surface-page: #0d0d0d;
+  --c-surface-page: #0c0c0d;
   --c-surface-card: #141414;
   --c-surface-subtle: #1a1a1a;
   --c-avail-bg: #10231a;
@@ -48,21 +48,24 @@
   --background: var(--c-bg);
   --foreground: var(--c-fg);
   color-scheme: dark;
+  /* Foreground for anything sitting ON an accent surface. The accent is
+     bright enough that white fails AA on it (2.86:1) — near-black is 6.85:1. */
+  --c-accent-on: #0c0c0d;
 }
 
 :root[data-theme="light"] {
-  --c-bg: #f5f5f4;
+  --c-bg: #f4f4f2;
   --c-fg: #1a1a1a;
-  --c-accent: #ff4d00;
-  --c-accent-hover: #e64500;
-  --c-accent-light: #fff1eb;
-  --c-accent-border: #ffd9c7;
+  --c-accent: #b04d0b;
+  --c-accent-hover: #963f08;
+  --c-accent-light: #fbeee6;
+  --c-accent-border: #edd2bf;
   --c-ink: #1a1a1a;
   --c-ink-label: #374151;
   --c-ink-muted: #6b7280;
   --c-ink-faint: #9ca3af;
   --c-surface: #ffffff;
-  --c-surface-page: #f5f5f4;
+  --c-surface-page: #f4f4f2;
   --c-surface-card: #ffffff;
   --c-surface-subtle: #f6f6f5;
   --c-avail-bg: #dcfce7;
@@ -83,6 +86,7 @@
   --c-hairline: rgba(0, 0, 0, 0.08);
   --c-shadow: rgba(0, 0, 0, 0.1);
   color-scheme: light;
+  --c-accent-on: #ffffff;
 }
 
 body {
@@ -144,7 +148,7 @@ a:hover {
    venue-keyed localStorage entry instead of the shared one.
    ========================================================================== */
 .cp-staff {
-  --c-surface-page: #0d0d0d;
+  --c-surface-page: #0c0c0d;
   --c-surface-card: #141414;
   --c-surface-subtle: #1a1a1a;
   --c-hairline: rgba(255, 255, 255, 0.07);
@@ -155,16 +159,16 @@ a:hover {
      info (shift times, dates, caveats). Verify with a checker on a real build. */
   --c-ink-muted: #8f8f8a;
   --c-ink-faint: #82827c;
-  --c-accent: #ff4d00;
-  --c-accent-hover: #e64500;
-  --c-accent-light: rgba(255, 77, 0, 0.12);
-  --c-accent-border: rgba(255, 77, 0, 0.25);
+  --c-accent: #ff6b00;
+  --c-accent-hover: #e65f00;
+  --c-accent-light: rgba(255, 107, 0, 0.12);
+  --c-accent-border: rgba(255, 107, 0, 0.25);
 
   --cp-icon-bg: #1e1e1e;
   --cp-track: #1e1e1e;
   --cp-green: #2ecc71;
   --cp-green-soft: rgba(46, 204, 113, 0.14);
-  --cp-amber: #e5a800;
+  --cp-amber: #e5c100;
   --cp-amber-soft: rgba(255, 193, 7, 0.14);
   /* Availability's "can't work" state (§2). Kept in sync with .cp-manager's
      red, so a negative/unavailable cell reads the same on both sides. */
@@ -174,6 +178,7 @@ a:hover {
   transition:
     background-color 0.35s ease,
     color 0.35s ease;
+  --c-accent-on: #0c0c0d;
 }
 
 :root[data-theme="light"] .cp-staff {
@@ -187,13 +192,16 @@ a:hover {
      #a8a69e at ~2.4:1. See the dark-mode note above. */
   --c-ink-muted: #6d6b64;
   --c-ink-faint: #737169;
-  --c-accent-light: rgba(255, 77, 0, 0.08);
+  --c-accent-light: rgba(176, 77, 11, 0.09);
 
   --cp-icon-bg: #f2f0ea;
   --cp-track: #eceae2;
   --cp-green-soft: rgba(46, 204, 113, 0.12);
   --cp-amber-soft: rgba(255, 193, 7, 0.16);
   --cp-red-soft: rgba(229, 72, 77, 0.1);
+  --c-accent: #b04d0b;
+  --c-accent-hover: #963f08;
+  --c-accent-on: #ffffff;
 }
 
 @layer utilities {
@@ -264,11 +272,11 @@ a:hover {
 
    Light mode still hangs off :root[data-theme="light"] so it flips from the
    same pre-paint script as everything else; the manager toggle just writes a
-   `crewplan-theme:manager` localStorage entry (see app/layout.tsx and
+   `rotally-theme:manager` localStorage entry (see app/layout.tsx and
    components/manager/mode-toggle.tsx).
    ========================================================================== */
 .cp-manager {
-  --c-surface-page: #0d0d0d;
+  --c-surface-page: #0c0c0d;
   --c-surface: #141414;
   --c-surface-card: #141414;
   --c-surface-subtle: #1a1a1a;
@@ -277,16 +285,16 @@ a:hover {
   --c-ink-label: #f0efe9;
   --c-ink-muted: #7a7a75;
   --c-ink-faint: #4a4a47;
-  --c-accent: #ff4d00;
-  --c-accent-hover: #e64500;
-  --c-accent-light: rgba(255, 77, 0, 0.12);
-  --c-accent-border: rgba(255, 77, 0, 0.25);
+  --c-accent: #ff6b00;
+  --c-accent-hover: #e65f00;
+  --c-accent-light: rgba(255, 107, 0, 0.12);
+  --c-accent-border: rgba(255, 107, 0, 0.25);
 
   --cp-icon-bg: #1e1e1e;
   --cp-track: #1e1e1e;
   --cp-green: #2ecc71;
   --cp-green-soft: rgba(46, 204, 113, 0.14);
-  --cp-amber: #e5a800;
+  --cp-amber: #e5c100;
   --cp-amber-soft: rgba(255, 193, 7, 0.14);
   --cp-red: #e5484d;
   --cp-red-soft: rgba(229, 72, 77, 0.12);
@@ -294,6 +302,7 @@ a:hover {
   transition:
     background-color 0.35s ease,
     color 0.35s ease;
+  --c-accent-on: #0c0c0d;
 }
 
 :root[data-theme="light"] .cp-manager {
@@ -306,13 +315,16 @@ a:hover {
   --c-ink-label: #1a1815;
   --c-ink-muted: #78766f;
   --c-ink-faint: #a8a69e;
-  --c-accent-light: rgba(255, 77, 0, 0.08);
+  --c-accent-light: rgba(176, 77, 11, 0.09);
 
   --cp-icon-bg: #f2f0ea;
   --cp-track: #eceae2;
   --cp-green-soft: rgba(46, 204, 113, 0.12);
   --cp-amber-soft: rgba(255, 193, 7, 0.16);
   --cp-red-soft: rgba(229, 72, 77, 0.1);
+  --c-accent: #b04d0b;
+  --c-accent-hover: #963f08;
+  --c-accent-on: #ffffff;
 }
 
 @layer components {
@@ -686,13 +698,13 @@ a:hover {
 .cp-onboarding {
   --ob-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.045);
   --ob-accent-2: #ff7a3d;
-  --ob-accent-glow: 0 10px 30px -10px rgba(255, 77, 0, 0.5);
+  --ob-accent-glow: 0 10px 30px -10px rgba(255, 107, 0, 0.5);
 }
 
 /* Progress rail — gradient + faint bloom instead of a flat bar */
 .ob-fill {
   background: linear-gradient(90deg, var(--accent), var(--ob-accent-2));
-  box-shadow: 0 0 8px -1px rgba(255, 77, 0, 0.55);
+  box-shadow: 0 0 8px -1px rgba(255, 107, 0, 0.55);
 }
 
 /* Typography — headings and object names in the display face, tighter */
@@ -728,27 +740,27 @@ a:hover {
 }
 .ob-card.sel {
   border-color: var(--accent);
-  background: linear-gradient(180deg, rgba(255, 77, 0, 0.06), var(--card));
-  box-shadow: var(--ob-highlight), 0 0 0 1px var(--accent), 0 10px 26px -14px rgba(255, 77, 0, 0.6);
+  background: linear-gradient(180deg, rgba(255, 107, 0, 0.06), var(--card));
+  box-shadow: var(--ob-highlight), 0 0 0 1px var(--accent), 0 10px 26px -14px rgba(255, 107, 0, 0.6);
 }
 .ob-card.sel .ob-cic { background: var(--accent-soft); color: var(--accent); }
 .ob-cic { box-shadow: var(--ob-highlight); }
 
 /* Segmented control — active segment picks up the CTA gradient + highlight */
 .ob-so.on {
-  background: linear-gradient(180deg, #ff5c14, var(--accent));
+  background: linear-gradient(180deg, #ff8124, var(--accent));
   box-shadow: var(--ob-highlight);
 }
 
 /* Join card + summary card — same depth language */
 .ob-join {
-  background: linear-gradient(180deg, rgba(255, 77, 0, 0.11), rgba(255, 77, 0, 0.05));
+  background: linear-gradient(180deg, rgba(255, 107, 0, 0.11), rgba(255, 107, 0, 0.05));
   box-shadow: var(--ob-highlight);
 }
 .ob-sum { box-shadow: var(--ob-highlight); }
 
 /* Solver ring — soft coloured bloom, green on completion */
-.ob-ring { box-shadow: var(--ob-highlight), 0 0 42px -12px rgba(255, 77, 0, 0.45); }
+.ob-ring { box-shadow: var(--ob-highlight), 0 0 42px -12px rgba(255, 107, 0, 0.45); }
 .ob-ring.done { box-shadow: var(--ob-highlight), 0 0 42px -12px rgba(46, 204, 113, 0.5); }
 
 /* Coach-mark — lift it off the scrim */
@@ -756,7 +768,7 @@ a:hover {
 
 /* Primary CTA — subtle vertical gradient + accent glow */
 .ob-btn {
-  background: linear-gradient(180deg, #ff5c14, var(--accent));
+  background: linear-gradient(180deg, #ff8124, var(--accent));
   box-shadow: var(--ob-accent-glow);
 }
 .ob-btn.ghost { background: transparent; box-shadow: none; }
@@ -784,7 +796,7 @@ a:hover {
    at the wizard root so they cover the viewport, not the animated step.
    ═══════════════════════════════════════════════════════════════════════════ */
 .ob-grp { display: flex; align-items: center; gap: 11px; padding: 13px 14px; border-radius: 13px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--ob-highlight); margin-bottom: 9px; }
-.ob-grp.wknd { border-color: rgba(255, 77, 0, 0.28); background: linear-gradient(180deg, rgba(255, 77, 0, 0.05), var(--card)); }
+.ob-grp.wknd { border-color: rgba(255, 107, 0, 0.28); background: linear-gradient(180deg, rgba(255, 107, 0, 0.05), var(--card)); }
 .ob-glabel { font-size: 14px; font-weight: 500; font-family: var(--font-display), "Space Grotesk", sans-serif; color: var(--text); }
 .ob-gsub { font-size: 10.5px; color: var(--dim); margin-top: 1px; }
 .ob-gsub .diff { color: var(--accent); }
@@ -835,7 +847,7 @@ a:hover {
 .ob-preset { flex-shrink: 0; padding: 8px 13px; border-radius: 999px; background: var(--icon-bg); border: 0.5px solid var(--border); color: var(--dim); font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap; font-family: inherit; transition: background 0.15s, color 0.15s, border-color 0.15s; }
 .ob-preset.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .ob-wheels { position: relative; display: flex; justify-content: center; gap: 4px; padding: 2px 18px 6px; overflow-x: hidden; touch-action: pan-y; }
-.ob-wband { position: absolute; left: 18px; right: 18px; top: 50%; height: 44px; transform: translateY(-50%); border-radius: 12px; background: rgba(255, 77, 0, 0.08); border-top: 0.5px solid rgba(255, 77, 0, 0.35); border-bottom: 0.5px solid rgba(255, 77, 0, 0.35); pointer-events: none; }
+.ob-wband { position: absolute; left: 18px; right: 18px; top: 50%; height: 44px; transform: translateY(-50%); border-radius: 12px; background: rgba(255, 107, 0, 0.08); border-top: 0.5px solid rgba(255, 107, 0, 0.35); border-bottom: 0.5px solid rgba(255, 107, 0, 0.35); pointer-events: none; }
 .ob-wcol { height: 220px; overflow-y: scroll; overflow-x: hidden; touch-action: pan-y; overscroll-behavior: contain; scroll-snap-type: y mandatory; scrollbar-width: none; -webkit-mask: linear-gradient(180deg, transparent, #000 28%, #000 72%, transparent); mask: linear-gradient(180deg, transparent, #000 28%, #000 72%, transparent); padding-block: 88px; }
 .ob-wcol::-webkit-scrollbar { display: none; }
 .ob-wcol.narrow { width: 64px; }
@@ -858,13 +870,13 @@ a:hover {
    INVITE-FIRST landing (step 7) — the honest payoff: share the join link + PIN
    so staff submit availability (the only thing that makes the next rota real).
    ═══════════════════════════════════════════════════════════════════════════ */
-.ob-joincard { border-radius: 18px; background: linear-gradient(180deg, rgba(255, 77, 0, 0.1), rgba(255, 77, 0, 0.04)); border: 1px solid var(--accent-line); box-shadow: var(--ob-highlight); padding: 18px; margin: 4px 0 16px; }
+.ob-joincard { border-radius: 18px; background: linear-gradient(180deg, rgba(255, 107, 0, 0.1), rgba(255, 107, 0, 0.04)); border: 1px solid var(--accent-line); box-shadow: var(--ob-highlight); padding: 18px; margin: 4px 0 16px; }
 .ob-jclabel { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
 .ob-pinrow { display: flex; gap: 8px; margin-bottom: 12px; }
 .ob-pindig { flex: 1; height: 54px; border-radius: 12px; background: var(--bg); border: 0.5px solid var(--border); display: grid; place-items: center; font-family: var(--font-display), "Space Grotesk", sans-serif; font-weight: 500; font-size: 26px; color: var(--text); font-variant-numeric: tabular-nums; }
 .ob-linkrow { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-radius: 11px; background: var(--bg); border: 0.5px solid var(--border); margin-bottom: 14px; }
 .ob-lk { font-size: 12.5px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .ob-lkic { color: var(--faint); display: inline-flex; flex-shrink: 0; }
-.ob-copybtn { width: 100%; padding: 14px; border-radius: 12px; background: linear-gradient(180deg, #ff5c14, var(--accent)); box-shadow: 0 8px 24px -10px rgba(255, 77, 0, 0.5); color: #fff; font-family: var(--font-display), "Space Grotesk", sans-serif; font-weight: 500; font-size: 14.5px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; border: none; transition: background 0.2s; }
+.ob-copybtn { width: 100%; padding: 14px; border-radius: 12px; background: linear-gradient(180deg, #ff8124, var(--accent)); box-shadow: 0 8px 24px -10px rgba(255, 107, 0, 0.5); color: #fff; font-family: var(--font-display), "Space Grotesk", sans-serif; font-weight: 500; font-size: 14.5px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; border: none; transition: background 0.2s; }
 .ob-copybtn:active { transform: scale(0.99); }
 .ob-copybtn.done { background: linear-gradient(180deg, #2ecc71, #25a85d); box-shadow: 0 8px 24px -10px rgba(46, 204, 113, 0.5); }

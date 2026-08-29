@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Rotally">
+  <title>Rotally mark — for light grounds</title>
+  <g id="icon" transform="rotate(-90 256 256)" fill="none">
+    <circle cx="256" cy="256" r="170" stroke="#C9C9C4" stroke-width="62" stroke-dasharray="112.59 40"/>
+    <circle cx="256" cy="256" r="170" stroke="#B04D0B" stroke-width="62" stroke-dasharray="112.59 955.55" stroke-dashoffset="-610.37"/>
+  </g>
+</svg>

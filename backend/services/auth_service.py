@@ -4,7 +4,7 @@ from database import get_supabase, get_supabase_anon
 
 # Shown to a manager or staff member whose venue has been disabled (e.g. by the
 # admin console, or in future by a lapsed subscription).
-INACTIVE_VENUE_MESSAGE = "This venue is currently inactive. Please contact Crewplan support."
+INACTIVE_VENUE_MESSAGE = "This venue is currently inactive. Please contact Rotally support."
 
 
 def get_current_manager(authorization: str = Header(default="")) -> dict:

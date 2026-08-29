@@ -337,7 +337,7 @@ export default function SettingsPage() {
         Something went wrong loading settings.
         <button
           onClick={() => setReloadToken((n) => n + 1)}
-          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-white"
+          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-accent-on"
         >
           Try again
         </button>
@@ -355,7 +355,7 @@ export default function SettingsPage() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-base font-bold text-ink">Appearance</div>
-              <div className="text-[13px] text-ink-faint">Choose how Crewplan looks on this device.</div>
+              <div className="text-[13px] text-ink-faint">Choose how Rotally looks on this device.</div>
             </div>
             <ThemeToggle />
           </div>
@@ -440,7 +440,7 @@ export default function SettingsPage() {
                 Pay &amp; labour cost <span className="font-normal text-ink-faint">· optional</span>
               </div>
               <div className="mt-1 text-[12px] leading-[1.5] text-ink-faint">
-                Not available yet — Crewplan doesn&apos;t track pay rates today, so there&apos;s no live
+                Not available yet — Rotally doesn&apos;t track pay rates today, so there&apos;s no live
                 labour cost to show. Coming in a future update.
               </div>
             </div>
@@ -453,7 +453,7 @@ export default function SettingsPage() {
             <SettingsIconBox name="star" />
             <div className="min-w-0 flex-1">
               <div className="text-[13px] font-medium text-ink">Plan</div>
-              <div className="text-xs text-ink-faint">Crewplan Pro</div>
+              <div className="text-xs text-ink-faint">Rotally Pro</div>
             </div>
             <span className="rounded-full bg-surface-subtle px-2.5 py-1 text-[11px] font-medium text-ink-faint">
               Coming soon
@@ -746,7 +746,7 @@ export default function SettingsPage() {
       <button
         onClick={handleSaveAll}
         disabled={saving}
-        className="mt-6 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white disabled:opacity-60"
+        className="mt-6 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-accent-on disabled:opacity-60"
       >
         {saving ? "Saving…" : "Save Changes"}
       </button>

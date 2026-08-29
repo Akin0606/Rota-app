@@ -121,7 +121,7 @@ export default function RotaImageView({
             </div>
             <div className="text-right">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">{statusLabel}</div>
-              <div className="mt-1 text-sm font-bold text-accent">crewplan.</div>
+              <div className="mt-1 text-sm font-bold text-ink">rota<span className="text-accent">lly</span></div>
             </div>
           </div>
 

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import ManagerIcon from "@/components/manager/icon";
 import ModeToggle from "@/components/manager/mode-toggle";
 import { ApiError, requestLoginCode, verifyLoginCode, warmBackend } from "@/lib/api";
+import Wordmark from "@/components/wordmark";
 
 // Supabase's OTP length is a project setting (Auth → Email → OTP length); this
 // must match it. The reference mockup drew six boxes, but this project issues
@@ -28,12 +29,10 @@ export default function LoginPage() {
 
         <div className="flex flex-1 flex-col justify-center px-7 pb-10">
           <div className="mb-10 text-center">
-            <div className="mx-auto mb-[18px] flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-white">
+            <div className="mx-auto mb-[18px] flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-accent-on">
               <ManagerIcon name="calendar-bolt" size={27} />
             </div>
-            <div className="font-display text-[26px] font-semibold tracking-[-0.7px] text-ink">
-              crewplan<span className="text-accent">.</span>
-            </div>
+            <Wordmark className="text-[26px]" />
             <div className="mt-1.5 text-[13px] text-ink-muted">Manager sign in</div>
           </div>
 
@@ -110,7 +109,7 @@ function EmailStep({
       <button
         onClick={handleSend}
         disabled={sending}
-        className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-[15px] text-[15px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+        className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-[15px] text-[15px] font-medium text-accent-on transition-opacity hover:opacity-90 disabled:opacity-60"
       >
         <ManagerIcon name="arrow-right" size={17} />
         {sending ? "Sending…" : "Send login code"}
@@ -284,7 +283,7 @@ function CodeStep({ email, onBack }: { email: string; onBack: () => void }) {
       <button
         onClick={handleVerify}
         disabled={verifying || !complete}
-        className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-[15px] text-[15px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+        className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-[15px] text-[15px] font-medium text-accent-on transition-opacity hover:opacity-90 disabled:opacity-60"
       >
         <ManagerIcon name="lock-open" size={17} />
         {verifying ? "Verifying…" : "Verify & sign in"}
