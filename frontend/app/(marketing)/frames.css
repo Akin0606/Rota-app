@@ -53,7 +53,9 @@
      align-items:center would otherwise float it 0.0625em high. */
   width: 0.675em;
   height: 0.675em;
-  margin: 0 0.02em;
+  /* Asymmetric on purpose: r and t have different sidebearings, so equal
+     margins give unequal optical gaps. This lands both ink gaps on 0.030em. */
+  margin: 0 0.02em 0 0.025em;
   transform: translateY(0.0625em);
   display: block;
   flex: none;

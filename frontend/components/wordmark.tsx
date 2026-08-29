@@ -22,7 +22,11 @@
  *    o lives on the x-height band — measured 0.0625em higher than it should
  *    be. translateY seats it without disturbing the line box.
  *
- * Both constants are Archivo-specific (x-height 0.529em) and assume the
+ * The sidebearings are asymmetric on purpose: r and t have different right/left
+ * sidebearings, so equal margins produce unequal optical gaps. 0.025em left /
+ * 0.02em right lands both ink gaps on 0.030em.
+ *
+ * All three constants are Archivo-specific (x-height 0.529em) and assume the
  * leading-none line-height set below. Re-measure if either changes.
  */
 export default function Wordmark({ className = "" }: { className?: string }) {
@@ -35,7 +39,7 @@ export default function Wordmark({ className = "" }: { className?: string }) {
       <svg
         aria-hidden="true"
         viewBox="55 55 402 402"
-        className="mx-[0.02em] block h-[0.675em] w-[0.675em] translate-y-[0.0625em]"
+        className="ml-[0.025em] mr-[0.02em] block h-[0.675em] w-[0.675em] translate-y-[0.0625em]"
       >
         <g transform="rotate(-90 256 256)" fill="none">
           <circle
