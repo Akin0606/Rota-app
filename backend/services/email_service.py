@@ -55,6 +55,51 @@ def _pin_badge(pin: str) -> str:
     )
 
 
+def _is_production(settings) -> bool:
+    """Production requires BOTH an explicit ENVIRONMENT=production and a
+    frontend URL that doesn't look like staging or local dev.
+
+    ENVIRONMENT alone defaults to "production", because defaulting the other way
+    would silently stop all real email the first time someone forgets to set it
+    — a worse failure than this one. But that default means an unconfigured
+    staging deploy would email freely, which is the exact hole this guard exists
+    to close. FRONTEND_URL is the backstop: it is already load-bearing on every
+    non-production deploy (it builds the links in the emails, so it cannot be
+    left wrong), and its value there can never look like production's.
+    """
+    if settings.environment.strip().lower() != "production":
+        return False
+    host = settings.frontend_url.strip().lower()
+    return "staging" not in host and "localhost" not in host and "127.0.0.1" not in host
+
+
+def _recipient_allowed(to_email: str, settings) -> bool:
+    """Outside production, only explicitly allow-listed recipients may be
+    emailed — and an empty allowlist means nobody.
+
+    Fails closed on purpose. Staging shares its code, its cron scheduler and
+    potentially its data with production: `cron_scheduler.refresh_jobs()`
+    iterates every venue in whatever database it booted against, so the moment
+    anyone restores a prod dump into staging, every real staff member is one
+    scheduler tick away from receiving staging's email. Requiring someone to
+    name the permitted recipients is the only version of this that is safe by
+    default rather than safe by remembering.
+    """
+    if _is_production(settings):
+        return True
+    target = to_email.strip().lower()
+    for entry in settings.email_allowlist.split(","):
+        rule = entry.strip().lower()
+        if not rule:
+            continue
+        if rule.startswith("@"):
+            if target.endswith(rule):
+                return True
+        elif target == rule:
+            return True
+    return False
+
+
 def _send(
     to_email: Optional[str],
     subject: str,
@@ -67,6 +112,14 @@ def _send(
     settings = get_settings()
     if not settings.resend_api_key:
         return {"status": "skipped", "reason": "RESEND_API_KEY not configured"}
+
+    # Distinct from "skipped" so a blocked send is visible in logs and callers
+    # rather than looking like an unconfigured mailer.
+    if not _recipient_allowed(to_email, settings):
+        return {
+            "status": "blocked",
+            "reason": f"{settings.environment} may only email allow-listed recipients",
+        }
 
     resend.api_key = settings.resend_api_key
     params = {

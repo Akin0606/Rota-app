@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     database_url: str = Field(alias="DATABASE_URL")
     resend_api_key: str = Field(default="", alias="RESEND_API_KEY")
     resend_from_email: str = Field(default="Rota <onboarding@resend.dev>", alias="RESEND_FROM_EMAIL")
+    # Anything other than "production" makes email fail CLOSED: see
+    # services/email_service._send. A non-production backend pointed at a real
+    # mailer is one prod-data restore away from emailing real staff — the cron
+    # scheduler iterates every venue in whatever DB it boots against.
+    environment: str = Field(default="production", alias="ENVIRONMENT")
+    # Comma-separated recipients a non-production environment may email. Entries
+    # are either a full address or a "@domain.com" suffix. Empty means nobody.
+    email_allowlist: str = Field(default="", alias="EMAIL_ALLOWLIST")
     cron_secret: str = Field(default="", alias="CRON_SECRET")
     admin_secret: str = Field(default="", alias="ADMIN_SECRET")
     # In production this must be set to the deployed frontend origin
