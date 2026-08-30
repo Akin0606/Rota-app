@@ -27,17 +27,22 @@ settings = get_settings()
 
 app = FastAPI(title="Rota App API")
 
-# Explicit allow-list plus whatever FRONTEND_URL is set to, deduped. This keeps
-# local dev working alongside the deployed Vercel frontend even if FRONTEND_URL
-# is pointed at just one of them.
+# ALLOWED_ORIGINS (comma-separated) is the authority when set; the literals are
+# the fallback for local dev and for a deployment that hasn't set it yet.
+# FRONTEND_URL is always folded in, since that's the origin our emails point at.
+#
+# This used to be the three literals alone, which silently broke production: a
+# brand domain served alongside a Vercel alias needs *two* origins, and
+# FRONTEND_URL can only hold one, so `rotally.co.uk` was rejected outright.
+_default_origins = [
+    "http://localhost:3000",
+    "https://rota-app-mu.vercel.app",
+    "https://rotally.co.uk",
+    "https://www.rotally.co.uk",
+]
+_configured = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
 allowed_origins = list(
-    dict.fromkeys(
-        [
-            "http://localhost:3000",
-            "https://rota-app-mu.vercel.app",
-            settings.frontend_url,
-        ]
-    )
+    dict.fromkeys((_configured or _default_origins) + [settings.frontend_url])
 )
 
 app.add_middleware(

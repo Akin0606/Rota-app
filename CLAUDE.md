@@ -6,13 +6,36 @@ Core loop: staff submit availability via PIN → solver auto-generates rota
 the product. We are NOT competing with Deputy/Rotaready.
 
 ## Stack
-- Frontend: Next.js 14 (App Router) + Tailwind → Vercel (rota-app-mu.vercel.app)
-- Backend: FastAPI + APScheduler → Render (rota-app-ugee.onrender.com)
+- Frontend: Next.js 14 (App Router) + Tailwind → Vercel
+- Backend: FastAPI + APScheduler → Render
 - DB/Auth: Supabase Postgres. Managers = OTP login, staff = 4-digit PIN
 - Solver: Google OR-Tools CP-SAT
 - Email: Resend
 - Admin: /admin, gated by ADMIN_SECRET header
 - Repo: github.com/Akin0606/Rota-app
+
+### Two full environments — they share NOTHING but the repo
+This file used to describe one backend and one Supabase project. There are two
+of each, and conflating them has already cost a debugging session:
+
+| | production (`main`) | staging (`staging`) |
+|---|---|---|
+| Frontend | `rotally.co.uk` + `rota-app-mu.vercel.app` | `staging.rotally.co.uk` |
+| Backend | `rota-app-ugee.onrender.com` | `rota-app-staging.onrender.com` |
+| Supabase | `ymmquszendtaflcslarf` | `drgktpkctqoarxxjkezf` |
+
+**The Supabase MCP in this environment is bound to the PRODUCTION project** —
+`get_project_url` returns `ymmquszendtaflcslarf`. Any SQL you run through it hits
+prod, and the staging project is unreachable from here. Confirm which stack a
+symptom belongs to *before* debugging: read the deployed bundle
+(`fetch` each `<script src>` and grep for `onrender.com` / `supabase.co`), don't
+assume from this file.
+
+**Supabase auth config is dashboard-only** — there is no `supabase/config.toml`
+in the repo, so Site URL, redirect allow list, email templates, OTP length and
+the signup toggle are per-project settings that live nowhere in version control
+and do **not** propagate from prod to staging. Every new environment starts on
+Supabase's defaults and must be configured by hand (see Before go-live).
 
 ## Working rules
 - Build ONE priority batch at a time. Verify before moving on.
@@ -54,91 +77,32 @@ Design language for Crewplan:
 - Every design decision should feel intentional, not templated
 
 ## Current state (living — keep accurate)
-Staff PWA, manager app, admin console, and the drop / give / swap / leave
-systems are all **built, merged to `main`, and deployed**. The six-batch staff
-UI rebuild (`crewplan-staff-reference.html`) is merged — `staff-ui-rebuild` is a
-**stale branch**, `main` is ahead of it. The **8-step onboarding wizard**
-(activation token → wizard → live venue; migrations `024`/`025`) is built and
-live.
+**`staging` is the working branch and is 12 commits ahead of `main`.** Working
+tree clean, `staging` == `origin/staging`.
 
-**Uncommitted right now:** the **manager-consistency + one-team-link batch**
-(5 sub-batches — top Learnings entry). Frontend: scheduler sticky bar lifted off
-the mobile tab nav; shared **TimeWheel** now used in Settings + the per-day Hours
-editor (via `components/manager/time-field.tsx`); staff entry page gains a
-register-first **choice** screen; Team/onboarding link copy uses the new slug.
-Backend: **migration `027_venue_slug.sql`** (venue `slug` alias) + resolver in
-`_get_venue_or_404` + `generate_venue_slug`. **Not committed, not pushed.**
-Migration `027` **auto-applies on the next Render deploy** — until it does, `slug`
-is null everywhere and every link falls back to `link_token` (safe no-op). Commit
-`027` in the same commit as the backend so deploy stays atomic.
+**This section was badly wrong until 2026-08-30 and the failure mode is worth
+naming: it listed six separate batches as "uncommitted, not pushed" that were in
+fact all committed and pushed** (rota page redesign B1–B7, availability per-day
+sync A–C, staff motion pass, manager-consistency + one-team-link, marketing v2
+and v3). Each session appended a fresh "uncommitted now" note and none removed
+the previous one. **Check `git status` and `git log origin/main..staging` before
+believing any claim here about what is or isn't shipped.**
 
-**Marketing site v1 — committed + pushed to `staging` (`493b8c1`).** The first
-full landing redesign (`LANDING_REDESIGN_BRIEF.md`, Designer Mark). **Superseded
-the same day by v2 (below), which the user asked for after reviewing it.**
+Built, merged and deployed: staff PWA, manager app, admin console, the drop /
+give / swap / leave systems, the 8-step onboarding wizard (activation token →
+wizard → live venue), the six-batch staff UI rebuild, the staff-UX overhaul
+(a11y → bottom nav → shared-primitive a11y → motion/tactility), the rota page
+redesign, the availability per-day sync, and marketing site v1→v3.
+`staff-ui-rebuild` is a **stale branch**; `main` is ahead of it.
 
-**Uncommitted now: marketing site v2 — total design rebuild + a suggestion box
-(the one backend change).** Top Learnings entry. Frontend is a rebuild of
-`app/(marketing)/`: new design system on Apple interface principles (materials,
-optical type, springs), **light/dark following the visitor's system setting**,
-the walkthrough moved to **its own `/walkthrough` route** with **per-role step
-titles**, real product stills replacing the placeholder boxes, and a **suggestion
-box**. Backend: **migration `028_suggestions.sql`** (new `suggestions` table) +
-`routers/suggestions.py` (public, rate-limited) + two admin endpoints +
-`/admin/suggestions` console page. Roadmap copy now carries Dan's concepts.
-`028` **auto-applies on the next Render deploy** — until it does, the suggestion
-box 500s and shows its error state (the rest of the site is unaffected). 56
-backend tests green, typecheck + lint + `next build` clean. **Not committed.**
+**Migration state:** prod DB is at 27 migrations (`main`). `028_suggestions.sql`
+is on `staging` and applied to the staging DB. It applies to prod the moment
+`staging` merges to `main` — and per the 027 incident a migrate failure takes the
+**whole prod API** down, not just the feature. Move migrations to a Render
+pre-deploy step before that merge.
 
-**Marketing site v3 — the conversion pass. Committed + pushed to `staging`.**
-Layered on top of v2, driven by two external skills (`marketing-psychology` + `copywriting` from
-`github.com/coreyhaines31/marketingskills`, run via `npx skills use`) plus
-`apple-design` for the one new component. **Frontend-only, zero backend, no
-migration** (migrations explicitly held). Top Learnings entry has the detail.
-The load-bearing changes: the hero gained the **missing discomfort beat**, every
-weak CTA was replaced, three new sections landed (**problem+comparison**,
-**trust**, **pricing** at `#pricing`), Roadmap left the primary nav for Pricing,
-and the **mobile nav gap was closed** — below 52rem the site previously hid its
-whole link row *and* the Log in button, so a manager on a phone could not log in
-at all. **One claim needs the user's sign-off before this ships** (see Learnings).
-
-**Also uncommitted:** the **rota page redesign (B1–B7)** — top Learnings entry.
-Frontend-only, no backend/migration: new `coverage-summary` / `approvals-row` /
-`u18-legal-block` / `rota-more-sheet` / `rota-risk-modal` components, a reworked
-`rota-review` (per-day-time chips + tap detail + red/amber gap chips) and the
-`rota/page.tsx` rewrite (severity-ranked layout, day-view default, unified risk
-modal). `ClaimsPanel`/`SwapsPanel`/the old 3 gap cards are removed from the page.
-Verified at 375px, typecheck/lint/build clean. **Not committed, not pushed.**
-
-**Also uncommitted:** the **availability per-day sync batch (A–C)** — top
-Learnings entry. Backend + frontend, **no migration**. Backend:
-`rota._submission_demand_slots` (existence-gated demand in `_build_summary`),
-`availability._filter_pattern_to_open_days` (prefill + cron auto-submit stop
-carrying closed-day rows forward), `solver.check_manual_assignment` closed-day
-hard block, new `_week_shifts` + `WeekShiftOut`/`WeekShiftDayOut` on the `/week`
-response. Frontend: `availability/page.tsx` reads per-day shift defs from `/week`
-(closed day → "Closed" card, real per-day times, progress/guard on open-day
-count); `WeekShift`/`WeekShiftDay` types on `lib/api.ts`. Verified live against
-The Anxhor (divergent per-day times now render) + a reversible closed-Monday
-test. 56 backend tests green. **Not committed, not pushed.**
-
-**Staff-UX overhaul — committed + pushed (`eda99ca`), frontend-only, deployed.**
-Designer Mark reviewed the whole staff app (with John on architecture) across
-four passes, all now shipped: **(A)** five accessibility/consistency fixes
-(`STAFF_DESIGN_REVIEW.md`): `.cp-staff` `--c-ink-muted`/`--c-ink-faint` raised to
-clear WCAG AA; entry/PIN screen brought onto `.cp-staff`; the three answered
-availability states given a non-colour glyph; sub-44px touch targets lifted; the
-`✕` glyph → SVG. **(B)** the **bottom-nav batch** — persistent tab bar
-(Home/Shifts/Availability/Swap/Time off) hosted inside `StaffScreen`, dead
-`components/bottom-nav.tsx` deleted, hub reworked into a glance home, sticky
-availability CTA. **(C)** shared-primitive a11y (`Modal` dialog semantics +
-Escape + focus, `Toast` live region, `ProgressBar` labels).
-
-**Uncommitted now (this session, layered on top):** **(D)** the **motion +
-tactility pass** (Mark's `STAFF_LIFE_REVIEW.md`) — per-screen entrance fade,
-universal press-scale contract, `cp-pop-in` earned beats on submit + approved
-claim/swap, drop tick pop — plus the **two PIN-polish items** (Copy-PIN button,
-inline `role="alert"` field errors). Frontend-only, no backend/migration; top
-Learnings entry has the detail. **Being committed now.**
+**Uncommitted now:** nothing of substance. Assorted untracked design artefacts
+(`*_MOCKUPS.html`, build prompts, `logos/`, agent + skill definitions).
 
 ## Near-term vision — real per-day shift model (Batches 0-5 done — functionally live)
 The one committed architectural change. Move the solver off the hardcoded
@@ -267,6 +231,27 @@ details in Learnings.)
   one is correct — audit logs freeze historical fact).
 
 ## Before go-live (blockers & gaps)
+- **Per-environment Supabase auth config is a manual checklist with no home in
+  the repo (hard blocker for any new environment).** A fresh project starts on
+  Supabase defaults and silently breaks login. For each project set: **Site URL**
+  = that environment's origin; **Redirect URLs** allow-list (`https://host/**`)
+  or an explicit `redirect_to` is *ignored* and falls back to Site URL;
+  **Confirm email OFF** (`mailer_autoconfirm: true`) or a first-time address gets
+  the link-only Confirm-signup template instead of the code; **Magic Link
+  template** rendering `{{ .Token }}`; **Email OTP length = 8** to match
+  `NEXT_PUBLIC_OTP_LENGTH`; **Allow new users to sign up = OFF**.
+- **Signups are OPEN on both Supabase projects** (`disable_signup: false`),
+  which contradicts the invite-only pilot model — see Security posture.
+- **Prod `FRONTEND_URL` still points at `rota-app-mu.vercel.app`**, so every
+  staff email sends people to the Vercel alias rather than the brand domain.
+  Change it *together with* `ALLOWED_ORIGINS` — `FRONTEND_URL` is currently the
+  only thing keeping the vercel.app origin in the CORS allowlist.
+- **Staging Resend config is unverified.** Either `RESEND_API_KEY` is unset and
+  the staging cycle silently sends nothing (`email_service` returns
+  `{"status":"skipped"}` with no error surface), or it shares prod's verified
+  domain and **staging cron jobs will email real staff** the moment anyone seeds
+  staging from a prod dump. `cron_scheduler.refresh_jobs()` iterates every venue
+  in whatever DB it boots against. Decide deliberately before any restore.
 - **Email deliverability (hard blocker).** Resend is in sandbox — staff rota /
   reminder emails only deliver to the account owner until a Resend domain is
   verified and `RESEND_FROM_EMAIL` is set on Render. Manager login OTP goes via
@@ -293,6 +278,24 @@ Sound where it counts, with two known-weak areas flagged in-code:
   every Render deploy and is per-instance**, so protection is ineffective if
   Render ever scales past one instance. Proper fix: shared store (Redis) +
   longer PINs. Tracked in-code.
+- **Anyone can self-register a tenant.** `disable_signup: false` on both Supabase
+  projects, and `create_venue` (`routers/venue.py:29`) gates on nothing but a
+  valid session — so the public `/login` OTP form issues a session to any email
+  on earth, which walks straight through onboarding into a live venue with cron
+  jobs and outbound email on your Resend quota. The login page's own copy ("This
+  email isn't registered — contact your Rotally admin", `lib/api.ts`) can never
+  fire. **Fix is one toggle per project**; admin invites are unaffected because
+  `_create_manager_account` uses `admin.create_user({email_confirm: True})`,
+  which bypasses the signup toggle by design.
+- **Migration 027's slugs made venue URLs enumerable, and nothing else moved.**
+  `generate_venue_slug` produces a bare readable slug with no hex, and
+  `_get_venue_or_404` resolves it — so `/api/availability/the-anxhor` returns 200
+  unauthenticated on prod (verified). The old `/v/{link_token}` capability URL
+  was the outer secret; now the only secret is a **4-digit PIN over a ~6-person
+  roster**, and `_get_staff_by_pin` matches *any* member, so an attacker needs no
+  specific target. With the venue-wide backstop at 30/15min (2,880/day) and the
+  store resetting on every deploy, expected time to first hit is roughly
+  overnight. Fix order: shared persistent rate-limit store, then 6-digit PINs.
 - **Admin console:** every route gated by `X-Admin-Secret` vs `ADMIN_SECRET`
   (`require_admin`). Plain `!=` compare (not constant-time — low-sev timing nit).
 - **Credential hygiene:** PINs travel in POST bodies, never URLs; forgot-PIN and
@@ -303,6 +306,8 @@ Sound where it counts, with two known-weak areas flagged in-code:
 - **Never touch the OTP / PIN auth flow without flagging first** (working rule).
 
 ## Learnings (append after each session — most recent first)
+- **Staging login was broken by Supabase *dashboard* config, not code — and the wrong comment in our own source is what stopped anyone finding it (John-audited; six files + two new, committed).** Symptom: the staging login email arrives from Supabase as a **link pointing at `http://localhost:3000`**, while `app/login/page.tsx` renders 8 OTP boxes and waits for a code that never comes. **First discovery: staging is a completely separate stack** — `staging.rotally.co.uk` → `rota-app-staging.onrender.com` → Supabase project `drgktpkctqoarxxjkezf`, none of which this file mentioned (it described prod as if it were the only environment, so the first 20 minutes were spent probing the *prod* backend for a *staging* bug). **Read the deployed bundle to establish topology** — fetch every `<script src>` on the live page and grep for `onrender.com` / `supabase.co`; env vars are inlined at build time, so the truth is in the JS, not in this file. Note the Supabase MCP here is bound to **production**, so the staging project cannot be inspected through it at all. **The proof, and a genuinely reusable probe:** GoTrue's `/auth/v1/verify` 303-redirects to the project Site URL when `redirect_to` is absent *or not allow-listed*, so a bogus token reads the config read-only with no email sent and no state change — `curl "…/auth/v1/verify?token=bogus&type=signup&redirect_to=<host>"` returned `localhost:3000` on staging (even with an explicit `redirect_to`, proving the allow list is empty) vs `rota-app-mu.vercel.app` on prod. **Root cause chain:** the projects differ on `mailer_autoconfirm` (prod `true`, staging `false` — visible on the public `GET /auth/v1/settings` with the anon key). With Confirm-email ON and no confirmed user yet, `signInWithOtp` doesn't send the Magic Link template at all — it sends **Confirm signup**, whose Supabase default body is `{{ .ConfirmationURL }}` only: a link, no token, redirecting to Site URL. **The load-bearing error was a comment**: `lib/api.ts` asserted that *omitting `emailRedirectTo` is what makes Supabase render `{{ .Token }}`*. It isn't — **the email template decides**. Prod works because someone configured its template years ago; that belief is precisely why nobody ever configured staging's. Comment corrected in place. **Config fixes are the user's (dashboard-only, no `config.toml` in repo):** Site URL, redirect allow list, Confirm-email OFF, Magic Link template, OTP length 8. **Code fixes made:** (1) **P0, production, unrelated and worse** — `main.py`'s CORS allowlist was three hardcoded literals plus one `FRONTEND_URL`, and `https://rotally.co.uk` was **not among them** (verified live: `400 Disallowed CORS origin`), which kills the entire staff PWA, the marketing waitlist and the admin console **on the brand domain**; a brand domain served alongside a Vercel alias needs *two* origins and `FRONTEND_URL` holds one, so the shape was unfixable by env alone → now comma-separated `ALLOWED_ORIGINS` (`config.py`) with both hosts in the fallback. Staging's backend was already correct. (2) `(manager)/layout.tsx` collapsed **401 and 404 to the same `null`**, so an expired token sent managers into the onboarding wizard — which only treats 404 as "start fresh" — landing them on `BootError`; this is almost certainly what the 027-outage entry below misdiagnosed. Now 401/403 → `/login`, 404 → `/onboarding`, network failure → a retry surface. (3) **`OTP_LENGTH` is now `NEXT_PUBLIC_OTP_LENGTH`** — it cannot be one constant when each environment is a different Supabase project with its own OTP-length setting (a staging project on Supabase's default 6 renders six digits into eight boxes and disables Verify forever). (4) `robots.ts` + `metadataBase`: **staging is publicly reachable and was fully crawlable** (the memory saying it's Vercel-SSO-protected is out of date), duplicating the marketing site against its own keywords.
+- **`frontend/middleware.ts` — the missing session refresh, and two deliberate departures from Supabase's documented snippet.** `@supabase/ssr`'s server client **cannot write cookies from a Server Component render** (`lib/supabase-server.ts` swallows the write in a try/catch because Next forbids it), so nothing refreshed the access token on a server render and manager sessions silently rotted. Middleware is the only App Router layer that can write them back. **(1) It refreshes; it does not redirect.** The docs' snippet redirects unauthenticated users, but the `(manager)` layout already owns every routing decision and — after the 401/404 fix above — is the only layer that can tell an expired token from a missing venue. A second redirect in middleware would give two sources of truth and the weaker one would win by running first. **(2) The matcher lists routes explicitly** (`/dashboard`, `/rota`, `/scheduler`, `/settings`, `/team`, `/leave`, `/onboarding`) rather than using the documented catch-all, because **this app has three auth models**: managers hold a Supabase session, staff use a PIN in `sessionStorage` under `/v/**`, and admin sends `X-Admin-Secret`. The catch-all would add a Supabase auth round-trip to every staff, admin and marketing page. `getUser()` not `getSession()` — only the former revalidates the JWT and triggers the refresh whose cookies `setAll` writes back; nothing may run between `createServerClient` and it. **Verification trick worth reusing: assert on a header only the middleware can produce.** It sets `Cache-Control: private, no-store`; `/onboarding` returns exactly that while `/walkthrough` still returns Next's static `s-maxage=31536000` untouched — which simultaneously proves it runs where intended *and* that it did **not** over-reach onto marketing and silently destroy CDN caching. `/v/…` keeps Next's own no-store, confirming `/rota/:path*` doesn't leak onto the staff `/v/[token]/rota` route. **The actual token refresh is UNVERIFIED** — it needs a real expired manager session, i.e. an OTP login, which is off-limits and broken on staging anyway. Plumbing is proven; the refresh rests on the documented pattern. First idle manager tab on staging after the dashboard fixes will settle it.
 - **Crewplan is now Rotally — full rebrand committed (`708ac06`, branch `staging`, not pushed).** Direction C "The Signal" from a three-direction identity study. **The mark is a seven-segment wheel replacing the `o`** (seven segments = a week; `rota` is Latin for wheel), with the `lly` in the accent. **Colour the `lly`, never `ally`** — the semantic split leaves **rot** standing alone in white; cutting after the `a` leaves **rota**, the trade's own word. **Palette:** ground `#0c0c0d`, paper `#f4f4f2`, accent `#ff6b00` dark / `#b04d0b` light, amber `#e5a800`→`#e5c100` (opens the hue gap from the 25° accent; `--cp-red` was already `#e5484d`). **The real find was a live contrast bug: the light theme used the same `#ff4d00` as dark, so white text on an accent button measured 3.33:1 — under AA.** No single accent value works under both white and black, so this added **`--c-accent-on`** (near-black on dark, white on light) and migrated **64** `bg-accent text-white` sites to `text-accent-on` (dark now 6.85:1, light 5.37:1). Also: **`.cp-staff` / `.cp-manager` light scopes never redefined `--c-accent`**, so they inherited the dark value in light mode — both now set it explicitly. **Wordmark polarity is automatic, and must stay that way:** letters take `--c-ink`, accent takes `--c-accent` (both already flip per theme), and the wheel's unfilled track is `currentColor` at `0.28` — a hardcoded grey would be wrong in one theme. Black on light, white on dark, with no caller ever choosing. **Marketing:** `.crewplan` scope → `.rotally`, `crewplan.css` → `rotally.css`, tokens moved over; the hero's orange full stop was the old `crewplan.` logo device echoed in copy — the mark has no dot now, so it was an orphan and was removed. **Backend:** email wordmark + footers, PDF export wordmark (ink letters + accent tail; the wheel is deliberately omitted — a dashed arc reads as noise at 11pt), inactive-venue message. **localStorage** moved to the `rotally-` prefix; theme keys reset once (trivial), but the hours screen's `rate`/`target` hold numbers a staff member typed, so those **read through to the old key once and copy forward**. **Archivo is loaded as `--font-mark` and scoped to the wordmark only** — switching the whole UI off Space Grotesk is a separate change, as is the brand book's "orange is never a button" rule (the app still has ~80 orange CTAs; they are now *correct* rather than *neutral*). **Traps hit again, both already in this file:** a `_`-prefixed route (`app/_tokencheck`) 404s as a Next private folder, and running `npm run build` while `next dev` is up corrupts the shared `.next` (fix: `preview_stop` → `rm -rf .next` → `preview_start`). After that clear the sandbox **cannot refetch Google fonts** (`document.fonts.size` 0), so Archivo is only verifiable before a cache wipe — it resolved as `__Archivo_6627df` on the marketing page and a throwaway token-check route. **Verified:** 56 backend tests green, PDF streams decompressed to confirm it draws `rota`+`lly` and no `crewplan`, typecheck + lint + `next build` clean (19 routes), landing/walkthrough/login checked live in both themes with zero real console errors. Brand assets in `logos/rotally-signal/` (note `favicon.svg` is a **separate thicker-stroke build** — the seven segments blur into a plain ring below 32px). **Committed, not pushed.**
 - **Marketing site v3 — a conversion pass over the whole site with two external marketing skills + `apple-design`. Frontend-only, no migration; committed + pushed to `staging`.** User asked for every wording, button and navigation flow improved autonomously, brand rules explicitly waived. Skills loaded via `npx skills use "https://github.com/coreyhaines31/marketingskills" --skill …` for `marketing-psychology` and `copywriting`; the latter ships two reference files (`copy-frameworks.md`, `natural-transitions.md`) that must be read from the temp supporting-files dir the CLI prints — the SKILL.md alone is about a third of the content. Both skills open by looking for `.agents/product-marketing.md` (or `.claude/`, or legacy `product-marketing-context.md`); **none exists in this repo**, so context came from CLAUDE.md + the live copy instead. **Worth creating that file** if these skills get used again. **The single biggest copy finding: the hero had a vision and a path but never named the discomfort** — the Human Action Model's first beat, and exactly the SavvyCal 3× case. v2 opened straight on the solution ("Your team sends their week from a link…"), so a reader got a destination with no reason to leave where they were. The lede now opens "Right now it's a group chat, a paper diary and your Sunday night." The `d1` itself was left alone — "Rotas that write themselves" passes the "Now you can…" test and establishes the category in four words, which a problem-framed headline would have cost. **Every CTA was on the skill's explicit weak list** ("Join the waitlist" is Sign-Up tier): now "Claim a pilot place" / "Claim a place" (nav) / "See a week, start to finish" (teaser), i.e. verb + what you get, with genuine scarcity since pilot onboarding really is hand-run and invite-gated. **Three new sections, no new colour tokens** (reused the `--green`/`--ink-3`/`--accent-ink` pairs already AA-checked in both themes): a **problem + `.versus` comparison** (Contrast Effect — the status-quo column is dashed and unfilled, the Crewplan column a real filled surface, so the treatment argues the point the copy makes), a **`.trust` band**, and **`.price`**. **The trust band exists because the page had zero social proof and inventing any would be the fastest way to lose this audience** — so the slot carries what is actually true (built against a real venue's week; onboarded by hand; the roadmap lists what's missing) under the heading "We're early, and we'd rather say so." **Pricing got promoted out of one FAQ row into its own section with display-scale type**, because £0 is the strongest single argument on the site (Zero-Price Effect) and it took the nav slot Roadmap used to hold — Roadmap stays on the page and in the footer/menu, but a cold visitor clicking it first reads what's *missing* before they know what exists. **The real defect this pass found was navigational, not editorial: below `52rem` the CSS hid `.nav-links` AND `.nav-actions .nav-login`, so on a phone there was no route to pricing/walkthrough and no way to log in at all** — the footer had no Log in link either. Fixed with a proper burger + panel: `NAV_LINKS` is now one array rendered twice so the bar and the menu can't drift; theme state moved up into `SiteNav` because `ThemeToggle` now renders in two places and per-copy `useState` would let them disagree; the theme toggle drops out of the mobile bar entirely (a preference must not outrank a destination for the last 44px of a phone's width). **Panel is `position:absolute` off the sticky nav and animates opacity+transform only** — the first cut used `max-height`, which is a layout property and needs a magic number to outgrow; `visibility:hidden` when closed keeps its 8 controls out of the tab order. **Two verification traps, both already in this file and both hit again:** (1) `offsetParent !== null` does **not** detect `visibility:hidden` — it reported 8 tabbable links in a closed panel; `el.checkVisibility({visibilityProperty:true, opacityProperty:true})` is the correct probe. (2) measuring straight after a `.click()` reads pre-render state, and the pane's frozen transitions make every animated property read its *start* value — so inject `*{transition:none!important}` **and** await a `setTimeout` of ≥1.4s (the pane throttles timers while hidden; rAF never fires). With both applied: closed 0 focusable / open 8, `aria-expanded` flips, Escape closes, an in-panel link click closes. **Verified** 375 + 1265px, zero horizontal overflow, single `h1`, no heading skips, all six anchors resolve, contrast measured on all nine new colour pairs — lowest **4.90 light / 5.14 dark**, all clear AA. Only console errors are `webpack.hot-update.json` 404s (dev HMR from my own edits; confirmed via the network log, absent from a production build). Typecheck + lint + `next build` clean, 19 static routes. **`.claude/launch.json` was temporarily given `autoPort: true` because another session held :3000 — reverted afterwards, so the diff is 7 files, all marketing except one metadata line in `app/layout.tsx` (its description said "rotas that *build* themselves" where the whole site says "write").** **UNVERIFIED CLAIM the user must confirm before this ships: the trust band asserts every rule was written against "a working pub's actual roster — real staff, real availability, real published weeks."** That is what this file records about Bar So16 / The Anxhor, but it is a public marketing claim about a real business and wants a human yes.
 - **Marketing site v2 — total design rebuild on `apple-design` + `animate`, plus a suggestion box (the one backend change). Uncommitted.** The user reviewed v1 (`493b8c1`), liked the structure, and asked for a brand-new design plus 11 specific fixes — explicitly authorising a departure from brand settings where it produced a better result. **Skills used: `apple-design` and `animate` (v1 had used `ui-ux-pro-max` + `animate`); Dan produced the roadmap concepts and the automation vocabulary (`ROADMAP_AND_VOICE.md`).** **Design system rewritten** (`crewplan.css` + new `frames.css`): tokens for **both themes on real selectors** (never only in a media query, so the toggle wins both directions); translucent `backdrop-filter` chrome that content scrolls under; **section "plates"** — full-bleed rounded panels on a different ground — which is what fixes the "every section looks the same" complaint that one flat background caused in v1; optical typography (size-specific tracking: `-0.042em` on display down to ~0 on body, leading inversely tracking size, **everything in `rem`** so it scales with the visitor's own text-size setting); critically-damped `--ease-standard` as the house curve with bounce reserved for momentum; press feedback on `:active` not release. **Theme toggle** keyed `crewplan-theme:site` (its own key — a marketing choice shouldn't follow anyone into the product), pre-paint script in the root layout extended to **fall back to `prefers-color-scheme`** when nothing is stored, and a `matchMedia` listener keeps following the system until the visitor actually chooses. **Walkthrough moved to `/walkthrough`** with a designed teaser + CTA on the home page; **step titles are now per-role** (manager: "Send one link / Watch the counter / It solves the week / Check what needs you / It goes out"; staff: "Tap in / Mark your week / Do nothing / Still nothing / Know your week") — v1 shared one label set across both roles, which hid the actual pitch. **Autoplay removed entirely** in favour of a real **swipe gesture** on coarse pointers: Pointer Events with capture, 1:1 tracking, **10px engage hysteresis**, rubber-banding at the ends, and Apple's exponential-decay **momentum projection** (`(v/1000)·d/(1−d)`, `d=0.998`) so a short fast flick still commits — verified that a 5px nudge is ignored, a real swipe moves both directions, and the ends clamp. **Two contrast traps, both caught by measuring rather than eyeballing:** (1) the intuitive light-mode orange `#dd4200` measures **4.15:1** on the light ground and **4.33:1 under white label text** — both fail AA; darkened to `#ad3300` (6.19 / 6.46), and green/amber/red/ink-3 all needed the same treatment. (2) In dark mode the bright `#ff5a1f` gives **3.12:1 under white** — so `--accent-on` is **near-black `#12100c` in dark and white in light** (6.09 / 6.46), the same call iOS makes on bright accents. **Both themes now clear AA on every token, on both `--bg` and `--surface`.** Touch targets: theme toggle keeps its 32px visual but gets a 44px hit box via `::before { inset: -0.375rem }` (verified by hit-testing 5px outside the visual bounds), footer/nav links padded to 44px. **Backend (the only backend work):** migration `028_suggestions.sql` — a **separate `suggestions` table, deliberately not folded into `waitlist`** (a waitlist row is a unique-email lead that gets invited once; a suggestion is free text the same person may send repeatedly, and overloading it would break the unique constraint and pollute the invite queue); email **optional** because asking for it is the main reason people don't send feedback; `routers/suggestions.py` rate-limited 8/hr per IP (vs the waitlist's 5 — someone with three thoughts is exactly who we want); `GET`/`PATCH /api/admin/suggestions` + a filterable `/admin/suggestions` console page with a `new → read → actioned → archived` flow held as data so the row's buttons and the allowed transitions can't drift. **`suppressHydrationWarning` on `<html>`** — the pre-paint theme script stamps `data-theme` before React hydrates, which React reports as "Extra attributes from the server"; this was latent for the app too. **Verification gotcha worth remembering: the Browser pane's console buffer accumulates across reloads and navigations, so a warning you already fixed keeps showing.** Prove a fix by checking the *count* doesn't grow across a load that would re-trigger it, not by seeing it absent. **Verified** at 375/768/1440: zero horizontal overflow anywhere, all 20 walkthrough step×role×device combos fit the stage with **zero focusable elements inside any frame**, step/role/device independence holds, single `h1` with no heading-level skips, suggestion box success **and** error paths (fetch-intercepted, no DB writes — success moves focus to the confirmation, errors render `role="alert"` with the form intact). 56 backend tests green; typecheck + lint + `next build` clean (19 routes). **Not committed.**

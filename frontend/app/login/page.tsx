@@ -9,11 +9,13 @@ import Wordmark from "@/components/wordmark";
 import Mark from "@/components/mark";
 import Waiting from "@/components/waiting";
 
-// Supabase's OTP length is a project setting (Auth → Email → OTP length); this
-// must match it. The reference mockup drew six boxes, but this project issues
-// eight-digit codes, so eight it is. Change this one number if the setting
-// changes — the boxes and copy follow automatically.
-const OTP_LENGTH = 8;
+// Supabase's OTP length is a per-project setting (Auth → Email → OTP length) and
+// each environment has its own project, so this cannot be a single constant: a
+// staging project left on Supabase's default 6 would render six digits into
+// eight boxes and leave Verify permanently disabled. Set
+// NEXT_PUBLIC_OTP_LENGTH per environment to match that project; 8 is what the
+// production project issues, so it stays the default.
+const OTP_LENGTH = Number(process.env.NEXT_PUBLIC_OTP_LENGTH) || 8;
 const RESEND_SECONDS = 30;
 
 type Step = "email" | "code";

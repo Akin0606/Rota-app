@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     # (https://rota-app-mu.vercel.app) so email links and CORS resolve
     # correctly. Defaults to localhost for local development.
     frontend_url: str = Field(default="http://localhost:3000", alias="FRONTEND_URL")
+    # Every browser origin allowed to call this API, comma-separated. One env
+    # var rather than a hardcoded list because a deployment can serve more than
+    # one origin (brand domain + www + the Vercel alias) while FRONTEND_URL can
+    # only ever name one. Blank falls back to the built-in defaults in main.py.
+    allowed_origins: str = Field(default="", alias="ALLOWED_ORIGINS")
 
     model_config = SettingsConfigDict(
         env_file=(ROOT_DIR / ".env", BACKEND_DIR / ".env"),

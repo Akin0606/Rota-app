@@ -508,11 +508,17 @@ export function saveSetupState(setup_state: SetupState): Promise<Venue> {
 }
 
 export async function requestLoginCode(email: string): Promise<{ status: string }> {
-  // Sends a 6-digit OTP code rather than a clickable magic link. We
-  // deliberately omit emailRedirectTo: with no redirect URL, Supabase's email
-  // template renders the {{ .Token }} code instead of a link. This avoids the
-  // mobile failure where tapping a magic link opens the mail app's in-app
-  // browser, which loses the PKCE code verifier and breaks sign-in.
+  // Sends a numeric OTP code rather than a clickable magic link, avoiding the
+  // mobile failure where tapping a link opens the mail app's in-app browser,
+  // which loses the PKCE code verifier and breaks sign-in.
+  //
+  // emailRedirectTo is omitted deliberately, but note that omission is NOT what
+  // produces a code: the Supabase project's *email template* decides that. Each
+  // environment needs its Magic Link template set to render {{ .Token }}, and
+  // "Confirm email" turned OFF — otherwise a first-time address gets the
+  // Confirm-signup template instead, which is link-only and redirects to the
+  // project's Site URL (a fresh project defaults that to http://localhost:3000,
+  // which is exactly how staging login broke).
   const supabase = createClient();
   const { error } = await supabase.auth.signInWithOtp({ email });
   if (error) {

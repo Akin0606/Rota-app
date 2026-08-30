@@ -3,13 +3,32 @@ import { redirect } from "next/navigation";
 import ManagerNav from "@/components/manager/nav";
 import { createClient } from "@/lib/supabase-server";
 
-async function getVenueServer(accessToken: string) {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/venue`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  return res.json();
+// The status matters, not just success: a 404 means "signed in, no venue yet"
+// (start onboarding) while a 401 means the token expired (sign in again). This
+// used to collapse both to null, which sent every manager with a stale session
+// into the onboarding wizard — where the boot only treats a 404 as "start
+// fresh", so they landed on the BootError screen instead of the login page.
+type VenueFetch =
+  | { kind: "ok"; venue: Record<string, unknown> }
+  | { kind: "unauthenticated" }
+  | { kind: "no-venue" }
+  | { kind: "error" };
+
+async function getVenueServer(accessToken: string): Promise<VenueFetch> {
+  let res: Response;
+  try {
+    res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/venue`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
+    });
+  } catch {
+    // Network failure / cold Supabase pool — not an auth signal.
+    return { kind: "error" };
+  }
+  if (res.ok) return { kind: "ok", venue: await res.json() };
+  if (res.status === 401 || res.status === 403) return { kind: "unauthenticated" };
+  if (res.status === 404) return { kind: "no-venue" };
+  return { kind: "error" };
 }
 
 export default async function ManagerLayout({ children }: { children: React.ReactNode }) {
@@ -22,10 +41,32 @@ export default async function ManagerLayout({ children }: { children: React.Reac
     redirect("/login");
   }
 
-  const venue = await getVenueServer(session.access_token);
-  if (!venue) {
+  const result = await getVenueServer(session.access_token);
+  if (result.kind === "unauthenticated") {
+    redirect("/login");
+  }
+  if (result.kind === "no-venue") {
     redirect("/onboarding");
   }
+  if (result.kind === "error") {
+    return (
+      <div className="cp-manager flex min-h-screen items-center justify-center bg-surface-page px-6 text-ink">
+        <div className="max-w-[420px] rounded-card border border-hairline bg-surface-card p-8 text-center">
+          <div className="mb-3 text-2xl font-medium text-ink">Something went wrong</div>
+          <div className="mb-6 text-sm text-ink-muted">
+            We couldn&apos;t load your venue just now. This is usually temporary.
+          </div>
+          <a
+            href="/dashboard"
+            className="inline-block rounded-xl bg-accent px-5 py-3 text-sm font-medium text-accent-on"
+          >
+            Try again
+          </a>
+        </div>
+      </div>
+    );
+  }
+  const venue = result.venue as { setup_state?: unknown; is_active?: boolean; name?: string };
 
   // Resume gate: a manager who created a venue but never finished the wizard
   // (setup_state present and not completed) is sent back to resume — not

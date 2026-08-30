@@ -6,6 +6,9 @@ import { archivo, ibmPlex, spaceGrotesk } from "@/lib/fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  // Without this, relative OG/canonical URLs resolve against whichever host
+  // served the page — so staging would advertise itself as the canonical site.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://rotally.co.uk"),
   title: "Rotally",
   description: "Rotas that write themselves — scheduling for pubs and restaurants",
 };
