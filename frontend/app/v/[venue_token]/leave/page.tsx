@@ -27,6 +27,7 @@ import {
   leaveDaysForRange,
   pinStorageKey,
 } from "@/lib/utils";
+import Waiting from "@/components/waiting";
 
 // Entitlement, the leave year and what a range costs all come from the backend
 // now (migration 021). They used to be guessed here — 28 days, a Jan-Dec year,
@@ -298,7 +299,7 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
             disabled={submitting || !startDate || !endDate}
             className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-50"
           >
-            {submitting ? "Sending…" : "Send request"}
+            {submitting ? <Waiting label="Sending…" /> : "Send request"}
           </button>
         </div>
       </Modal>
@@ -322,7 +323,7 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
                 disabled={cancelling}
                 className="rounded-cp-control bg-cp-icon px-5 py-2.5 text-[13px] font-medium text-ink disabled:opacity-60"
               >
-                {cancelling ? "Cancelling…" : "Cancel request"}
+                {cancelling ? <Waiting label="Cancelling…" /> : "Cancel request"}
               </button>
             </div>
           </>

@@ -23,6 +23,7 @@ import {
   proposeSwap,
 } from "@/lib/api";
 import { DAY_LABELS, DAY_NAMES, addDays, parseISODate, pinStorageKey } from "@/lib/utils";
+import Waiting from "@/components/waiting";
 
 type ActionKey = "drop" | "give" | "swap";
 
@@ -507,7 +508,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                 disabled={dropping}
                 className="rounded-cp-control bg-unavail-text px-5 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
               >
-                {dropping ? "Dropping…" : "Drop shift"}
+                {dropping ? <Waiting label="Dropping…" /> : "Drop shift"}
               </button>
             </div>
           </>
@@ -553,7 +554,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                 disabled={giving || !giveeId}
                 className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-50"
               >
-                {giving ? "Sending…" : "Give shift"}
+                {giving ? <Waiting label="Sending…" /> : "Give shift"}
               </button>
             </div>
           </>
@@ -663,7 +664,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                       disabled={swapping || !swapTheirAssignmentId}
                       className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-50"
                     >
-                      {swapping ? "Sending…" : "Propose swap"}
+                      {swapping ? <Waiting label="Sending…" /> : "Propose swap"}
                     </button>
                   </div>
                 </div>
@@ -692,7 +693,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
                 disabled={claiming}
                 className="rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-60"
               >
-                {claiming ? "Claiming…" : "Claim shift"}
+                {claiming ? <Waiting label="Claiming…" /> : "Claim shift"}
               </button>
             </div>
           </>

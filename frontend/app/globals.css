@@ -8,10 +8,10 @@
 :root {
   --c-bg: #0c0c0d;
   --c-fg: #f4f4f2;
-  --c-accent: #ff6b00;
-  --c-accent-hover: #e65f00;
-  --c-accent-light: #21140a;
-  --c-accent-border: #8a3a00;
+  --c-accent: #f4f4f2;
+  --c-accent-hover: #dededa;
+  --c-accent-light: #1c1c1e;
+  --c-accent-border: #35353a;
   --c-ink: #f4f4f2;
   --c-ink-label: #c9c9c7;
   --c-ink-muted: #8c8c8a;
@@ -51,15 +51,18 @@
   /* Foreground for anything sitting ON an accent surface. The accent is
      bright enough that white fails AA on it (2.86:1) — near-black is 6.85:1. */
   --c-accent-on: #0c0c0d;
+  /* The brand orange. Used by the wordmark and nothing else — every
+     other surface is neutral, and colour in the UI means coverage. */
+  --c-mark: #ff6b00;
 }
 
 :root[data-theme="light"] {
   --c-bg: #f4f4f2;
   --c-fg: #1a1a1a;
-  --c-accent: #b04d0b;
-  --c-accent-hover: #963f08;
-  --c-accent-light: #fbeee6;
-  --c-accent-border: #edd2bf;
+  --c-accent: #0c0c0d;
+  --c-accent-hover: #2a2a2d;
+  --c-accent-light: #f0f0ec;
+  --c-accent-border: #d8d8d3;
   --c-ink: #1a1a1a;
   --c-ink-label: #374151;
   --c-ink-muted: #6b7280;
@@ -87,6 +90,9 @@
   --c-shadow: rgba(0, 0, 0, 0.1);
   color-scheme: light;
   --c-accent-on: #ffffff;
+  /* The brand orange. Used by the wordmark and nothing else — every
+     other surface is neutral, and colour in the UI means coverage. */
+  --c-mark: #b04d0b;
 }
 
 body {
@@ -159,10 +165,10 @@ a:hover {
      info (shift times, dates, caveats). Verify with a checker on a real build. */
   --c-ink-muted: #8f8f8a;
   --c-ink-faint: #82827c;
-  --c-accent: #ff6b00;
-  --c-accent-hover: #e65f00;
-  --c-accent-light: rgba(255, 107, 0, 0.12);
-  --c-accent-border: rgba(255, 107, 0, 0.25);
+  --c-accent: #f4f4f2;
+  --c-accent-hover: #dededa;
+  --c-accent-light: rgba(255, 255, 255, 0.09);
+  --c-accent-border: rgba(255, 255, 255, 0.20);
 
   --cp-icon-bg: #1e1e1e;
   --cp-track: #1e1e1e;
@@ -179,6 +185,9 @@ a:hover {
     background-color 0.35s ease,
     color 0.35s ease;
   --c-accent-on: #0c0c0d;
+  /* The brand orange. Used by the wordmark and nothing else — every
+     other surface is neutral, and colour in the UI means coverage. */
+  --c-mark: #ff6b00;
 }
 
 :root[data-theme="light"] .cp-staff {
@@ -192,16 +201,19 @@ a:hover {
      #a8a69e at ~2.4:1. See the dark-mode note above. */
   --c-ink-muted: #6d6b64;
   --c-ink-faint: #737169;
-  --c-accent-light: rgba(176, 77, 11, 0.09);
+  --c-accent-light: rgba(0, 0, 0, 0.06);
 
   --cp-icon-bg: #f2f0ea;
   --cp-track: #eceae2;
   --cp-green-soft: rgba(46, 204, 113, 0.12);
   --cp-amber-soft: rgba(255, 193, 7, 0.16);
   --cp-red-soft: rgba(229, 72, 77, 0.1);
-  --c-accent: #b04d0b;
-  --c-accent-hover: #963f08;
+  --c-accent: #0c0c0d;
+  --c-accent-hover: #2a2a2d;
   --c-accent-on: #ffffff;
+  /* The brand orange. Used by the wordmark and nothing else — every
+     other surface is neutral, and colour in the UI means coverage. */
+  --c-mark: #b04d0b;
 }
 
 @layer utilities {
@@ -285,10 +297,10 @@ a:hover {
   --c-ink-label: #f0efe9;
   --c-ink-muted: #7a7a75;
   --c-ink-faint: #4a4a47;
-  --c-accent: #ff6b00;
-  --c-accent-hover: #e65f00;
-  --c-accent-light: rgba(255, 107, 0, 0.12);
-  --c-accent-border: rgba(255, 107, 0, 0.25);
+  --c-accent: #f4f4f2;
+  --c-accent-hover: #dededa;
+  --c-accent-light: rgba(255, 255, 255, 0.09);
+  --c-accent-border: rgba(255, 255, 255, 0.20);
 
   --cp-icon-bg: #1e1e1e;
   --cp-track: #1e1e1e;
@@ -303,6 +315,9 @@ a:hover {
     background-color 0.35s ease,
     color 0.35s ease;
   --c-accent-on: #0c0c0d;
+  /* The brand orange. Used by the wordmark and nothing else — every
+     other surface is neutral, and colour in the UI means coverage. */
+  --c-mark: #ff6b00;
 }
 
 :root[data-theme="light"] .cp-manager {
@@ -315,16 +330,19 @@ a:hover {
   --c-ink-label: #1a1815;
   --c-ink-muted: #78766f;
   --c-ink-faint: #a8a69e;
-  --c-accent-light: rgba(176, 77, 11, 0.09);
+  --c-accent-light: rgba(0, 0, 0, 0.06);
 
   --cp-icon-bg: #f2f0ea;
   --cp-track: #eceae2;
   --cp-green-soft: rgba(46, 204, 113, 0.12);
   --cp-amber-soft: rgba(255, 193, 7, 0.16);
   --cp-red-soft: rgba(229, 72, 77, 0.1);
-  --c-accent: #b04d0b;
-  --c-accent-hover: #963f08;
+  --c-accent: #0c0c0d;
+  --c-accent-hover: #2a2a2d;
   --c-accent-on: #ffffff;
+  /* The brand orange. Used by the wordmark and nothing else — every
+     other surface is neutral, and colour in the UI means coverage. */
+  --c-mark: #b04d0b;
 }
 
 @layer components {
@@ -880,3 +898,27 @@ a:hover {
 .ob-copybtn { width: 100%; padding: 14px; border-radius: 12px; background: linear-gradient(180deg, #ff8124, var(--accent)); box-shadow: 0 8px 24px -10px rgba(255, 107, 0, 0.5); color: #fff; font-family: var(--font-display), "Space Grotesk", sans-serif; font-weight: 500; font-size: 14.5px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; border: none; transition: background 0.2s; }
 .ob-copybtn:active { transform: scale(0.99); }
 .ob-copybtn.done { background: linear-gradient(180deg, #2ecc71, #25a85d); box-shadow: 0 8px 24px -10px rgba(46, 204, 113, 0.5); }
+
+/* ==========================================================================
+   THE WHEEL AS A LOADING INDICATOR
+   A rota is a wheel, so waiting is the wheel turning. One rotation is stepped
+   into seven so it ticks through the days rather than sliding — the same beat
+   the mark already implies. Reduced motion gets a pulse instead of rotation.
+   ========================================================================== */
+@keyframes cp-wheel-turn {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes cp-wheel-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+.cp-wheel-spin {
+  animation: cp-wheel-turn 1.4s steps(7, end) infinite;
+  transform-origin: 50% 50%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cp-wheel-spin {
+    animation: cp-wheel-pulse 1.6s ease-in-out infinite;
+  }
+}

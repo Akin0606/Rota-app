@@ -26,6 +26,7 @@ import {
   updateScheduler,
   updateShift,
 } from "@/lib/api";
+import Waiting from "@/components/waiting";
 
 // The API returns naive wall-clock strings ("YYYY-MM-DDTHH:MM:SS"). Format for
 // display without letting the browser apply a timezone shift.
@@ -473,7 +474,7 @@ export default function SchedulerPage() {
             disabled={savingOverride || !overrideWeek}
             className="rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-60"
           >
-            {savingOverride ? "Saving…" : "Save close time"}
+            {savingOverride ? <Waiting label="Saving…" /> : "Save close time"}
           </button>
           {selectedWeek?.is_override && (
             <button onClick={() => handleReset(overrideWeek)} className="text-[13px] font-medium text-accent">
@@ -566,7 +567,7 @@ export default function SchedulerPage() {
                 disabled={savingOverride}
                 className="rounded-cp-control bg-cp-red px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
               >
-                {savingOverride ? "Saving…" : "Save anyway"}
+                {savingOverride ? <Waiting label="Saving…" /> : "Save anyway"}
               </button>
             </div>
           </div>
@@ -592,7 +593,7 @@ export default function SchedulerPage() {
                 disabled={savingDayOff}
                 className="rounded-cp-control bg-cp-red px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
               >
-                {savingDayOff ? "Saving…" : "Turn off anyway"}
+                {savingDayOff ? <Waiting label="Saving…" /> : "Turn off anyway"}
               </button>
             </div>
           </div>
@@ -749,7 +750,7 @@ function SaveButton({ onClick, busy, label }: { onClick: () => void; busy: boole
       disabled={busy}
       className="mt-3.5 rounded-cp-control bg-accent px-5 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-60"
     >
-      {busy ? "Saving…" : label}
+      {busy ? <Waiting label="Saving…" /> : label}
     </button>
   );
 }

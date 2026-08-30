@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { ApiError, joinWaitlist, sendSuggestion } from "@/lib/api";
+import Waiting from "@/components/waiting";
 
 /* Waitlist + suggestion box. Both are public, unauthenticated writes. */
 
@@ -160,7 +161,7 @@ export function SuggestionBox() {
           onChange={(e) => setEmail(e.target.value)}
         />
         <button type="submit" className="btn btn-primary" disabled={submitting}>
-          {submitting ? "Sending…" : "Send it"}
+          {submitting ? <Waiting label="Sending…" /> : "Send it"}
         </button>
       </div>
       {error ? (

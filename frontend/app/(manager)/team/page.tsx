@@ -32,6 +32,7 @@ import {
   updateStaff,
 } from "@/lib/api";
 import type { ManagerIconName } from "@/components/manager/icon";
+import Waiting from "@/components/waiting";
 
 function initials(name: string): string {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -609,7 +610,7 @@ export default function TeamPage() {
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-accent-on disabled:opacity-60"
               >
                 <ManagerIcon name="check" size={15} />
-                {saving ? "Saving…" : "Approve & add"}
+                {saving ? <Waiting label="Saving…" /> : "Approve & add"}
               </button>
             </>
           ) : (
@@ -626,7 +627,7 @@ export default function TeamPage() {
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-accent-on disabled:opacity-60"
               >
                 <ManagerIcon name="check" size={15} />
-                {saving ? "Saving…" : sheetMode === "add" ? "Add to team" : "Save changes"}
+                {saving ? <Waiting label="Saving…" /> : sheetMode === "add" ? "Add to team" : "Save changes"}
               </button>
             </>
           )
@@ -840,7 +841,7 @@ export default function TeamPage() {
             disabled={removing}
             className="flex-1 rounded-xl bg-cp-red py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
           >
-            {removing ? "Removing…" : "Remove"}
+            {removing ? <Waiting label="Removing…" /> : "Remove"}
           </button>
         </div>
         <button

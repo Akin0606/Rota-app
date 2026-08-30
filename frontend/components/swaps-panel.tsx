@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import type { Shift, Swap } from "@/lib/api";
 import { DAY_LABELS } from "@/lib/utils";
+import Waiting from "@/components/waiting";
 
 type SwapsPanelProps = {
   swaps: Swap[];
@@ -59,7 +60,7 @@ export default function SwapsPanel({ swaps, shifts, busyId, onApprove, onReject 
                     disabled={busy}
                     className="rounded-lg bg-accent px-3 py-1.5 text-[12px] font-semibold text-accent-on disabled:opacity-50"
                   >
-                    {busy ? "Working…" : "Approve"}
+                    {busy ? <Waiting label="Working…" /> : "Approve"}
                   </button>
                   <button
                     onClick={() => onReject(swap.id)}

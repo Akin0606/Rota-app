@@ -37,6 +37,7 @@ import {
   shiftDurationHours,
   startsWithName,
 } from "@/lib/utils";
+import Waiting from "@/components/waiting";
 
 const CACHE_KEY = "rotally_dashboard_snapshot";
 
@@ -324,7 +325,7 @@ export default function DashboardPage() {
                     disabled={reminding}
                     className="rounded-lg bg-accent-light px-3.5 py-2 text-[13px] font-semibold text-accent disabled:opacity-60"
                   >
-                    {reminding ? "Reminding…" : `Remind ${pendingCount} pending`}
+                    {reminding ? <Waiting label="Reminding…" /> : `Remind ${pendingCount} pending`}
                   </button>
                 )}
               </div>

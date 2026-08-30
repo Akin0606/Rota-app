@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import ManagerIcon, { ManagerIconName } from "@/components/manager/icon";
+import Mark from "@/components/mark";
 import Wordmark from "@/components/wordmark";
 
 import ModeToggle from "./mode-toggle";
@@ -28,10 +29,12 @@ export default function ManagerNav() {
 
   return (
     <>
-      {/* Top bar — wordmark always; tabs inline on laptop/web (md+). */}
+      {/* Top bar — the wheel alone on a phone, where the bar is competing with
+          the tab row for width; the full wordmark once there's room (md+). */}
       <div className="sticky top-0 z-30 border-b border-hairline bg-surface-page">
         <div className="flex items-center gap-6 px-5 py-3.5 md:px-8">
-          <Wordmark className="!font-semibold text-[17px]" />
+          <Mark className="h-[22px] w-[22px] text-ink md:hidden" />
+          <Wordmark className="!font-semibold text-[17px] max-md:hidden" />
           <nav className="scrollbar-none hidden flex-1 items-center gap-0.5 overflow-x-auto md:flex">
             {TABS.map((t) => {
               const active = isActive(t.href);

@@ -1,4 +1,5 @@
 "use client";
+import Waiting from "@/components/waiting";
 
 // One risk modal for all three manager-side confirm paths (manual add / approve
 // claim / approve swap) — B7. The title *names the rule that fired* instead of
@@ -75,7 +76,7 @@ export default function RotaRiskModal({
             disabled={busy}
             className="rounded-[10px] bg-cp-amber px-5 py-2.5 text-[12.5px] font-medium text-[#1a1815] transition-[transform] active:scale-[0.97] disabled:opacity-60"
           >
-            {busy ? "Saving…" : confirmLabel}
+            {busy ? <Waiting label="Saving…" /> : confirmLabel}
           </button>
         </div>
       </div>

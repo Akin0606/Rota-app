@@ -450,7 +450,7 @@
   height: 0.675em;
   /* Asymmetric on purpose: r and t have different sidebearings, so equal
      margins give unequal optical gaps. This lands both ink gaps on 0.030em. */
-  margin: 0 0.02em 0 0.025em;
+  margin: 0 max(0.09em, 2px) 0 max(0.105em, 2px);
   transform: translateY(0.0625em);
   display: block;
   flex: none;

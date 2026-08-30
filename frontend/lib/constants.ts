@@ -26,3 +26,15 @@ export const ALL_TIMES: string[] = (() => {
 export const STAFF_ROLES = ["Bartender", "Server", "Kitchen", "Host", "Manager"];
 
 export const SHIFT_COLORS = ["#f472b6", "#34d399", "#fb923c", "#38bdf8", "#c084fc", "#facc15"];
+
+/**
+ * Where a stuck manager can reach a human.
+ *
+ * NOTE: this mailbox does not exist yet. Until it does, the address is set to
+ * a route that actually delivers — change this ONE constant once
+ * hello@rotally.co.uk is receiving (Cloudflare Email Routing or Zoho free tier
+ * both do it for nothing). It is deliberately a constant rather than an inline
+ * mailto so there is exactly one place to update.
+ */
+export const SUPPORT_EMAIL =
+  process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "hello@rotally.co.uk";

@@ -30,6 +30,7 @@ import {
   parseISODate,
   pinStorageKey,
 } from "@/lib/utils";
+import Waiting from "@/components/waiting";
 
 // The three states the reference exposes, mapped onto the statuses the solver
 // already understands. It has exactly three tiers — unassignable, weight 1,
@@ -713,7 +714,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
             disabled={submitting}
             className="flex-1 rounded-cp-slot bg-accent py-3 text-[13px] font-medium text-accent-on transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
           >
-            {submitting ? "Submitting…" : "Submit anyway"}
+            {submitting ? <Waiting label="Submitting…" /> : "Submit anyway"}
           </button>
         </div>
       </Modal>
@@ -745,7 +746,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
               disabled={submitting || weekLoading}
               className="w-full rounded-cp-panel bg-accent py-[13px] text-[15px] font-medium tracking-[-0.1px] text-accent-on transition-[opacity,transform] duration-150 hover:opacity-90 active:scale-[0.99] disabled:opacity-60"
             >
-              {submitting ? "Submitting…" : "Submit availability"}
+              {submitting ? <Waiting label="Submitting…" /> : "Submit availability"}
             </button>
           ) : (
             <div className="rounded-cp-panel bg-cp-icon py-[13px] text-center text-[13px] text-ink-muted">

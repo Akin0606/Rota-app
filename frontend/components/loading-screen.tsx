@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Mark from "@/components/mark";
 
 // A loading indicator that, after a few seconds, honestly explains the Render
 // free-tier cold start instead of looking frozen.
@@ -20,7 +21,7 @@ export default function LoadingScreen({
 
   return (
     <div className={`flex flex-col items-center justify-center gap-3 px-6 text-center ${className}`}>
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-hairline border-t-accent" />
+      <Mark spinning className="h-6 w-6 text-ink-faint" />
       <div className="text-sm text-ink-muted">{base}</div>
       {slow && (
         <div className="max-w-[320px] text-[13px] leading-relaxed text-ink-faint">

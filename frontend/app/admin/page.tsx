@@ -15,6 +15,8 @@ import {
   listAdminVenues,
   resendPendingManagerLoginLink,
 } from "@/lib/admin-api";
+import Mark from "@/components/mark";
+import Waiting from "@/components/waiting";
 
 // A live venue with no activity in the last 14 days is worth a nudge.
 const STALE_DAYS = 14;
@@ -153,7 +155,7 @@ export default function AdminVenuesPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-hairline border-t-accent" />
+        <Mark spinning className="h-6 w-6 text-ink-faint" />
         <div className="text-sm text-ink-muted">Loading venues…</div>
       </div>
     );
@@ -335,7 +337,7 @@ export default function AdminVenuesPage() {
                 disabled={saving}
                 className="flex-1 rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-accent-on disabled:opacity-60"
               >
-                {saving ? "Creating…" : "Create account"}
+                {saving ? <Waiting label="Creating…" /> : "Create account"}
               </button>
             </div>
           </div>

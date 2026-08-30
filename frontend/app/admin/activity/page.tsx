@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { AdminActivity, listAdminActivity } from "@/lib/admin-api";
 import { formatRelativeTime, startsWithName } from "@/lib/utils";
+import Mark from "@/components/mark";
 
 function prettyAction(action: string): string {
   const label = action.replace(/_/g, " ");
@@ -56,7 +57,7 @@ export default function AdminActivityPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-hairline border-t-accent" />
+        <Mark spinning className="h-6 w-6 text-ink-faint" />
         <div className="text-sm text-ink-muted">Loading activity…</div>
       </div>
     );

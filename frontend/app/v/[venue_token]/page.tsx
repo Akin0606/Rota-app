@@ -8,6 +8,7 @@ import ModeToggle from "@/components/staff/mode-toggle";
 import Toast from "@/components/toast";
 import { ApiError, authenticatePin, getVenueInfo, joinTeam } from "@/lib/api";
 import { deviceKey, pinStorageKey } from "@/lib/utils";
+import Waiting from "@/components/waiting";
 
 type Mode = "choice" | "pin" | "join" | "reveal";
 
@@ -238,7 +239,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
                   disabled={submitting}
                   className="w-full rounded-cp-control bg-accent py-4 text-center text-base font-medium text-accent-on transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
                 >
-                  {submitting ? "Checking…" : "Continue"}
+                  {submitting ? <Waiting label="Checking…" /> : "Continue"}
                 </button>
 
                 <Link href={`/v/${venue_token}/forgot-pin`} className="mt-4 text-[13px] font-medium text-accent">
@@ -300,7 +301,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
                   disabled={joining}
                   className="w-full rounded-cp-control bg-accent py-4 text-center text-base font-medium text-accent-on transition-transform duration-150 active:scale-[0.98] disabled:opacity-60"
                 >
-                  {joining ? "Joining…" : "Join the team"}
+                  {joining ? <Waiting label="Joining…" /> : "Join the team"}
                 </button>
 
                 <button onClick={() => setMode("pin")} className="mt-4 text-[13px] font-medium text-ink-muted">

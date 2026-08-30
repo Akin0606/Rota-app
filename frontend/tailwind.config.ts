@@ -17,16 +17,22 @@ const config: Config = {
         background: "var(--background)",
         foreground: "var(--foreground)",
         // All theme colours resolve to CSS variables so light/dark can be
-        // switched at runtime (see globals.css). Orange accent is reserved
-        // for primary actions and status.
+        // switched at runtime (see globals.css). "accent" is the primary
+        // ACTION colour and is deliberately neutral — paper on dark, ink on
+        // light. The brand orange lives in `mark` and nothing else uses it.
         accent: {
           DEFAULT: "var(--c-accent)",
           hover: "var(--c-accent-hover)",
-          // Foreground for content sitting ON an accent surface. White fails
-          // AA on the accent (2.86:1); this resolves per theme in globals.css.
+          // Foreground for content sitting ON an accent surface: near-black on
+          // dark, white on light. Resolves per theme in globals.css.
           on: "var(--c-accent-on)",
           light: "var(--c-accent-light)",
           border: "var(--c-accent-border)",
+        },
+        // The brand orange. Wordmark and wheel only — never a button, never a
+        // link. Colour in the UI is reserved for coverage state.
+        mark: {
+          DEFAULT: "var(--c-mark)",
         },
         ink: {
           DEFAULT: "var(--c-ink)",

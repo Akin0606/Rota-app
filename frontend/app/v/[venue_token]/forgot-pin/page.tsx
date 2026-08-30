@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import Toast from "@/components/toast";
 import { ApiError, forgotPin } from "@/lib/api";
+import Waiting from "@/components/waiting";
 
 export default function ForgotPinPage({ params }: { params: { venue_token: string } }) {
   const { venue_token } = params;
@@ -72,7 +73,7 @@ export default function ForgotPinPage({ params }: { params: { venue_token: strin
                 disabled={sending}
                 className="w-full rounded-control bg-accent py-4 text-center text-base font-semibold text-accent-on disabled:opacity-60"
               >
-                {sending ? "Sending…" : "Send my PIN"}
+                {sending ? <Waiting label="Sending…" /> : "Send my PIN"}
               </button>
             </>
           )}

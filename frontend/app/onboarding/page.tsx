@@ -26,7 +26,8 @@ import {
   updateVenue,
 } from "@/lib/api";
 import { createClient } from "@/lib/supabase";
-import { SHIFT_COLORS } from "@/lib/constants";
+import { SHIFT_COLORS, SUPPORT_EMAIL } from "@/lib/constants";
+import Waiting from "@/components/waiting";
 
 // ── Venue type presets (the seed) ──────────────────────────────────────────
 type VenueKey = "pub" | "bar" | "resto" | "cafe" | "hotel" | "other";
@@ -640,7 +641,7 @@ function OnboardingWizard() {
     if (si === 0)
       return (
         <button className="ob-btn" onClick={handleStart} disabled={saving}>
-          {saving ? "Starting…" : "Start setup"} <OIcon name="arrow-right" size={17} />
+          {saving ? <Waiting label="Starting…" /> : "Start setup"} <OIcon name="arrow-right" size={17} />
         </button>
       );
     if (si === 1)
@@ -652,13 +653,13 @@ function OnboardingWizard() {
     if (si === 2)
       return (
         <button className="ob-btn" onClick={handleRolesContinue} disabled={saving}>
-          {saving ? "Saving…" : "Looks right"} <OIcon name="arrow-right" size={17} />
+          {saving ? <Waiting label="Saving…" /> : "Looks right"} <OIcon name="arrow-right" size={17} />
         </button>
       );
     if (si === 3)
       return (
         <button className="ob-btn" onClick={handleHoursContinue} disabled={saving}>
-          {saving ? "Saving…" : "Continue"} <OIcon name="arrow-right" size={17} />
+          {saving ? <Waiting label="Saving…" /> : "Continue"} <OIcon name="arrow-right" size={17} />
         </button>
       );
     if (si === 4)
@@ -1092,7 +1093,7 @@ function ResendWall() {
         <div className="ob-p" style={{ maxWidth: 300 }}>
           Setup links work once and for 7 days. Ask your Rotally contact to send a fresh one, and you&apos;ll be set up in a few minutes.
         </div>
-        <a className="ob-btn" style={{ maxWidth: 300 }} href="mailto:hello@rotally.co.uk?subject=Resend%20my%20setup%20link">Request a new link</a>
+        <a className="ob-btn" style={{ maxWidth: 300 }} href={`mailto:${SUPPORT_EMAIL}?subject=Resend%20my%20setup%20link`}>Request a new link</a>
       </div>
     </div>
   );

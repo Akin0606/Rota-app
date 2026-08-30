@@ -54,6 +54,7 @@ import {
 } from "@/lib/api";
 import { STAFF_ROLES } from "@/lib/constants";
 import { formatWeekRange } from "@/lib/utils";
+import Waiting from "@/components/waiting";
 
 // This week's Monday (offset 0) and the following weeks, as YYYY-MM-DD.
 function mondayISO(offsetWeeks: number): string {
@@ -642,14 +643,14 @@ export default function RotaPage() {
               disabled={copying}
               className="cp-hairline rounded-[9px] bg-surface-card px-3 py-2 text-[12px] font-medium text-ink-muted disabled:opacity-60"
             >
-              {copying ? "Copying…" : "Copy last week"}
+              {copying ? <Waiting label="Copying…" /> : "Copy last week"}
             </button>
             <button
               onClick={handleGenerate}
               disabled={generating}
               className="rounded-[9px] bg-accent px-3 py-2 text-[12px] font-medium text-accent-on disabled:opacity-60"
             >
-              {generating ? "Generating…" : "Auto-fill"}
+              {generating ? <Waiting label="Generating…" /> : "Auto-fill"}
             </button>
           </div>
         )}
@@ -739,7 +740,7 @@ export default function RotaPage() {
           disabled={generating}
           className="mb-5 w-full rounded-[11px] bg-accent px-4 py-3 text-[13px] font-medium text-accent-on disabled:opacity-60"
         >
-          {generating ? "Generating…" : "Auto-fill this week"}
+          {generating ? <Waiting label="Generating…" /> : "Auto-fill this week"}
         </button>
       )}
 
@@ -929,7 +930,7 @@ export default function RotaPage() {
                 disabled={clearingId !== null}
                 className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
               >
-                {clearingId ? "Clearing…" : "Clear submission"}
+                {clearingId ? <Waiting label="Clearing…" /> : "Clear submission"}
               </button>
             </div>
           </div>
@@ -962,7 +963,7 @@ export default function RotaPage() {
                 disabled={publishing}
                 className="rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-accent-on disabled:opacity-60"
               >
-                {publishing ? "Publishing…" : "Publish anyway"}
+                {publishing ? <Waiting label="Publishing…" /> : "Publish anyway"}
               </button>
             </div>
           </div>
@@ -1000,7 +1001,7 @@ export default function RotaPage() {
               disabled={publishing}
               className="flex shrink-0 items-center gap-1.5 rounded-[11px] bg-accent px-4 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-50"
             >
-              <ManagerIcon name="send" size={15} /> {publishing ? "Publishing…" : "Publish"}
+              <ManagerIcon name="send" size={15} /> {publishing ? <Waiting label="Publishing…" /> : "Publish"}
             </button>
           )}
         </div>

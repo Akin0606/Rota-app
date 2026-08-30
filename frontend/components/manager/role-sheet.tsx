@@ -13,6 +13,7 @@ import {
 
 import BottomSheet from "./bottom-sheet";
 import ManagerIcon, { type ManagerIconName } from "./icon";
+import Waiting from "@/components/waiting";
 
 // The picker set — role-appropriate glyphs from the manager icon set.
 const ROLE_ICONS: ManagerIconName[] = [
@@ -122,7 +123,7 @@ export default function RoleSheet({
             className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-accent-on disabled:opacity-60"
           >
             <ManagerIcon name="check" size={15} />
-            {saving ? "Saving…" : editing ? "Save changes" : "Add role"}
+            {saving ? <Waiting label="Saving…" /> : editing ? "Save changes" : "Add role"}
           </button>
         </>
       }

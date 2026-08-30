@@ -21,6 +21,8 @@ import {
   setVenueNotes,
 } from "@/lib/admin-api";
 import { formatWeekRange } from "@/lib/utils";
+import Mark from "@/components/mark";
+import Waiting from "@/components/waiting";
 
 function initials(name: string): string {
   return name
@@ -196,7 +198,7 @@ export default function AdminVenueDetailPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-24 text-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-hairline border-t-accent" />
+        <Mark spinning className="h-6 w-6 text-ink-faint" />
         <div className="text-sm text-ink-muted">Loading venue…</div>
       </div>
     );
@@ -247,7 +249,7 @@ export default function AdminVenueDetailPage() {
           disabled={generating || !venue.period}
           className="rounded-lg border border-hairline bg-surface-card px-3.5 py-2 text-xs font-semibold text-ink-muted disabled:opacity-50"
         >
-          {generating ? "Running solver…" : "Trigger solver"}
+          {generating ? <Waiting label="Running solver…" /> : "Trigger solver"}
         </button>
         <button
           onClick={handleViewRota}
@@ -260,7 +262,7 @@ export default function AdminVenueDetailPage() {
           disabled={linkLoading}
           className="rounded-lg border border-hairline bg-surface-card px-3.5 py-2 text-xs font-semibold text-ink-muted disabled:opacity-50"
         >
-          {linkLoading ? "Creating…" : "Support login"}
+          {linkLoading ? <Waiting label="Creating…" /> : "Support login"}
         </button>
         <button
           onClick={handleToggleActive}
@@ -269,7 +271,7 @@ export default function AdminVenueDetailPage() {
             venue.is_active ? "bg-unavail-text" : "bg-avail-text"
           }`}
         >
-          {togglingActive ? "Saving…" : venue.is_active ? "Disable venue" : "Enable venue"}
+          {togglingActive ? <Waiting label="Saving…" /> : venue.is_active ? "Disable venue" : "Enable venue"}
         </button>
       </div>
 
@@ -284,7 +286,7 @@ export default function AdminVenueDetailPage() {
               disabled={savingNotes}
               className="rounded-lg bg-accent px-3 py-1.5 text-[11px] font-semibold text-accent-on disabled:opacity-60"
             >
-              {savingNotes ? "Saving…" : "Save notes"}
+              {savingNotes ? <Waiting label="Saving…" /> : "Save notes"}
             </button>
           )}
         </div>
@@ -445,7 +447,7 @@ export default function AdminVenueDetailPage() {
             disabled={deleting || deleteConfirm !== venue.name}
             className="flex-1 rounded-xl bg-unavail-text py-3.5 text-center text-sm font-semibold text-white disabled:opacity-40"
           >
-            {deleting ? "Deleting…" : "Delete permanently"}
+            {deleting ? <Waiting label="Deleting…" /> : "Delete permanently"}
           </button>
         </div>
       </Modal>

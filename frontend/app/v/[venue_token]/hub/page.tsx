@@ -32,6 +32,7 @@ import {
   sumShiftHours,
   weeksFromThisWeek,
 } from "@/lib/utils";
+import Waiting from "@/components/waiting";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -431,7 +432,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
                 disabled={resolving}
                 className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-on disabled:opacity-60"
               >
-                {resolving ? "Accepting…" : "Accept shift"}
+                {resolving ? <Waiting label="Accepting…" /> : "Accept shift"}
               </button>
             </div>
           </>
@@ -458,7 +459,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
                 disabled={resolvingSwap}
                 className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-on disabled:opacity-60"
               >
-                {resolvingSwap ? "Accepting…" : "Accept swap"}
+                {resolvingSwap ? <Waiting label="Accepting…" /> : "Accept swap"}
               </button>
             </div>
           </>

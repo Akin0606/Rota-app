@@ -6,6 +6,7 @@ import LoadingScreen from "@/components/loading-screen";
 import Toast from "@/components/toast";
 import { ApiError, LeaveRequest, approveLeave, listLeaveRequests, rejectLeave } from "@/lib/api";
 import { parseISODate } from "@/lib/utils";
+import Waiting from "@/components/waiting";
 
 const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string }> = {
   pending: { label: "Pending", bg: "bg-warn-bg", text: "text-warn-text" },
@@ -149,7 +150,7 @@ export default function LeavePage() {
                     disabled={busy}
                     className="rounded-lg bg-accent px-3.5 py-1.5 text-[12px] font-semibold text-accent-on disabled:opacity-50"
                   >
-                    {busy ? "Working…" : "Approve"}
+                    {busy ? <Waiting label="Working…" /> : "Approve"}
                   </button>
                   <button
                     onClick={() => handleReject(r)}

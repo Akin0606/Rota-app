@@ -7,6 +7,7 @@ import { ApiError, getShiftSchedule, setShiftSchedule, updateShift, type Shift }
 import BottomSheet from "./bottom-sheet";
 import Switch from "./switch";
 import TimeField from "./time-field";
+import Waiting from "@/components/waiting";
 
 // Per-day shift-hours editor (Batch 4 of the per-day shift model). Writes the
 // venue's real per-day schedule to shift_days via PUT /shifts/{id}/days: a
@@ -187,7 +188,7 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, onDelete, show
             disabled={saving || loading || openCount === 0}
             className="flex-1 rounded-xl bg-accent py-3 text-sm font-medium text-accent-on disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Save shift"}
+            {saving ? <Waiting label="Saving…" /> : "Save shift"}
           </button>
         </>
       }

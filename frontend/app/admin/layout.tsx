@@ -12,6 +12,7 @@ import {
   listAdminVenues,
   setAdminSecret,
 } from "@/lib/admin-api";
+import Waiting from "@/components/waiting";
 
 const NAV_ITEMS = [
   { key: "venues", label: "Venues", icon: "🏢", href: "/admin" },
@@ -91,7 +92,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             disabled={verifying}
             className="w-full rounded-control bg-accent py-3 text-sm font-semibold text-accent-on disabled:opacity-60"
           >
-            {verifying ? "Checking…" : "Enter"}
+            {verifying ? <Waiting label="Checking…" /> : "Enter"}
           </button>
         </div>
       </div>

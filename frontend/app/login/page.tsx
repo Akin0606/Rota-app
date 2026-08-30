@@ -6,6 +6,8 @@ import ManagerIcon from "@/components/manager/icon";
 import ModeToggle from "@/components/manager/mode-toggle";
 import { ApiError, requestLoginCode, verifyLoginCode, warmBackend } from "@/lib/api";
 import Wordmark from "@/components/wordmark";
+import Mark from "@/components/mark";
+import Waiting from "@/components/waiting";
 
 // Supabase's OTP length is a project setting (Auth → Email → OTP length); this
 // must match it. The reference mockup drew six boxes, but this project issues
@@ -112,7 +114,7 @@ function EmailStep({
         className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-[15px] text-[15px] font-medium text-accent-on transition-opacity hover:opacity-90 disabled:opacity-60"
       >
         <ManagerIcon name="arrow-right" size={17} />
-        {sending ? "Sending…" : "Send login code"}
+        {sending ? <Waiting label="Sending…" /> : "Send login code"}
       </button>
 
       <div className="mt-4 text-center text-xs leading-relaxed text-ink-faint">
@@ -230,7 +232,7 @@ function CodeStep({ email, onBack }: { email: string; onBack: () => void }) {
   if (signingIn) {
     return (
       <div className="flex flex-col items-center gap-4 py-10 text-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-hairline border-t-accent" />
+        <Mark spinning className="h-8 w-8 text-ink-faint" />
         <div className="text-sm text-ink-muted">Signing you in…</div>
       </div>
     );
@@ -286,7 +288,7 @@ function CodeStep({ email, onBack }: { email: string; onBack: () => void }) {
         className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-[15px] text-[15px] font-medium text-accent-on transition-opacity hover:opacity-90 disabled:opacity-60"
       >
         <ManagerIcon name="lock-open" size={17} />
-        {verifying ? "Verifying…" : "Verify & sign in"}
+        {verifying ? <Waiting label="Verifying…" /> : "Verify & sign in"}
       </button>
 
       <div className="mt-[18px] text-center text-xs text-ink-muted">

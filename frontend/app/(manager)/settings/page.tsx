@@ -39,6 +39,7 @@ import {
 } from "@/lib/api";
 import { SHIFT_COLORS } from "@/lib/constants";
 import { compactTimeRange, DAY_NAMES, formatWeekRange } from "@/lib/utils";
+import Waiting from "@/components/waiting";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -748,7 +749,7 @@ export default function SettingsPage() {
         disabled={saving}
         className="mt-6 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-accent-on disabled:opacity-60"
       >
-        {saving ? "Saving…" : "Save Changes"}
+        {saving ? <Waiting label="Saving…" /> : "Save Changes"}
       </button>
 
       <Modal
@@ -776,7 +777,7 @@ export default function SettingsPage() {
             disabled={unpublishing}
             className="flex-1 rounded-xl bg-unavail-text py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
           >
-            {unpublishing ? "Unpublishing…" : "Unpublish"}
+            {unpublishing ? <Waiting label="Unpublishing…" /> : "Unpublish"}
           </button>
         </div>
       </Modal>
