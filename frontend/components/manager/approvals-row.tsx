@@ -51,7 +51,7 @@ export default function ApprovalsRow({
   const shiftsById = new Map(shifts.map((s) => [s.id, s]));
 
   const okBtn =
-    "rounded-[7px] bg-accent px-2.5 py-1.5 text-[11.5px] font-medium text-white transition-[transform] active:scale-[0.96] disabled:opacity-50";
+    "rounded-[7px] bg-accent px-2.5 py-1.5 text-[11.5px] font-medium text-accent-on transition-[transform] active:scale-[0.96] disabled:opacity-50";
   const noBtn =
     "flex h-[30px] w-[30px] items-center justify-center rounded-[7px] border-[0.5px] border-hairline text-ink-muted transition-[transform] active:scale-[0.96] disabled:opacity-50";
 

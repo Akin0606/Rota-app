@@ -43,7 +43,7 @@ export default function ManagerNav() {
                   key={t.href}
                   href={t.href}
                   className={`whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-medium transition-colors ${
-                    active ? "bg-accent text-white" : "text-ink-muted hover:!text-ink"
+                    active ? "bg-accent text-accent-on" : "text-ink-muted hover:!text-ink"
                   }`}
                 >
                   {t.label}

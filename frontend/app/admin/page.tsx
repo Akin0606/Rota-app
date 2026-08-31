@@ -206,7 +206,7 @@ export default function AdminVenuesPage() {
               onClick={() => setStatusFilter(f.key)}
               className={`rounded-full px-3 py-1.5 text-[12px] font-semibold transition ${
                 statusFilter === f.key
-                  ? "bg-accent text-white"
+                  ? "bg-accent text-accent-on"
                   : "border border-hairline bg-surface-card text-ink-muted hover:bg-surface-subtle"
               }`}
             >

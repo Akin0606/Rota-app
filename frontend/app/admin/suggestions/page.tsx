@@ -124,7 +124,7 @@ export default function AdminSuggestionsPage() {
             onClick={() => setFilter(f.key)}
             className={`rounded-full px-3.5 py-1.5 text-[12px] font-semibold transition-colors ${
               filter === f.key
-                ? "bg-accent text-white"
+                ? "bg-accent text-accent-on"
                 : "border border-hairline bg-surface-card text-ink-muted"
             }`}
           >

@@ -27,7 +27,7 @@ export default function ThemeToggle() {
           key={t}
           onClick={() => apply(t)}
           className={`rounded-lg px-4 py-1.5 text-[13px] font-semibold capitalize transition ${
-            theme === t ? "bg-accent text-white" : "text-ink-muted"
+            theme === t ? "bg-accent text-accent-on" : "text-ink-muted"
           }`}
         >
           {t}

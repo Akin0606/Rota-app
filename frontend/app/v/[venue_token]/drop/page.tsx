@@ -347,7 +347,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
               >
                 {row}
                 <span
-                  className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] text-white transition-[border-color,background-color] duration-200 ${
+                  className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] text-accent-on transition-[border-color,background-color] duration-200 ${
                     isSelected ? "border-accent bg-accent" : "border-hairline"
                   }`}
                 >

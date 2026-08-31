@@ -665,7 +665,7 @@ export default function RotaPage() {
               key={opt.weekStart}
               onClick={() => setSelectedWeek(opt.weekStart)}
               className={`whitespace-nowrap rounded-[9px] px-3 py-1.5 text-[12px] font-medium transition ${
-                active ? "bg-accent text-white" : "cp-hairline bg-surface-card text-ink-muted"
+                active ? "bg-accent text-accent-on" : "cp-hairline bg-surface-card text-ink-muted"
               }`}
             >
               {opt.label}

@@ -450,7 +450,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
               key={opt.weekStart}
               onClick={() => setSelectedWeek(opt.weekStart)}
               className={`inline-flex min-h-[44px] shrink-0 items-center rounded-cp-slot px-3.5 py-2 text-[12px] font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.96] ${
-                active ? "bg-accent text-white" : "cp-hairline bg-surface-card text-ink-muted"
+                active ? "bg-accent text-accent-on" : "cp-hairline bg-surface-card text-ink-muted"
               }`}
             >
               {opt.label}
@@ -614,7 +614,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                     key={di}
                     onClick={() => setNoteDay(di)}
                     className={`inline-flex min-h-[44px] items-center rounded-cp-badge px-3 py-1 text-[11px] font-medium transition-colors ${
-                      noteDay === di ? "bg-accent text-white" : "bg-cp-icon text-ink-muted"
+                      noteDay === di ? "bg-accent text-accent-on" : "bg-cp-icon text-ink-muted"
                     }`}
                   >
                     {day}

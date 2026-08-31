@@ -179,7 +179,7 @@ export default function RoleSheet({
                 >
                   <span
                     className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-medium ${
-                      on ? "bg-accent text-white" : "bg-cp-icon text-ink-muted"
+                      on ? "bg-accent text-accent-on" : "bg-cp-icon text-ink-muted"
                     }`}
                   >
                     {initials(s.name)}

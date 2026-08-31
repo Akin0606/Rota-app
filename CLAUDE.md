@@ -67,13 +67,30 @@ The **Design language** below is the operative rulebook (the old
 environment — do not try to read it). For deeper UI passes the `ui-ux-pro-max`
 skill is available.
 
-Design language for Crewplan:
-- Dark-mode first: #0D0D0D background, #FF4D00 orange accent, white/off-white text
-- Modern and clean — generous whitespace, flat surfaces, no gradients or drop shadows
-- Minimal borders: 0.5px solid, low-opacity
-- Cards: #141414 background, 12px radius
-- Typography: sentence case always, two weights only (400 body, 500 bold), no ALL CAPS except micro-labels
-- Motion: subtle only — short transitions on hover/toggle, nothing decorative
+Design language for Rotally (verified in `frontend/app/globals.css` — this
+section described the pre-rebrand crewplan system until 2026-08-31 and was
+actively misleading; trust the tokens, not memory):
+- **The accent is NEUTRAL, not orange.** `--c-accent` = `#f4f4f2` on dark /
+  `#0c0c0d` on light. Text on it is **`--c-accent-on`** (the inverse) — never
+  `text-white`, which is invisible on the dark-theme accent. Primary buttons are
+  high-contrast black/white.
+- **Orange is the WORDMARK ONLY** (`--c-mark` `#ff6b00` dark / `#b04d0b` light).
+  Colour in the UI means coverage; nothing else is coloured for emphasis.
+- **Coverage colours are the only meaningful colour:** `--cp-green` `#2ecc71`
+  covered · `--cp-amber` `#e5c100` short · `--cp-red` `#e5484d` uncovered.
+  `text-white` on those is correct and stays.
+- **Scopes:** `.cp-staff` (PWA), `.cp-manager` (manager app), `.cp-onboarding`,
+  bare `:root` (admin + marketing) — all on the same neutral-accent system.
+  Dark-first; light via `data-theme` + the pre-paint script.
+- Dark-mode first: page `#0d0d0d`, cards `#141414`, 12px radius, **0.5px**
+  hairlines (`.cp-hairline`), flat — no gradients or drop shadows.
+- Type: Space Grotesk display, IBM Plex body, **Archivo wordmark**
+  (`--font-mark`). Sentence case always, two weights only (400 / 500), no ALL
+  CAPS except micro-labels.
+- Motion: reuse the shared tokens `--ease-out` / `--ease-in-out` /
+  `--ease-drawer` / `--ease-pop` (already on `:root`). Subtle only.
+  **The spinning wheel (`Waiting` / `Mark spinning`) is every wait** — no
+  generic spinners anywhere.
 - Every design decision should feel intentional, not templated
 
 ## Current state (living — keep accurate)

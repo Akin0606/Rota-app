@@ -236,7 +236,7 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, onDelete, show
                       onClick={() => toggleOpen(d.day_index, !d.open)}
                       aria-pressed={d.open}
                       className={`rounded-lg px-3 py-2 text-[13px] font-medium transition-colors ${
-                        d.open ? "bg-accent text-white" : "bg-surface-subtle text-ink-muted"
+                        d.open ? "bg-accent text-accent-on" : "bg-surface-subtle text-ink-muted"
                       }`}
                     >
                       {DAY_LABELS[d.day_index]}
