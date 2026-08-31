@@ -1,19 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 
+import Mark from "@/components/mark";
 import type { RotaSummary, Shift } from "@/lib/api";
 import { usePresence } from "@/lib/use-presence";
 import { DAY_LABELS } from "@/lib/utils";
 
 import ManagerIcon from "./icon";
 
-// The reference's "Generate" screen: a stepped solving animation that resolves
-// to an honest result. The phases mirror the real solver's objective order
-// (coverage → preferences → compliance), minus fairness (omitted — the solver
-// balances hours as a fixed tie-break, not a tunable phase). Shared by the rota
-// page's Auto-fill and the Scheduler's Generate bar so there's one definition of
-// "what generating looks like".
+// The generate overlay: a stepped solving animation that resolves to an honest
+// result. Shared by the rota page and the Scheduler's Generate bar, so there is
+// one definition of what generating looks like.
+//
+// The animation and the ending are deliberately decoupled. Every moving part is
+// a CSS keyframe (see .cp-gen-* in globals.css) running on the compositor, and
+// NOTHING here decides when the wait is over — this state is replaced the moment
+// `result || error` lands. A scripted timeline that "completed" while a cold
+// Render instance was still solving would be worse than an honest indeterminate
+// wheel, which is why the rail never reaches 100%.
 type GenerateOverlayProps = {
   open: boolean;
   // null while the solver is running; set when it resolves.
@@ -25,23 +30,20 @@ type GenerateOverlayProps = {
   onClose: () => void;
 };
 
+// Four beats, in the order the solver genuinely works: it reads availability,
+// balances hours as a tie-break, hard-blocks on compliance, then places. Naming
+// them is the justification for a wait longer than 300ms — the manager learns
+// what the app is doing for them, which is the whole pitch.
 const PHASES = [
-  "Reading availability & leave",
-  "Matching coverage & roles",
-  "Checking compliance & under-18s",
+  "Reading everyone's availability",
+  "Balancing hours fairly",
+  "Checking rest gaps & under-18 rules",
+  "Placing the shifts",
 ];
 
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mq.matches);
-    const onChange = () => setReduced(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return reduced;
-}
+// Reduced motion is handled entirely in CSS (see .cp-gen-* in globals.css), so
+// there is no matchMedia hook here any more. That also removes the only reason
+// this component re-rendered while a solve was in flight.
 
 export default function GenerateOverlay({
   open,
@@ -52,26 +54,6 @@ export default function GenerateOverlay({
   onReviewRota,
   onClose,
 }: GenerateOverlayProps) {
-  const reducedMotion = usePrefersReducedMotion();
-  const [step, setStep] = useState(0);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const running = open && !result && !error;
-
-  // Advance the phase label while the solver runs. Purely cosmetic — the real
-  // request is a single await; this just paces the reassurance. Skipped under
-  // reduced motion, which shows a single static line instead.
-  useEffect(() => {
-    if (!running || reducedMotion) return;
-    setStep(0);
-    timer.current = setInterval(() => {
-      setStep((s) => (s < PHASES.length - 1 ? s + 1 : s));
-    }, 850);
-    return () => {
-      if (timer.current) clearInterval(timer.current);
-    };
-  }, [running, reducedMotion]);
-
   const shiftsById = useMemo(() => new Map(shifts.map((s) => [s.id, s])), [shifts]);
 
   const { render, state } = usePresence(open, 260);
@@ -93,56 +75,42 @@ export default function GenerateOverlay({
             onReviewRota={onReviewRota}
           />
         ) : (
-          <RunningState step={step} reducedMotion={reducedMotion} />
+          <RunningState />
         )}
       </div>
     </div>
   );
 }
 
-function RunningState({ step, reducedMotion }: { step: number; reducedMotion: boolean }) {
+function RunningState() {
   return (
     <div className="flex flex-col items-center py-2">
-      <div
-        className={`mb-6 flex h-16 w-16 items-center justify-center rounded-[18px] bg-accent-light text-accent ${
-          reducedMotion ? "" : "animate-pulse"
-        }`}
-      >
-        <ManagerIcon name="sparkles" size={30} />
+      {/* The wheel does every wait. A rota is a wheel, and this is the longest
+          wait in the app, so it is the one place that most has to look like
+          Rotally rather than like a generic control. */}
+      <div className="mb-5 flex items-center justify-center gap-2.5">
+        <Mark spinning className="h-[26px] w-[26px] text-ink" />
+        <span className="text-[19px] font-medium tracking-[-0.4px] text-ink">
+          Building your rota
+        </span>
       </div>
-      <div className="mb-1 text-[19px] font-medium tracking-[-0.4px] text-ink">Building your rota</div>
-      {reducedMotion ? (
-        <div className="text-[13px] text-ink-muted">Solving — this takes a few seconds.</div>
-      ) : (
-        <div className="flex w-full flex-col gap-2 pt-4">
-          {PHASES.map((label, i) => {
-            const done = i < step;
-            const active = i === step;
-            return (
-              <div key={label} className="flex items-center gap-2.5 text-left">
-                <span
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] ${
-                    done
-                      ? "bg-cp-green-soft text-cp-green"
-                      : active
-                        ? "bg-accent-light text-accent"
-                        : "bg-cp-icon text-ink-faint"
-                  }`}
-                >
-                  {done ? <ManagerIcon name="check" size={12} /> : <span>{i + 1}</span>}
-                </span>
-                <span
-                  className={`text-[13px] ${
-                    active ? "font-medium text-ink" : done ? "text-ink-muted" : "text-ink-faint"
-                  }`}
-                >
-                  {label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+
+      <div className="cp-gen-rail mb-[18px] h-[5px] w-full max-w-[230px] overflow-hidden rounded-full bg-cp-track">
+        <i />
+      </div>
+
+      {/* The steps are a live region so a screen reader hears the explanation
+          too — the wheel itself is aria-hidden, as a decorative mark should be. */}
+      <div className="flex w-full max-w-[250px] flex-col gap-0.5" aria-live="polite">
+        {PHASES.map((label) => (
+          <div key={label} className="cp-gen-step flex items-center gap-2.5 px-0.5 py-[5px] text-left">
+            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-cp-green-soft text-cp-green">
+              <ManagerIcon name="check" size={11} strokeWidth={2.25} />
+            </span>
+            <span className="text-[12.5px] text-ink">{label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

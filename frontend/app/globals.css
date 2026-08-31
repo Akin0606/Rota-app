@@ -970,3 +970,62 @@ a:hover {
     animation: cp-wheel-pulse 1.6s ease-in-out infinite;
   }
 }
+
+/* ==========================================================================
+   THE GENERATE STEPPER (R4)
+   The one legitimately long wait in the app — a real CP-SAT solve — so it gets
+   an explanation rather than a spinner. The wheel carries the wait (it is the
+   brand's loading indicator); the stepper says what the solver is doing.
+
+   All of it is CSS keyframes on transform and opacity only, so it runs on the
+   compositor and stays smooth while the request is in flight. Nothing here is
+   driven by a timer, and nothing here decides when the overlay ends: the result
+   state replaces this the moment `result || error` lands. That separation is the
+   whole point — Render's free tier can take longer than the animation, and a
+   progress bar that has "finished" while the work is still running is a lie.
+
+   Which is also why the rail never reaches 100%. It fills to 92% over ~3.6s and
+   then crawls, so it is always honestly short of done until the real answer
+   arrives and the whole panel changes.
+   ========================================================================== */
+@keyframes cp-gen-rail {
+  0%   { transform: scaleX(0); }
+  60%  { transform: scaleX(0.92); }
+  100% { transform: scaleX(0.98); }
+}
+@keyframes cp-gen-step {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.cp-gen-rail > i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--c-accent);
+  transform-origin: left center;
+  transform: scaleX(0);
+  animation: cp-gen-rail 6s linear forwards;
+}
+.cp-gen-step {
+  opacity: 0;
+  animation: cp-gen-step 420ms var(--ease-out) forwards;
+}
+/* ~0.9s apart, so the four beats span the rail's first fill. */
+.cp-gen-step:nth-child(1) { animation-delay: 0ms; }
+.cp-gen-step:nth-child(2) { animation-delay: 900ms; }
+.cp-gen-step:nth-child(3) { animation-delay: 1800ms; }
+.cp-gen-step:nth-child(4) { animation-delay: 2700ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Drop the rail's scale and the steps' lift. The steps still stagger in by
+     opacity alone — the sequence is information, not decoration, and removing
+     it entirely would leave a blank panel for three seconds. */
+  .cp-gen-rail > i {
+    transform: scaleX(0.92);
+    animation: none;
+  }
+  .cp-gen-step {
+    animation-name: cp-fade-in;
+    animation-duration: 300ms;
+  }
+}
