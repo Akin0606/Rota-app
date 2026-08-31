@@ -5,21 +5,22 @@ import Link from "next/link";
 
 import LoadingScreen from "@/components/loading-screen";
 import ManagerIcon from "@/components/manager/icon";
+import StatusHero, { buildHeroPlan } from "@/components/manager/status-hero";
+import TodayStrip from "@/components/manager/today-strip";
 import Modal from "@/components/modal";
-import StatusBanner from "@/components/status-banner";
-import TeamStatusCard from "@/components/team-status-card";
 import Toast from "@/components/toast";
+import Waiting from "@/components/waiting";
 import {
   Activity,
   ApiError,
   Period,
   RotaSummary,
-  SchedulingRules,
+  SchedulerConfig,
   Shift,
   StaffManager,
   Venue,
   getRota,
-  getRules,
+  getScheduler,
   getVenue,
   listActivity,
   listPeriods,
@@ -30,30 +31,67 @@ import {
 } from "@/lib/api";
 import {
   DAY_NAMES,
-  daysUntilDeadline,
+  daysUntilClose,
   describeAction,
   formatRelativeTime,
   formatWeekRange,
+  londonToday,
+  parseISODate,
+  periodForToday,
+  planningPeriod,
   shiftDurationHours,
   startsWithName,
+  todayIndexInWeek,
 } from "@/lib/utils";
-import Waiting from "@/components/waiting";
 
 const CACHE_KEY = "rotally_dashboard_snapshot";
 
-export default function DashboardPage() {
+// Home — reframed present-first (H1/H2/H3).
+//
+// The old screen was a generic SaaS org-chart: "Good morning / Dashboard", a
+// four-stat vanity row, then Team Status and Recent Activity. Two of those four
+// numbers ("Total Hours 214", "Conflicts 0") are things a small-pub owner does
+// nothing with, and everything above the fold was about a week that hasn't
+// happened yet — a status page, not a home.
+//
+// The order now reads: where am I right now (Today) → what's my next job (the
+// status hero) → what needs me (joins, conflicts-if-any) → my people (Team) →
+// reassurance (Recent, demoted). Present tense first, planning second, both
+// above the fold on a phone, and no "Today | This week" tabs — a toggle would
+// be a tap tax on the thing they opened the app to see.
+//
+// The route stays /dashboard deliberately: renaming it means touching
+// middleware.ts's matcher (miss it and manager sessions stop refreshing here)
+// and the pre-paint theme regex in app/layout.tsx (miss it and a light-mode
+// manager gets a dark Home). Both fail silently, for no user-visible gain.
+
+export default function HomePage() {
   const [venue, setVenue] = useState<Venue | null>(null);
-  const [period, setPeriod] = useState<Period | null>(null);
-  const [rules, setRules] = useState<SchedulingRules | null>(null);
+  // Two periods, deliberately named apart. `planning` is the week the manager is
+  // being asked to build (the hero); `today` is the week we're standing in (the
+  // Today strip). They're usually different, and the old page only ever held the
+  // planning one — which is why a Today strip built on it would have shown next
+  // week's Monday.
+  const [planning, setPlanning] = useState<Period | null>(null);
+  const [today, setToday] = useState<Period | null>(null);
+  // The authoritative close time comes from the scheduler window, not the
+  // legacy `avail_closes_day` name on the rules row. That field is the Nth day
+  // OF the week being collected for, so a Wednesday close on w/c 7 Sept reads as
+  // 9 Sept — two days after the week has already started. The backend derives
+  // the real close from the legal notice period before the week's earliest
+  // shift, and the hero states a deadline out loud, so it has to be the real one.
+  const [scheduler, setScheduler] = useState<SchedulerConfig | null>(null);
   const [staff, setStaff] = useState<StaffManager[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
-  const [rota, setRota] = useState<RotaSummary | null>(null);
+  const [planningRota, setPlanningRota] = useState<RotaSummary | null>(null);
+  const [todayRota, setTodayRota] = useState<RotaSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [reminding, setReminding] = useState(false);
+  const [remindingId, setRemindingId] = useState<string | null>(null);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [staffBusy, setStaffBusy] = useState(false);
 
@@ -63,16 +101,16 @@ export default function DashboardPage() {
   }
 
   async function handleRemindPending() {
-    if (!period) return;
+    if (!planning) return;
     setReminding(true);
     try {
-      const result = await remindStaff({ periodId: period.id });
+      const result = await remindStaff({ periodId: planning.id });
       showToast(
         result.reminded === 0
           ? "Everyone's already submitted"
           : result.email_sent
-            ? `Reminded ${result.reminded} staff by email`
-            : `Reminded ${result.reminded} staff — but no emails were delivered`,
+            ? `Reminded ${result.reminded} by email`
+            : `Reminded ${result.reminded} — but no emails were delivered`,
       );
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not send reminders");
@@ -81,10 +119,10 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleModalRemind(member: StaffManager) {
-    setStaffBusy(true);
+  async function handleRemindOne(member: StaffManager) {
+    setRemindingId(member.id);
     try {
-      const result = await remindStaff({ staffId: member.id, periodId: period?.id });
+      const result = await remindStaff({ staffId: member.id, periodId: planning?.id });
       showToast(
         result.email_sent
           ? `Reminder emailed to ${member.name.split(" ")[0]}`
@@ -95,7 +133,7 @@ export default function DashboardPage() {
     } catch {
       showToast("Could not send reminder");
     } finally {
-      setStaffBusy(false);
+      setRemindingId(null);
     }
   }
 
@@ -120,12 +158,14 @@ export default function DashboardPage() {
       if (raw) {
         const s = JSON.parse(raw);
         setVenue(s.venue);
-        setPeriod(s.period);
-        setRules(s.rules);
-        setStaff(s.staff);
+        setPlanning(s.planning ?? null);
+        setToday(s.today ?? null);
+        setScheduler(s.scheduler ?? null);
+        setStaff(s.staff ?? []);
         setShifts(s.shifts ?? []);
-        setActivity(s.activity);
-        setRota(s.rota);
+        setActivity(s.activity ?? []);
+        setPlanningRota(s.planningRota ?? null);
+        setTodayRota(s.todayRota ?? null);
         setLoading(false);
       }
     } catch {
@@ -140,40 +180,55 @@ export default function DashboardPage() {
       // Don't blank existing (cached) content while revalidating.
       setError(false);
       try {
-        const [venueRes, periodsRes, rulesRes, activityRes] = await Promise.all([
+        const [venueRes, periodsRes, schedulerRes, activityRes] = await Promise.all([
           getVenue(),
           listPeriods(),
-          getRules(),
-          listActivity(10),
+          getScheduler(),
+          listActivity(8),
         ]);
         if (cancelled) return;
 
-        const current = periodsRes.find((p) => p.status === "collecting") ?? periodsRes[0] ?? null;
-        const [staffRes, shiftsRes, rotaRes] = await Promise.all([
-          listStaff(current?.id),
+        const plan = planningPeriod(periodsRes);
+        const now = periodForToday(periodsRes);
+
+        // At most two rota fetches, usually one or none: a week still collecting
+        // has nothing built, and planning/today are frequently the same week.
+        const wanted: string[] = [];
+        if (plan && plan.status !== "collecting") wanted.push(plan.id);
+        if (now && now.status !== "collecting" && now.id !== plan?.id) wanted.push(now.id);
+        const [staffRes, shiftsRes, rotaEntries] = await Promise.all([
+          listStaff(plan?.id),
           listShifts(),
-          current && current.status !== "collecting" ? getRota(current.id) : Promise.resolve(null),
+          Promise.all(wanted.map((id) => getRota(id).then((r) => [id, r] as const))),
         ]);
         if (cancelled) return;
+
+        const rotaById = new Map<string, RotaSummary>(rotaEntries);
+        const planRota = plan ? (rotaById.get(plan.id) ?? null) : null;
+        const nowRota = now ? (rotaById.get(now.id) ?? null) : null;
 
         setVenue(venueRes);
-        setPeriod(current);
-        setRules(rulesRes);
+        setPlanning(plan);
+        setToday(now);
+        setScheduler(schedulerRes);
         setStaff(staffRes);
         setShifts(shiftsRes);
         setActivity(activityRes);
-        setRota(rotaRes);
+        setPlanningRota(planRota);
+        setTodayRota(nowRota);
         try {
           sessionStorage.setItem(
             CACHE_KEY,
             JSON.stringify({
               venue: venueRes,
-              period: current,
-              rules: rulesRes,
+              planning: plan,
+              today: now,
+              scheduler: schedulerRes,
               staff: staffRes,
               shifts: shiftsRes,
               activity: activityRes,
-              rota: rotaRes,
+              planningRota: planRota,
+              todayRota: nowRota,
             }),
           );
         } catch {
@@ -193,16 +248,16 @@ export default function DashboardPage() {
   }, [reloadToken]);
 
   if (loading) {
-    return <LoadingScreen base="Loading your dashboard…" />;
+    return <LoadingScreen base="Loading your week…" />;
   }
 
   if (error || !venue) {
     return (
       <div className="flex flex-col items-center gap-3 p-10 text-center text-sm text-ink-muted">
-        Something went wrong loading your dashboard.
+        Something went wrong loading your week.
         <button
           onClick={() => setReloadToken((n) => n + 1)}
-          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-accent-on"
+          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-medium text-accent-on"
         >
           Try again
         </button>
@@ -216,173 +271,219 @@ export default function DashboardPage() {
   const activeStaff = staff.filter((s) => s.is_active && !s.pending);
   const submittedCount = activeStaff.filter((s) => s.submitted).length;
   const totalCount = activeStaff.length;
-  const pendingCount = totalCount - submittedCount;
-  const daysLeft = period && rules ? daysUntilDeadline(period.week_start, rules.avail_closes_day) : null;
+  const closesAt =
+    scheduler?.weeks.find((w) => w.week_start === planning?.week_start)?.closes_at ?? null;
+  const daysLeft = closesAt ? daysUntilClose(closesAt) : null;
+
+  const heroPlan = buildHeroPlan({
+    period: planning,
+    rota: planningRota,
+    shifts,
+    submittedCount,
+    totalCount,
+    daysLeft,
+    hasAnyPeriod: Boolean(planning || today),
+  });
+  // The collecting hero's primary is a remind, which has no route — wire it here
+  // rather than letting the builder reach into page state.
+  if (!heroPlan.primary.href) heroPlan.primary.onClick = handleRemindPending;
+
+  // Conflicts surface only when there are some. A "0 / All clear" tile rewards
+  // nothing; a red one-liner that appears exactly when something needs checking
+  // is worth reading.
+  const conflicts = planningRota?.conflicts ?? 0;
+
+  // Mirrors TodayStrip's own gap test so the strip's red state and the hero's
+  // demotion can never disagree about whether today has a hole.
+  const todayIsGappy = (() => {
+    if (!todayRota || !today) return false;
+    if (today.status !== "published" && today.status !== "confirmed") return false;
+    const idx = todayIndexInWeek(today.week_start);
+    if (idx === null) return false;
+    return (
+      todayRota.uncovered.some((u) => u.day_index === idx) ||
+      todayRota.under_covered.some((u) => u.day_index === idx)
+    );
+  })();
+
+  const dateLabel = parseISODate(londonToday()).toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
 
   return (
     <div className="animate-fadeIn px-5 py-6 pb-24 md:px-10 md:py-8 md:pb-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-[13px] font-medium text-ink-faint">Good morning</div>
-          <div className="text-[26px] font-bold text-ink md:text-[28px]">Dashboard</div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          {period && (
-            <div className="rounded-[10px] border border-hairline bg-surface-card px-4 py-2.5 text-[13px] font-medium text-ink-muted">
-              {formatWeekRange(period.week_start)}
-            </div>
-          )}
-          <Link
-            href="/rota"
-            className="rounded-[10px] bg-accent px-4 py-2.5 text-[13px] font-semibold text-accent-on"
-          >
-            Open Rota Builder
-          </Link>
-        </div>
-      </div>
-
-      {period && (
-        <div className="mb-6">
-          <StatusBanner status={period.status} />
-        </div>
-      )}
-
-      {pendingApprovals.length > 0 && (
-        <Link
-          href="/team"
-          className="mb-6 flex items-center gap-3 rounded-panel border border-cp-amber-soft bg-surface-card px-5 py-4"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cp-amber-soft text-cp-amber">
-            <ManagerIcon name="users" size={18} />
+      <div className="mx-auto max-w-[560px] md:max-w-none">
+        {/* A home shouldn't announce that it's the home. Lead with where you
+            are: the venue, and the day it is there. */}
+        <div className="mb-3">
+          <div className="text-[11px] uppercase tracking-[0.09em] text-ink-faint">{venue.name}</div>
+          <div className="mt-0.5 text-[17px] font-medium tracking-[-0.3px] text-ink">
+            {dateLabel}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-bold text-ink">
-              {pendingApprovals.length} {pendingApprovals.length === 1 ? "person wants" : "people want"} to
-              join
-            </div>
-            <div className="mt-0.5 truncate text-xs text-ink-muted">
-              {pendingApprovals
-                .slice(0, 3)
-                .map((s) => s.name.split(" ")[0])
-                .join(", ")}
-              {pendingApprovals.length > 3 ? ` +${pendingApprovals.length - 3}` : ""} · tap to review
-            </div>
-          </div>
-          <span className="shrink-0 rounded-full bg-cp-amber-soft px-3 py-1.5 text-[12px] font-semibold text-cp-amber">
-            Review
-          </span>
-        </Link>
-      )}
-
-      {!period ? (
-        <div className="rounded-panel border border-hairline bg-surface-card p-8 text-center text-sm text-ink-muted">
-          No availability window is open yet.
         </div>
-      ) : (
-        <>
-          <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-            <StatCard
-              label="Availability"
-              value={`${submittedCount}`}
-              sub={`/ ${totalCount}`}
-              href={pendingCount > 0 ? "/team?filter=pending" : "/team"}
-            >
-              <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-page">
-                <div
-                  className="h-full rounded-full bg-accent transition-all"
-                  style={{ width: totalCount ? `${(submittedCount / totalCount) * 100}%` : "0%" }}
-                />
-              </div>
-            </StatCard>
-            <StatCard
-              label="Days Until Deadline"
-              value={daysLeft !== null ? String(Math.max(daysLeft, 0)) : "—"}
-              valueClassName="text-warn-dot"
-              href="/settings"
+
+        {/* Desktop is the minimal widen only — no new information, no extra
+            tiles. Today and the hero stay full-bleed across the top (present
+            tense wins the widest screen too); below them, the things waiting on
+            you sit beside the team. */}
+        <div className="md:grid md:grid-cols-[1fr_340px] md:items-start md:gap-5">
+          <div className="md:col-span-2">
+            <TodayStrip
+              period={today}
+              rota={todayRota}
+              shifts={shifts}
+              staff={staff}
             />
-            <StatCard
-              label="Conflicts"
-              value={rota ? String(rota.conflicts) : "—"}
-              valueClassName={rota && rota.conflicts > 0 ? "text-unavail-text" : "text-avail-text"}
-              extraText={rota ? (rota.conflicts > 0 ? "Needs attention" : "All clear") : "No rota generated yet"}
-              href="/rota"
-            />
-            <StatCard
-              label="Total Hours"
-              value={rota ? String(rota.total_hours) : "0"}
-              extraText={rota ? `Across ${totalCount} staff` : "No rota generated yet"}
-              href="/rota"
-            />
+
+            <StatusHero plan={heroPlan} busy={reminding} demoted={todayIsGappy} />
           </div>
 
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_380px]">
-            <div className="rounded-panel border border-hairline bg-surface-card p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="text-base font-bold text-ink">Team Status</div>
-                {pendingCount > 0 && (
-                  <button
-                    onClick={handleRemindPending}
-                    disabled={reminding}
-                    className="rounded-lg bg-accent-light px-3.5 py-2 text-[13px] font-semibold text-accent disabled:opacity-60"
-                  >
-                    {reminding ? <Waiting label="Reminding…" /> : `Remind ${pendingCount} pending`}
-                  </button>
-                )}
-              </div>
-              {activeStaff.length === 0 ? (
-                <div className="py-6 text-center text-[13px] text-ink-faint">No team members yet.</div>
-              ) : (
-                activeStaff.map((m) => (
-                  <TeamStatusCard
-                    key={m.id}
-                    name={m.name}
-                    role={m.role}
-                    submitted={m.submitted}
-                    onClick={() => setSelectedStaffId(m.id)}
-                  />
-                ))
-              )}
-            </div>
+          <div className="min-w-0">
+            {conflicts > 0 && (
+              <Link
+                href="/rota"
+                className="mb-3.5 flex items-center gap-2.5 rounded-cp-panel border-[0.5px] border-cp-red/40 bg-cp-red-soft px-3.5 py-[11px]"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-cp-slot bg-cp-red/15 text-cp-red">
+                  <ManagerIcon name="alert-triangle" size={15} />
+                </span>
+                <span className="flex-1 text-[12.5px] font-medium text-cp-red">
+                  {conflicts} scheduling conflict{conflicts === 1 ? "" : "s"} to check
+                </span>
+                <ManagerIcon name="chevron-right" size={15} className="text-cp-red" />
+              </Link>
+            )}
 
-            <div className="rounded-panel border border-hairline bg-surface-card p-6">
-              <div className="mb-4 text-base font-bold text-ink">Recent Activity</div>
-              {activity.length === 0 ? (
-                <div className="py-6 text-center text-[13px] text-ink-faint">
-                  Nothing yet — activity will show up here.
+            {pendingApprovals.length > 0 && (
+              <Link
+                href="/team"
+                className="mb-3.5 flex items-center gap-2.5 rounded-cp-panel border-[0.5px] border-cp-amber/40 bg-cp-amber-soft px-3.5 py-3"
+              >
+                <span className="flex h-[22px] min-w-[22px] shrink-0 items-center justify-center rounded-full bg-cp-amber px-1.5 text-[12px] font-medium text-accent-on">
+                  {pendingApprovals.length}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-medium text-ink">
+                    {pendingApprovals.length === 1 ? "1 person wants" : `${pendingApprovals.length} people want`}{" "}
+                    to join
+                  </span>
+                  <span className="mt-px block truncate text-[11px] text-ink-muted">
+                    {pendingApprovals.map((s) => s.name.split(" ")[0]).join(", ")} · tap to review
+                  </span>
+                </span>
+                <ManagerIcon name="chevron-right" size={15} className="text-ink-muted" />
+              </Link>
+            )}
+
+            {/* Reassurance, not action — nobody opens the app to read the log. */}
+            {activity.length > 0 && (
+              <>
+                <div className="mb-2 mt-1 px-0.5 text-[10px] uppercase tracking-[0.11em] text-ink-faint">
+                  Recent
                 </div>
-              ) : (
-                <div className="flex flex-col gap-3">
-                  {activity.map((a) => {
+                <div className="flex flex-col">
+                  {activity.slice(0, 5).map((a) => {
                     const text = describeAction(a.action, a.detail, a.staff_name);
                     const showNamePrefix = a.staff_name && !startsWithName(text, a.staff_name);
                     return (
-                      <div key={a.id} className="flex items-start gap-2.5">
-                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />
-                        <div>
-                          <div className="text-[13px] text-ink-label">
-                            {showNamePrefix && <span className="font-semibold">{a.staff_name} </span>}
-                            {text}
-                          </div>
-                          <div className="text-[11px] text-ink-faint">{formatRelativeTime(a.created_at)}</div>
+                      <div key={a.id} className="flex items-start gap-2.5 py-[7px] text-[12px]">
+                        <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-hairline" />
+                        <div className="min-w-0 flex-1 text-ink-muted">
+                          {showNamePrefix && (
+                            <span className="font-medium text-ink">{a.staff_name} </span>
+                          )}
+                          {text}
                         </div>
+                        <span className="shrink-0 whitespace-nowrap pl-2 text-[10.5px] text-ink-faint">
+                          {formatRelativeTime(a.created_at)}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
+              </>
+            )}
+          </div>
+
+          <div className="min-w-0">
+            <div className="mb-3.5 rounded-cp-card border-[0.5px] border-hairline bg-surface-card px-3.5 pb-2 pt-3.5">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-[14px] font-medium text-ink">Team</span>
+                <span className="text-[11px] text-ink-muted">
+                  {totalCount === 0
+                    ? "nobody yet"
+                    : submittedCount === totalCount
+                      ? `all ${totalCount} in`
+                      : `${submittedCount} of ${totalCount} sent availability`}
+                </span>
+              </div>
+              {activeStaff.length === 0 ? (
+                <div className="py-5 text-center text-[13px] text-ink-faint">
+                  No team members yet.
+                </div>
+              ) : (
+                activeStaff.map((m) => (
+                  <div
+                    key={m.id}
+                    className="flex items-center gap-2.5 border-b border-hairline py-2.5 last:border-0"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStaffId(m.id)}
+                      aria-label={`Open ${m.name}`}
+                      className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-cp-icon text-[12px] font-medium text-ink-muted transition-[transform] active:scale-[0.95]"
+                    >
+                      {m.name
+                        .split(" ")
+                        .map((w) => w[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 truncate text-[13px] font-medium text-ink">
+                        {m.name}
+                        {m.is_under_18 && (
+                          <span className="rounded-cp-badge bg-cp-icon px-1 py-px text-[8px] font-medium text-ink-muted">
+                            U18
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-ink-faint">{m.role}</div>
+                    </div>
+                    {m.submitted ? (
+                      <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-cp-green">
+                        <ManagerIcon name="check" size={13} /> Sent
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleRemindOne(m)}
+                        disabled={remindingId === m.id}
+                        className="cp-hairline shrink-0 rounded-cp-chip px-2.5 py-[5px] text-[11px] font-medium text-ink-muted transition-[transform] active:scale-[0.96] disabled:opacity-60"
+                      >
+                        {remindingId === m.id ? <Waiting label="…" /> : "Remind"}
+                      </button>
+                    )}
+                  </div>
+                ))
               )}
             </div>
+
           </div>
-        </>
-      )}
+        </div>
+      </div>
 
       <StaffModal
         member={staff.find((m) => m.id === selectedStaffId) ?? null}
         shifts={shifts}
-        assignments={rota?.assignments ?? []}
-        weekStart={period?.week_start ?? null}
-        busy={staffBusy}
+        assignments={planningRota?.assignments ?? todayRota?.assignments ?? []}
+        weekStart={planning?.week_start ?? today?.week_start ?? null}
+        busy={staffBusy || remindingId !== null}
         onClose={() => setSelectedStaffId(null)}
-        onRemind={handleModalRemind}
+        onRemind={handleRemindOne}
         onResetPin={handleModalResetPin}
       />
 
@@ -429,11 +530,14 @@ function StaffModal({
     .filter((x): x is { day: number; shift: Shift } => Boolean(x.shift))
     .sort((a, b) => a.day - b.day);
 
-  const totalHours = mine.reduce((sum, x) => sum + (shiftDurationHours(x.shift.start_time, x.shift.end_time) ?? 0), 0);
+  const totalHours = mine.reduce(
+    (sum, x) => sum + (shiftDurationHours(x.shift.start_time, x.shift.end_time) ?? 0),
+    0,
+  );
 
   return (
     <Modal open onClose={onClose} title={member.name}>
-      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+      <div className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-faint">
         Upcoming shifts{weekStart ? ` · ${formatWeekRange(weekStart)}` : ""}
       </div>
       {mine.length === 0 ? (
@@ -444,11 +548,8 @@ function StaffModal({
         <div className="mb-2 flex flex-col gap-1.5">
           {mine.map((x, i) => (
             <div key={i} className="flex items-center gap-2 text-[13px] text-ink-label">
-              <span
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ background: x.shift.color }}
-              />
-              <span className="font-semibold text-ink">{DAY_NAMES[x.day]}</span>
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: x.shift.color }} />
+              <span className="font-medium text-ink">{DAY_NAMES[x.day]}</span>
               <span className="text-ink-muted">
                 {x.shift.name} · {x.shift.start_time}–{x.shift.end_time}
               </span>
@@ -457,75 +558,32 @@ function StaffModal({
         </div>
       )}
       {mine.length > 0 && (
-        <div className="mb-5 text-[13px] font-semibold text-ink">
+        <div className="mb-5 text-[13px] font-medium text-ink">
           {Math.round(totalHours * 10) / 10}h across {mine.length} shift{mine.length === 1 ? "" : "s"}
         </div>
       )}
 
       <div className="mb-4 flex items-center justify-between rounded-input border border-hairline bg-surface-subtle px-3.5 py-2.5">
         <span className="text-[13px] text-ink-muted">PIN</span>
-        <span className="text-sm font-bold tracking-wide text-ink-label">{member.pin}</span>
+        <span className="text-sm font-medium tracking-wide text-ink-label">{member.pin}</span>
       </div>
 
       <div className="flex gap-2.5">
         <button
           onClick={() => onRemind(member)}
           disabled={busy}
-          className="flex-1 rounded-xl bg-surface-subtle py-3 text-center text-sm font-semibold text-ink-muted disabled:opacity-60"
+          className="flex-1 rounded-xl bg-surface-subtle py-3 text-center text-sm font-medium text-ink-muted disabled:opacity-60"
         >
           Remind
         </button>
         <button
           onClick={() => onResetPin(member)}
           disabled={busy}
-          className="flex-1 rounded-xl bg-accent py-3 text-center text-sm font-semibold text-accent-on disabled:opacity-60"
+          className="flex-1 rounded-xl bg-accent py-3 text-center text-sm font-medium text-accent-on disabled:opacity-60"
         >
           Reset PIN
         </button>
       </div>
     </Modal>
   );
-}
-
-function StatCard({
-  label,
-  value,
-  sub,
-  extraText,
-  valueClassName,
-  href,
-  children,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  extraText?: string;
-  valueClassName?: string;
-  href?: string;
-  children?: React.ReactNode;
-}) {
-  const inner = (
-    <>
-      <div className="mb-2 text-xs font-medium text-ink-faint">{label}</div>
-      <div className={`text-[28px] font-bold md:text-[32px] ${valueClassName ?? "text-ink"}`}>
-        {value}
-        {sub && <span className="ml-1 text-base font-medium text-ink-faint">{sub}</span>}
-      </div>
-      {extraText && <div className="mt-2 text-xs text-ink-faint">{extraText}</div>}
-      {children}
-    </>
-  );
-
-  if (href) {
-    return (
-      <Link
-        href={href}
-        className="block rounded-panel border border-hairline bg-surface-card p-5 transition hover:border-accent-border"
-      >
-        {inner}
-      </Link>
-    );
-  }
-
-  return <div className="rounded-panel border border-hairline bg-surface-card p-5">{inner}</div>;
 }

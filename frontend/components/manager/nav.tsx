@@ -15,7 +15,12 @@ import ModeToggle from "./mode-toggle";
 // same breakpoint every manager page already uses to drop its bottom-nav
 // clearance (`pb-24 md:pb-8`) and widen its padding, so the two stay in lockstep.
 const TABS: { label: string; href: string; icon: ManagerIconName }[] = [
-  { label: "Dashboard", href: "/dashboard", icon: "home" },
+  // Labelled Home, still served from /dashboard. Renaming the route would
+  // mean touching middleware.ts's matcher (manager sessions stop refreshing
+  // if it's missed) and the pre-paint theme regex in app/layout.tsx (a
+  // light-mode manager would get a dark Home) — both fail silently, for no
+  // user-visible gain.
+  { label: "Home", href: "/dashboard", icon: "home" },
   { label: "Rota", href: "/rota", icon: "table" },
   { label: "Scheduler", href: "/scheduler", icon: "calendar-bolt" },
   { label: "Staff", href: "/team", icon: "users" },

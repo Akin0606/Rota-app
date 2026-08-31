@@ -198,13 +198,30 @@ a:hover {
   --c-ink: #1a1815;
   --c-ink-label: #1a1815;
   /* Raised to clear AA on white — old muted #78766f sat at ~4.47:1 and faint
-     #a8a69e at ~2.4:1. See the dark-mode note above. */
-  --c-ink-muted: #6d6b64;
-  --c-ink-faint: #737169;
+     #a8a69e at ~2.4:1. Darkened again so they still clear 4.5:1 when the card
+     underneath carries a soft red/amber tint, which the previous values missed
+     by a hair (4.46 and 4.09 on the red-soft card). See the dark-mode note. */
+  --c-ink-muted: #65635c;
+  --c-ink-faint: #6b6960;
   --c-accent-light: rgba(0, 0, 0, 0.06);
 
   --cp-icon-bg: #f2f0ea;
   --cp-track: #eceae2;
+  /* Coverage colours, re-stated for light mode.
+     Until now neither light scope redefined these — only their -soft
+     backgrounds — so a light-theme page inherited the DARK values, which are
+     tuned to sit on near-black. Measured on white they were catastrophic as
+     text: green 2.1:1, amber 1.45:1, red 3.28:1, and white-on-amber (the
+     pending-approvals badge) 1.45:1. Exactly the bug the rebrand found in
+     `--c-accent`, in the one colour family the brand says carries meaning.
+     These are the same hues darkened until they clear AA as text on white AND
+     under white as a fill; the -soft tints below are backgrounds and are
+     unchanged. They are darker than a first guess because the hardest case is
+     each colour on its OWN soft tint (red text in a red-soft card), which eats
+     the remaining headroom. */
+  --cp-green: #126c35;
+  --cp-amber: #7d6500;
+  --cp-red: #c22a2f;
   --cp-green-soft: rgba(46, 204, 113, 0.12);
   --cp-amber-soft: rgba(255, 193, 7, 0.16);
   --cp-red-soft: rgba(229, 72, 77, 0.1);
@@ -295,8 +312,14 @@ a:hover {
   --c-hairline: rgba(255, 255, 255, 0.07);
   --c-ink: #f0efe9;
   --c-ink-label: #f0efe9;
-  --c-ink-muted: #7a7a75;
-  --c-ink-faint: #4a4a47;
+  /* Raised to clear WCAG AA, matching the fix the staff scope got. These were
+     #7a7a75 / #4a4a47 — about 4.2:1 and 2.0:1 on the #141414 card — and faint
+     carries real information here (shift times, dates, week labels, the quiet
+     secondary buttons), not just decoration. The staff pass corrected .cp-staff
+     and left .cp-manager on the old values because they were identical at the
+     time; this is that half of the job. */
+  --c-ink-muted: #8f8f8a;
+  --c-ink-faint: #82827c;
   --c-accent: #f4f4f2;
   --c-accent-hover: #dededa;
   --c-accent-light: rgba(255, 255, 255, 0.09);
@@ -328,12 +351,30 @@ a:hover {
   --c-hairline: rgba(0, 0, 0, 0.08);
   --c-ink: #1a1815;
   --c-ink-label: #1a1815;
-  --c-ink-muted: #78766f;
-  --c-ink-faint: #a8a69e;
+  /* Same AA correction as the dark block above (was #78766f / #a8a69e — faint
+     measured about 2.4:1 on white). Darkened past the staff pass's values so
+     they also clear 4.5:1 on a soft red/amber tinted card. */
+  --c-ink-muted: #65635c;
+  --c-ink-faint: #6b6960;
   --c-accent-light: rgba(0, 0, 0, 0.06);
 
   --cp-icon-bg: #f2f0ea;
   --cp-track: #eceae2;
+  /* Coverage colours, re-stated for light mode.
+     Until now neither light scope redefined these — only their -soft
+     backgrounds — so a light-theme page inherited the DARK values, which are
+     tuned to sit on near-black. Measured on white they were catastrophic as
+     text: green 2.1:1, amber 1.45:1, red 3.28:1, and white-on-amber (the
+     pending-approvals badge) 1.45:1. Exactly the bug the rebrand found in
+     `--c-accent`, in the one colour family the brand says carries meaning.
+     These are the same hues darkened until they clear AA as text on white AND
+     under white as a fill; the -soft tints below are backgrounds and are
+     unchanged. They are darker than a first guess because the hardest case is
+     each colour on its OWN soft tint (red text in a red-soft card), which eats
+     the remaining headroom. */
+  --cp-green: #126c35;
+  --cp-amber: #7d6500;
+  --cp-red: #c22a2f;
   --cp-green-soft: rgba(46, 204, 113, 0.12);
   --cp-amber-soft: rgba(255, 193, 7, 0.16);
   --cp-red-soft: rgba(229, 72, 77, 0.1);

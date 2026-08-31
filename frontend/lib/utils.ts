@@ -241,19 +241,33 @@ export function periodForToday<T extends { week_start: string }>(periods: T[]): 
 }
 
 /**
- * The week the manager is being asked to *build*: the one still collecting
- * availability, else the nearest current-or-future period. A venue whose only
- * periods are in the past has nothing to plan — null, and the caller shows the
- * front door for this week instead of narrating a week that's been and gone.
+ * The week the manager is being asked to *build* — the soonest current-or-future
+ * one that still needs work.
+ *
+ * "Needs work" is any status that isn't out to staff yet: collecting (chase),
+ * closed (reopen or build), generated (finish and publish). Only when every
+ * upcoming week is already live does this fall back to the earliest of those,
+ * so the hero can say "this week's sorted" — and the hero then checks that
+ * week's actual coverage, because a published week can still have holes.
+ *
+ * The ordering matters: picking the plain earliest week would hide next week's
+ * unfinished draft behind a this-week rota that's already out and fine, which is
+ * exactly backwards from what the manager's next job is.
+ *
+ * A venue whose only periods are in the past has nothing to plan — null, and the
+ * caller shows the front door rather than narrating a week that's been and gone.
  */
 export function planningPeriod<T extends { week_start: string; status: string }>(
   periods: T[],
 ): T | null {
-  const collecting = periods.find((p) => p.status === "collecting");
-  if (collecting) return collecting;
-  const upcoming = periods.filter((p) => weekOffsetFromNow(p.week_start) >= 0);
+  const upcoming = periods
+    .filter((p) => weekOffsetFromNow(p.week_start) >= 0)
+    .sort((a, b) => a.week_start.localeCompare(b.week_start));
   if (!upcoming.length) return null;
-  return upcoming.reduce((a, b) => (a.week_start <= b.week_start ? a : b));
+  const needsWork = upcoming.find(
+    (p) => p.status !== "published" && p.status !== "confirmed",
+  );
+  return needsWork ?? upcoming[0];
 }
 
 // How many whole weeks ahead a week-start is relative to the current week's
@@ -264,6 +278,18 @@ export function weeksFromThisWeek(weekStart: string): number {
   const dow = (new Date(todayUTC).getUTCDay() + 6) % 7;
   const thisMonday = todayUTC - dow * 86_400_000;
   return Math.round((parseISODate(weekStart).getTime() - thisMonday) / (7 * 86_400_000));
+}
+
+// Whole days from the venue's today to a real close timestamp (the scheduler's
+// `closes_at`, derived from the legal notice period). 0 = closes today, negative
+// = already shut. Distinct from daysUntilDeadline below, which counts to the Nth
+// day OF the collected week off the legacy `avail_closes_day` name and can land
+// after that week has already started.
+export function daysUntilClose(closesAt: string): number {
+  const close = closesAt.slice(0, 10);
+  return Math.round(
+    (parseISODate(close).getTime() - parseISODate(londonToday()).getTime()) / 86_400_000,
+  );
 }
 
 export function daysUntilDeadline(weekStart: string, closesDay: string): number {
@@ -365,6 +391,61 @@ export function shiftDurationHours(start: string, end: string): number | null {
   let mins = e.h * 60 + e.m - (s.h * 60 + s.m);
   if (mins <= 0) mins += 24 * 60;
   return Math.round((mins / 60) * 10) / 10;
+}
+
+// "10:00pm" -> "10pm", "10:30pm" -> "10:30pm", "close" -> "close". The single
+// time on its own, for the places a range would be noise (an under-18's finish).
+export function shortClock(time: string): string {
+  const c = parseClock(time);
+  if (!c) return time.trim();
+  const disp = c.h % 12 || 12;
+  return c.m ? `${disp}:${String(c.m).padStart(2, "0")}${c.suffix}` : `${disp}${c.suffix}`;
+}
+
+// Minutes since midnight at the venue right now. Paired with shiftPhase below
+// so "who's on" is answered against the pub's clock, not the viewer's.
+export function londonMinutesNow(): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const h = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+  const m = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+  return (h % 24) * 60 + m;
+}
+
+/**
+ * Where a shift sits relative to right now: not started, running, or done.
+ * Null when either time is unparseable free text (a legacy "close"), so callers
+ * can say nothing rather than guess.
+ *
+ * `startedDaysAgo` is which day the shift is rostered ON, and it is the whole
+ * point of the signature. A 5pm–1am shift is eight hours of one evening, but it
+ * spans two calendar dates — so at 00:30 the shift that is actually running is
+ * *yesterday's*, and today's identically-timed one has not begun. Measuring
+ * both against a bare clock would report today's as live sixteen hours early,
+ * at exactly the hour a late-close manager opens the app to see who's still on.
+ * Pass 0 for a shift rostered today, 1 for one rostered yesterday.
+ */
+export function shiftPhase(
+  start: string,
+  end: string,
+  nowMinutes: number,
+  startedDaysAgo = 0,
+): "upcoming" | "now" | "done" | null {
+  const s = parseClock(start);
+  const e = parseClock(end);
+  if (!s || !e) return null;
+  let from = s.h * 60 + s.m;
+  let to = e.h * 60 + e.m;
+  if (to <= from) to += 24 * 60; // crosses midnight
+  from -= startedDaysAgo * 24 * 60;
+  to -= startedDaysAgo * 24 * 60;
+  if (nowMinutes < from) return "upcoming";
+  if (nowMinutes < to) return "now";
+  return "done";
 }
 
 // "2:00pm"/"6:00pm" -> "2–6pm"; "9am"/"5pm" -> "9am–5pm". Falls back to the raw
