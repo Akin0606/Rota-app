@@ -280,16 +280,23 @@ def under18_availability_notes(
     rota screen re-reads a week on every load and every scrub, and a hard legal
     block that only rendered in the seconds after a solve is worse than useless.
 
-    Returns (warnings, info):
-      warnings -- availability that legally cannot be used at all.
-      info     -- availability that will be trimmed by the weekly cap or the
-                  2-consecutive-days-off rule.
+    Returns (warnings, info, unreadable):
+      warnings   -- availability that legally cannot be used at all.
+      info       -- availability that will be trimmed by the weekly cap or the
+                    2-consecutive-days-off rule.
+      unreadable -- shifts whose stored times won't parse, and which are
+                    therefore silently dropped from every solve. Returned rather
+                    than swallowed for the same reason the warnings are computed
+                    here at all: a venue with a corrupt shift time would
+                    otherwise see the message once, after a solve, and never
+                    again — while the shift kept vanishing from every rota.
     """
     max_hours = rules.get("max_hours_per_week", 48)
     leave_days = leave_days or {}
 
     warnings = []
     info = []
+    unreadable = []
 
     shifts_by_id = {sh["id"]: sh for sh in shifts}
     names = {s["id"]: s.get("name") or "Staff member" for s in staff}
@@ -301,11 +308,10 @@ def under18_availability_notes(
         availability[(sub["staff_id"], sub["day_index"], sub["shift_id"])] = sub["status"]
 
     # Per-(shift, day) duration / night, for the days a shift actually runs.
-    # Membership is the existence gate, exactly as in the solve. An unreadable
-    # time is skipped silently here -- generate_rota owns that warning, and
-    # repeating it on every read would double it up in the summary.
+    # Membership is the existence gate, exactly as in the solve.
     duration = {}
     touches_night = {}
+    seen_unreadable = set()
     for shid, sh in shifts_by_id.items():
         for d in DAYS:
             if not shift_bounds.exists_on_day(sh, d, shift_days_by_key):
@@ -314,6 +320,12 @@ def under18_availability_notes(
                 duration[(shid, d)] = shift_bounds.duration_for(sh, d, shift_days_by_key)
                 touches_night[(shid, d)] = shift_bounds.touches_night_for(sh, d, shift_days_by_key)
             except ValueError:
+                if shid not in seen_unreadable:
+                    unreadable.append(
+                        f"'{sh.get('name') or 'A shift'}' has an unreadable time and was "
+                        f"skipped — check its hours."
+                    )
+                    seen_unreadable.add(shid)
                 continue
 
     for member in staff:
@@ -402,7 +414,7 @@ def under18_availability_notes(
                 f"required 2 consecutive days off for under-18s means some availability won't be used."
             )
 
-    return warnings, info
+    return warnings, info, unreadable
 
 
 def generate_rota(
@@ -465,12 +477,10 @@ def generate_rota(
                 duration[(shid, d)] = shift_bounds.duration_for(sh, d, shift_days_by_key)
                 touches_night[(shid, d)] = shift_bounds.touches_night_for(sh, d, shift_days_by_key)
             except ValueError:
-                if shid not in unreadable:
-                    warnings.append(
-                        f"'{sh.get('name') or 'A shift'}' has an unreadable time and was "
-                        f"skipped — check its hours."
-                    )
-                    unreadable.add(shid)
+                # The manager-facing message for this comes from
+                # under18_availability_notes() below, so a plain read of the week
+                # reports it too rather than only the seconds after a solve.
+                unreadable.add(shid)
 
     def _min_staff(shid, d) -> int:
         src = shift_bounds.staffing_source(shifts_by_id[shid], d, shift_days_by_key)
@@ -540,9 +550,10 @@ def generate_rota(
     # they are computed by the same pure function the rota summary calls on every
     # read. Keeping one definition is what stops the manager's legal block from
     # saying something different after a solve than it does on the next load.
-    u18_warnings, u18_info = under18_availability_notes(
+    u18_warnings, u18_info, unreadable_warnings = under18_availability_notes(
         staff, submissions, shifts, rules, shift_days_by_key, leave_days
     )
+    warnings.extend(unreadable_warnings)
     warnings.extend(u18_warnings)
     info.extend(u18_info)
 

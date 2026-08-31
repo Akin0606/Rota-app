@@ -141,6 +141,8 @@ def _build_summary(
     period: dict,
     warnings: list[str] | None = None,
     info: list[str] | None = None,
+    *,
+    solved: bool = False,
 ) -> dict:
     supabase = get_supabase()
 
@@ -246,10 +248,14 @@ def _build_summary(
     # further work for a venue with no under-18 staff, which is the only reason
     # this is affordable on a summary that runs on every edit.
     #
-    # A caller that already solved passes its own warnings/info through
-    # untouched: generate_rota calls the same function, so recomputing would
-    # duplicate every line.
-    if warnings is None and info is None:
+    # `solved` is explicit rather than inferred from whether warnings were
+    # passed. A caller that already solved passes its own list through untouched
+    # (generate_rota calls the same function, so recomputing would duplicate
+    # every line) — but copy_previous passes a warning WITHOUT having solved, and
+    # inferring from nullability silently skipped the recompute there, blanking
+    # the under-18 legal block on exactly the response that paints the screen.
+    # Everything else APPENDS, so a caller's own warning is never replaced.
+    if not solved:
         u18_staff = (
             supabase.table("staff_members")
             .select("id, name, is_under_18")
@@ -260,6 +266,12 @@ def _build_summary(
             .execute()
             .data
         )
+        # The rules row is only needed for the under-18 weekly-cap note, so skip
+        # that query when there are none. The notes call itself still runs: an
+        # unreadable shift time is a venue-wide fact that has to surface either
+        # way, and with no under-18 staff the per-person loop simply produces
+        # nothing.
+        rules: dict = {}
         if u18_staff:
             rules_res = (
                 supabase.table("scheduling_rules")
@@ -269,14 +281,16 @@ def _build_summary(
                 .execute()
             )
             rules = rules_res.data[0] if rules_res.data else {}
-            warnings, info = under18_availability_notes(
-                u18_staff,
-                submissions,
-                shifts,
-                rules,
-                shift_days_by_key=shift_days_idx,
-                leave_days=leave_blocked,
-            )
+        u18_warnings, u18_info, unreadable = under18_availability_notes(
+            u18_staff,
+            submissions,
+            shifts,
+            rules,
+            shift_days_by_key=shift_days_idx,
+            leave_days=leave_blocked,
+        )
+        warnings = (warnings or []) + unreadable + u18_warnings
+        info = (info or []) + u18_info
 
     return {
         "period_id": period["id"],
@@ -960,7 +974,11 @@ def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
 
     updated_period = {**period, "status": "generated"}
     return _build_summary(
-        venue["id"], updated_period, warnings=result["warnings"], info=result.get("info", [])
+        venue["id"],
+        updated_period,
+        warnings=result["warnings"],
+        info=result.get("info", []),
+        solved=True,
     )
 
 

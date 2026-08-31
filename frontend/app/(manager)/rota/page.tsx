@@ -362,9 +362,9 @@ export default function RotaPage() {
     }
   }
 
-  async function handleGenerate() {
+  async function handleGenerate(): Promise<boolean> {
     const p = await ensurePeriod();
-    if (!p) return;
+    if (!p) return false;
     // Open the animated overlay first, then run the solver. The overlay shows a
     // stepped solving animation while `genResult`/`genError` are null, then the
     // honest result (filled / gaps / gap reasons) when the request resolves.
@@ -377,8 +377,10 @@ export default function RotaPage() {
       setSummary(result);
       setPeriods((prev) => prev.map((x) => (x.id === p.id ? { ...x, status: result.status } : x)));
       setGenResult(result);
+      return true;
     } catch (err) {
       setGenError(err instanceof ApiError ? err.message : "Could not generate rota. Try again.");
+      return false;
     } finally {
       setGenerating(false);
     }
@@ -468,7 +470,14 @@ export default function RotaPage() {
       setSummary(after);
       setPeriods((prev) => prev.map((x) => (x.id === period.id ? { ...x, status: after.status } : x)));
       setRebuildConfirmOpen(false);
-      await handleGenerate();
+      const solved = await handleGenerate();
+      if (!solved) {
+        // The unpublish landed, so the week really is off the staff app now.
+        // The generate overlay's own "couldn't generate" doesn't say that, and
+        // it's the one thing the manager has to know — the state is recoverable,
+        // but only if they realise they need to publish again.
+        showToast("Rebuild failed — this week is now unpublished. Publish it again or retry.");
+      }
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not unpublish this rota");
     } finally {
@@ -719,11 +728,38 @@ export default function RotaPage() {
   //   fresh     · the pre-generation front door (R3), not an empty grid
   //   draft     · the coverage-first day-view, immediately, no gate
   //   live      · the same body, read-first, Generate buried behind a confirm
+  //
+  // "fresh" is NOT simply "no assignments". A solve that placed nobody — which a
+  // venue of mostly under-18s on late shifts really can produce — leaves the
+  // period at "generated" with zero rows, and treating that as fresh sent the
+  // manager back to the chase screen to email reminders pointing at an
+  // availability link the backend had already closed (`editable` is
+  // `status == "collecting"`). It also hid the coverage summary behind
+  // `showsRota`, so the gaps the solve had just reported were invisible. A week
+  // that has been solved shows its result, empty or not.
+  //
+  // Open posts count too: a week whose only remaining row is an unclaimed open
+  // shift still needs its grid, or the Withdraw control it lives in is
+  // unreachable while the post stays live in the staff claim pool.
+  // `warnings` carries two different kinds of thing: under-18 notes, which are
+  // hard legal blocks, and venue-level notices (a shift whose stored time won't
+  // parse, staff skipped by copy-previous). Rendering the second kind under
+  // "the law blocked these assignments · can't be overridden" is simply untrue,
+  // and now that warnings arrive on every read rather than once after a solve,
+  // an untrue one would sit there permanently. Classified on the marker the
+  // solver itself writes — the same client-side classify the risk modal uses,
+  // for the same reason: the strings are ours.
+  const allWarnings = summary?.warnings ?? [];
+  const legalWarnings = allWarnings.filter((w) => w.includes("(under 18)"));
+  const otherWarnings = allWarnings.filter((w) => !w.includes("(under 18)"));
+
+  const hasAnyRow = (summary?.assignments.length ?? 0) > 0;
+  const wasSolved = period?.status === "generated";
   const entry: "past" | "fresh" | "draft" | "live" = isPastWeek
     ? "past"
     : isLive
       ? "live"
-      : hasAssignments
+      : hasAssignments || hasAnyRow || wasSolved
         ? "draft"
         : "fresh";
   const showsRota = entry === "draft" || entry === "live" || (entry === "past" && hasAssignments);
@@ -855,7 +891,11 @@ export default function RotaPage() {
         <RotaFrontDoor
           weekLabel={`w/c ${formatWeekRange(selectedWeek).split(" – ")[0]}`}
           hasPeriod={Boolean(period)}
-          windowClosed={period?.status === "closed"}
+          // The backend gates the availability grid on `status == "collecting"`
+          // (availability.py), so anything else means the link staff would
+          // follow is already read-only. Matching that exact predicate is what
+          // stops a reminder being offered for a window that has shut.
+          windowClosed={Boolean(period) && period?.status !== "collecting"}
           onReopen={handleReopen}
           reopening={reopening}
           staff={assignableStaff}
@@ -922,7 +962,19 @@ export default function RotaPage() {
       {showsRota && summary && <CoverageSummary slots={coverageSlots} />}
 
       {/* Under-18 legal block, its own distinct treatment (B4) */}
-      {showsRota && summary && <U18LegalBlock warnings={summary.warnings} />}
+      {showsRota && summary && <U18LegalBlock warnings={legalWarnings} />}
+      {showsRota && otherWarnings.length > 0 && (
+        <div className="mb-3 flex gap-2.5 rounded-cp-panel border-[0.5px] border-cp-amber/40 bg-cp-amber-soft px-3.5 py-3">
+          <span className="mt-px shrink-0 text-cp-amber">
+            <ManagerIcon name="alert-triangle" size={16} />
+          </span>
+          <div className="text-[12px] leading-[1.5] text-ink-muted">
+            {otherWarnings.map((w, i) => (
+              <div key={i}>{w}</div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {showsRota && view === "matrix" && (
         <button

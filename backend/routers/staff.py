@@ -415,10 +415,17 @@ def _reminder_context(venue: dict, period_id: Optional[str]) -> tuple[str, str]:
         return "this week", "soon"
 
     supabase = get_supabase()
+    # Venue-scoped, like every other lookup here has to be: the backend runs on
+    # the service-role key with RLS bypassed, so an unscoped query is the only
+    # thing between a caller-supplied id and someone else's data. Not exploitable
+    # in this instance (UUIDs don't collide, and the id only reaches an email
+    # body), but the pattern is what matters — an unscoped read is a leak waiting
+    # for the next person to copy it.
     period_res = (
         supabase.table("availability_periods")
         .select("week_start")
         .eq("id", period_id)
+        .eq("venue_id", venue["id"])
         .limit(1)
         .execute()
     )
@@ -460,6 +467,20 @@ def remind(payload: RemindRequest, manager: dict = Depends(get_current_manager))
     if payload.staff_id:
         targets = [m for m in active if m["id"] == payload.staff_id]
     elif payload.period_id:
+        # The result is only membership-tested against `active` (this venue's own
+        # roster) below, so a foreign period can't widen the target list — but
+        # scope it anyway rather than leave an unscoped read to be copied.
+        owns_period = (
+            supabase.table("availability_periods")
+            .select("id")
+            .eq("id", payload.period_id)
+            .eq("venue_id", venue["id"])
+            .limit(1)
+            .execute()
+            .data
+        )
+        if not owns_period:
+            raise HTTPException(status_code=404, detail="Period not found")
         subs = (
             supabase.table("availability_submissions")
             .select("staff_id")

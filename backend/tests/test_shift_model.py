@@ -245,7 +245,7 @@ def test_u18_notes_are_derivable_without_solving():
         {"staff_id": "u18", "day_index": FRI, "shift_id": "eve", "status": 3},
         {"staff_id": "u18", "day_index": SUN, "shift_id": "eve", "status": 3},
     ]
-    warnings, _info = under18_availability_notes(
+    warnings, _info, _unreadable = under18_availability_notes(
         [U18], subs, [EVE], RULES, shift_days_by_key=SHIFT_DAYS
     )
     # Friday is 9.5h AND touches night; the daily-hours rule is checked first,
@@ -264,7 +264,7 @@ def test_u18_notes_match_the_solvers_own_warnings():
         {"staff_id": "u18", "day_index": SAT, "shift_id": "eve", "status": 3},
         {"staff_id": "u18", "day_index": SUN, "shift_id": "eve", "status": 3},
     ]
-    pure, _ = under18_availability_notes(
+    pure, _, _pu = under18_availability_notes(
         [U18], subs, [EVE], RULES, shift_days_by_key=SHIFT_DAYS
     )
     solved = generate_rota(
@@ -278,11 +278,12 @@ def test_u18_notes_stay_silent_for_an_adult():
     from services.solver import under18_availability_notes
 
     subs = [{"staff_id": "ad", "day_index": FRI, "shift_id": "eve", "status": 3}]
-    warnings, info = under18_availability_notes(
+    warnings, info, unreadable = under18_availability_notes(
         [ADULT], subs, [EVE], RULES, shift_days_by_key=SHIFT_DAYS
     )
     assert warnings == []
     assert info == []
+    assert unreadable == []
 
 
 def test_u18_notes_ignore_a_closed_day():
@@ -291,7 +292,7 @@ def test_u18_notes_ignore_a_closed_day():
     # Monday has no shift_days row — the shift doesn't run, so availability for
     # it is not a legal problem, it's simply not a slot.
     subs = [{"staff_id": "u18", "day_index": MON, "shift_id": "eve", "status": 3}]
-    warnings, _ = under18_availability_notes(
+    warnings, _, _u = under18_availability_notes(
         [U18], subs, [EVE], RULES, shift_days_by_key=SHIFT_DAYS
     )
     assert warnings == []
@@ -332,3 +333,38 @@ def test_solver_guard_lets_cron_through():
             raise AssertionError(f"guard wrongly blocked status {status!r}") from e
         except Exception:
             pass  # got past the guard and into the database; that's a pass here
+
+
+def test_unreadable_shift_time_is_reported_on_a_plain_read():
+    # A shift whose stored time won't parse is silently dropped from every solve.
+    # That message used to exist only on the generate response, so a venue with
+    # corrupt data saw it once and never again — the same disappearing-warning
+    # bug the under-18 notes had, on the one warning that means real corruption.
+    from services.solver import under18_availability_notes
+
+    broken = {**EVE, "id": "broken", "name": "Brunch", "start_time": "banana", "end_time": "carrot"}
+    _w, _i, unreadable = under18_availability_notes([U18], [], [broken], RULES)
+    assert len(unreadable) == 1, unreadable
+    assert "Brunch" in unreadable[0] and "unreadable time" in unreadable[0]
+
+
+def test_unreadable_is_reported_once_per_shift_not_once_per_day():
+    from services.solver import under18_availability_notes
+
+    broken = {**EVE, "id": "broken", "name": "Brunch", "start_time": "banana", "end_time": "carrot"}
+    _w, _i, unreadable = under18_availability_notes([], [], [broken], RULES)
+    assert len(unreadable) == 1, unreadable  # not 7
+
+
+def test_u18_unusable_warning_ignores_availability_on_a_closed_day():
+    # Pins a deliberate narrowing: "none of your availability is usable under the
+    # under-18 rules" now fires only when the person submitted for a slot that
+    # actually runs. Availability on a closed shift-day isn't an under-18
+    # problem, so blaming the under-18 rules for it would be wrong.
+    from services.solver import under18_availability_notes
+
+    subs = [{"staff_id": "u18", "day_index": MON, "shift_id": "eve", "status": 3}]  # MON is closed
+    warnings, _i, _u = under18_availability_notes(
+        [U18], subs, [EVE], RULES, shift_days_by_key=SHIFT_DAYS
+    )
+    assert warnings == []

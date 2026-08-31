@@ -312,6 +312,18 @@ export default function HomePage() {
     );
   })();
 
+  // The shifts and the heading above them must come from ONE week. Two
+  // independent ?? chains looked equivalent and weren't: planningRota is only
+  // fetched when the planning week has been built, so in the normal steady state
+  // (this week published, next week collecting) the rota fell through to today's
+  // while the label stayed on next week's — the modal read "Upcoming shifts ·
+  // 7 Sep" over this week's actual shifts, and attributed the hours total to the
+  // wrong week. A manager checking someone's hours before approving a swap got a
+  // wrong answer with nothing to signal it.
+  const modalWeek = planningRota
+    ? { rota: planningRota, weekStart: planning?.week_start ?? null }
+    : { rota: todayRota, weekStart: today?.week_start ?? null };
+
   const dateLabel = parseISODate(londonToday()).toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -485,8 +497,8 @@ export default function HomePage() {
       <StaffModal
         member={staff.find((m) => m.id === selectedStaffId) ?? null}
         shifts={shifts}
-        assignments={planningRota?.assignments ?? todayRota?.assignments ?? []}
-        weekStart={planning?.week_start ?? today?.week_start ?? null}
+        assignments={modalWeek.rota?.assignments ?? []}
+        weekStart={modalWeek.weekStart}
         busy={staffBusy || remindingId !== null}
         onClose={() => setSelectedStaffId(null)}
         onRemind={handleRemindOne}

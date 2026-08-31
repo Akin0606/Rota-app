@@ -221,7 +221,14 @@ export default function ManagerRotaReview({
               })}
 
               {uncovered ? (
-                <span className="flex items-center gap-[7px] rounded-lg border-[0.5px] border-cp-red/40 bg-cp-red-soft px-[11px] py-[7px] text-xs font-medium text-cp-red">
+                // Solid, not tinted. Red text on its own soft tint measures
+                // 4.2:1 here — the tint composites over the day CARD (#141414)
+                // rather than the page, which is why the identical pairing in
+                // the coverage line above passes at 4.52 and this one doesn't.
+                // Filling it clears both themes (5.00 dark / 5.73 light) and is
+                // the right weight anyway: "nobody at all" is the loudest state
+                // on the screen and shouldn't read as quiet as "needs one more".
+                <span className="flex items-center gap-[7px] rounded-lg bg-cp-red px-[11px] py-[7px] text-xs font-medium text-status-on">
                   <ManagerIcon name="alert-triangle" size={13} /> Uncovered · nobody available
                 </span>
               ) : gap > 0 ? (

@@ -531,7 +531,50 @@ def admin_generate_rota(venue_id: str):
     if not period:
         raise HTTPException(status_code=404, detail="This venue has no availability period yet")
 
+    # run_solver_for_period refuses a published/confirmed period — it deletes
+    # every solver-placed row before it solves, so on a live week that destroys
+    # the rota staff already have. Bring it down with the unpublish below first;
+    # that path logs to activity_log, so the trail shows a support action took
+    # the week off staff deliberately.
     return run_solver_for_period(venue, period, note=" (triggered via admin console)")
+
+
+@router.post(
+    "/venues/{venue_id}/unpublish",
+    response_model=RotaSummaryOut,
+    dependencies=[Depends(require_admin)],
+)
+def admin_unpublish_rota(venue_id: str):
+    """Pulls a venue's newest published/confirmed rota back to "generated".
+
+    Exists because the generate guard would otherwise leave support with a dead
+    end: once a manager publishes their newest week — the steady state — the
+    console's Generate button 400s telling the operator to unpublish first,
+    which the console had no way to do. Same status flip and same activity_log
+    row as the manager-facing endpoint, so a rota only ever comes down one way.
+    """
+    venue = _get_venue_or_404(venue_id)
+    period = _latest_period(venue_id)
+    if not period:
+        raise HTTPException(status_code=404, detail="This venue has no availability period yet")
+    if period["status"] not in ("published", "confirmed"):
+        raise HTTPException(status_code=400, detail="This venue's newest rota isn't published")
+
+    supabase = get_supabase()
+    supabase.table("availability_periods").update({"status": "generated"}).eq(
+        "id", period["id"]
+    ).execute()
+    supabase.table("activity_log").insert(
+        {
+            "venue_id": venue["id"],
+            "action": "rota_unpublished",
+            "detail": (
+                f"Rota for week of {period['week_start']} was unpublished "
+                f"(via admin console)"
+            ),
+        }
+    ).execute()
+    return _build_summary(venue["id"], {**period, "status": "generated"})
 
 
 @router.post(

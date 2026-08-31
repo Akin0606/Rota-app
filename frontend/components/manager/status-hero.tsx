@@ -132,8 +132,29 @@ export function buildHeroPlan(args: {
     };
   }
 
+  const hasPlacements = rota?.assignments.some((a) => a.staff_id) ?? false;
+
+  // Solved, and it placed nobody. A venue of mostly under-18s on late shifts
+  // really can produce this, and so can a copy-previous onto a week with nothing
+  // to copy. It gets its own sentence because both neighbouring branches would
+  // lie about it: on status alone the "built" branch below announces "every
+  // shift is covered — publish it" for a week containing nothing, and falling
+  // through to "collecting" would offer to chase for a window the solve has
+  // already closed.
+  if (period.status === "generated" && !hasPlacements) {
+    return {
+      tone: "red",
+      badge: "Draft",
+      badgeIcon: "alert-triangle",
+      weekLabel,
+      line: `${whichWeek}'s rota came back empty`,
+      sub: "Nobody could be placed — usually too little availability, or none of it legal for who's left.",
+      primary: { label: "Open the rota", icon: "table", href: "/rota" },
+    };
+  }
+
   // Built but not out. Gaps are the blocker, and they're named.
-  if (period.status === "generated" || (rota && rota.assignments.some((a) => a.staff_id))) {
+  if (hasPlacements) {
     if (slots.length === 0) {
       return {
         tone: "green",
