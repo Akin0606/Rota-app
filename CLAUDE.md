@@ -431,6 +431,17 @@ Sound where it counts, with two known-weak areas flagged in-code:
   *text on a dark page* and so is light — white on it measured 2.77:1, and the
   admin enable button 1.74:1 on light green. New `--c-status-on` joins
   `--c-accent-on`: near-black in dark, white in light.
+- **A `closed` availability window used to be a genuinely terminal state, and
+  nothing in the app could get out of it.** Cron closes the week then solves, but
+  a week nobody submitted for makes `run_solver_for_period` early-return *without
+  advancing the status* — so the period sits at `closed` forever, and
+  `reopen_availability` accepted `"generated"` only. That is exactly the quiet
+  week a manager most needs to reopen and chase. `reopen` now takes `closed` too,
+  and the rota front door has a closed branch: the names of who never sent stay
+  (they're what tells you whether reopening is worth it) but the per-person
+  Remind buttons and the over-hours warning go, because both are about chasing
+  and offering them beside "there's no point chasing — the link is shut"
+  contradicts itself.
 - **The compositing contrast probe is the reusable bit.** Walk up the ancestors
   collecting every non-transparent `background-color`, composite them, and only
   then compute the ratio — a naive probe reads a translucent `rgba(...)` as if it
