@@ -94,9 +94,10 @@ actively misleading; trust the tokens, not memory):
 - Every design decision should feel intentional, not templated
 
 ## Current state (living — keep accurate)
-**`staging` is the working branch and is 23 commits ahead of `main`.** The last
-**6 are committed but NOT pushed** (the Home/Rota refresh, 2026-08-31) — pushing
-is always an explicit, separate ask.
+**`staging` is the working branch and is 33 commits ahead of `main`.** Working
+tree clean, `staging` == `origin/staging` — the Home/Rota refresh (16 commits,
+2026-08-31) is **pushed and deployed to staging**. Nothing is merged to `main`,
+so prod is untouched and migration `028` still has not run there.
 
 **This section was badly wrong until 2026-08-30 and the failure mode is worth
 naming: it listed six separate batches as "uncommitted, not pushed" that were in
