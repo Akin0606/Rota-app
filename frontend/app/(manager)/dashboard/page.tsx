@@ -44,7 +44,13 @@ import {
   todayIndexInWeek,
 } from "@/lib/utils";
 
-const CACHE_KEY = "rotally_dashboard_snapshot";
+// Versioned. The stale-while-revalidate blob's shape changed with the Home
+// rebuild (one `period`/`rota` became `planning`/`today` and their two rotas),
+// and while every read below defaults safely, an old blob would paint an
+// established venue as "let's build your first rota" for the second before the
+// refetch lands. Bumping the key makes a stale blob simply not match, so that
+// first paint is the honest loading state instead.
+const CACHE_KEY = "rotally_home_snapshot_v2";
 
 // Home — reframed present-first (H1/H2/H3).
 //
