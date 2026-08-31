@@ -53,6 +53,7 @@ import {
   rejectClaim,
   rejectSwap,
   remindStaff,
+  reopenAvailability,
   unpublishRota,
 } from "@/lib/api";
 import WeekScrubber, {
@@ -134,6 +135,7 @@ export default function RotaPage() {
   // R2 (iii) — rebuilding a live week has to pull it down from staff first.
   const [rebuildConfirmOpen, setRebuildConfirmOpen] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
+  const [reopening, setReopening] = useState(false);
 
   const period = periods.find((p) => p.week_start === selectedWeek) ?? null;
 
@@ -392,6 +394,25 @@ export default function RotaPage() {
       }
     } finally {
       setSettingUp(false);
+    }
+  }
+
+  // A "closed" week whose solve found nothing to schedule stays closed forever —
+  // run_solver_for_period early-returns without advancing the status. That is
+  // exactly the quiet week a manager most needs to reopen and chase, and until
+  // now there was no way back to "collecting" inside the app at all.
+  async function handleReopen() {
+    if (!period) return;
+    setReopening(true);
+    try {
+      const after = await reopenAvailability(period.id);
+      setSummary(after);
+      setPeriods((prev) => prev.map((x) => (x.id === period.id ? { ...x, status: after.status } : x)));
+      showToast("Availability reopened — your team can send their week again");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not reopen availability");
+    } finally {
+      setReopening(false);
     }
   }
 
@@ -834,6 +855,9 @@ export default function RotaPage() {
         <RotaFrontDoor
           weekLabel={`w/c ${formatWeekRange(selectedWeek).split(" – ")[0]}`}
           hasPeriod={Boolean(period)}
+          windowClosed={period?.status === "closed"}
+          onReopen={handleReopen}
+          reopening={reopening}
           staff={assignableStaff}
           onSetUpWeek={handleSetUpWeek}
           settingUp={settingUp}

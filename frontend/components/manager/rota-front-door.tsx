@@ -21,6 +21,10 @@ type FrontDoorProps = {
   weekLabel: string;
   /** False when no period exists for this week yet — nothing to be ready for. */
   hasPeriod: boolean;
+  /** The availability window has shut (status "closed") — chasing is over. */
+  windowClosed: boolean;
+  onReopen: () => void;
+  reopening: boolean;
   /** Active, approved staff only — a pending self-registrant isn't on the team. */
   staff: StaffManager[];
   onSetUpWeek: () => void;
@@ -49,6 +53,9 @@ function initials(name: string): string {
 export default function RotaFrontDoor({
   weekLabel,
   hasPeriod,
+  windowClosed,
+  onReopen,
+  reopening,
   staff,
   onSetUpWeek,
   settingUp,
@@ -129,19 +136,25 @@ export default function RotaFrontDoor({
             <div className="mt-px text-[11.5px] text-ink-muted">
               {total === 0
                 ? "Add your team, then they can send their weeks."
-                : everyoneIn
-                  ? `All ${total} in for ${weekLabel} — nobody to chase.`
-                  : `for ${weekLabel}`}
+                : windowClosed
+                  ? `for ${weekLabel} · the window has closed`
+                  : everyoneIn
+                    ? `All ${total} in for ${weekLabel} — nobody to chase.`
+                    : `for ${weekLabel}`}
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2 · who hasn't sent — by name, each with its own nudge */}
+      {/* 2 · who hasn't sent — by name, each with its own nudge.
+          Once the window has closed the names still matter (they're what tells
+          you whether reopening is worth it) but the nudge doesn't: the link
+          those reminders point at is shut, so offering a Remind button beside
+          "there's no point chasing" would contradict itself. */}
       {missing.length > 0 && (
         <>
           <div className="mb-2 px-0.5 text-[10px] uppercase tracking-[0.11em] text-ink-faint">
-            Waiting on
+            {windowClosed ? "Never sent" : "Waiting on"}
           </div>
           <div className="mb-3 flex flex-col gap-[7px]">
             {missing.map((m) => {
@@ -158,6 +171,7 @@ export default function RotaFrontDoor({
                     {m.name}
                     <span className="ml-1.5 text-[10.5px] font-normal text-ink-faint">{m.role}</span>
                   </span>
+                  {!windowClosed && (
                   <button
                     onClick={() => onRemindOne(m)}
                     disabled={remindingId === m.id || done}
@@ -179,6 +193,7 @@ export default function RotaFrontDoor({
                       </>
                     )}
                   </button>
+                  )}
                 </div>
               );
             })}
@@ -192,7 +207,7 @@ export default function RotaFrontDoor({
           gaps, day-off-in-7, per-day shift existence and availability weights
           all at once. There is no honest way to pick a name before it runs, so
           this says the true thing instead of the specific one. */}
-      {missing.length >= 2 && (
+      {!windowClosed && missing.length >= 2 && (
         <div className="mb-3.5 flex gap-2.5 rounded-cp-panel border-[0.5px] border-cp-amber/40 bg-cp-amber-soft px-3.5 py-3">
           <span className="mt-px shrink-0 text-cp-amber">
             <ManagerIcon name="alert-triangle" size={17} />
@@ -211,7 +226,49 @@ export default function RotaFrontDoor({
 
       {/* 4 · the two ways out. Chasing leads when there's someone to chase;
           otherwise generating is the whole screen. */}
-      {missing.length > 0 ? (
+      {windowClosed ? (
+        <>
+          {/* The window has shut, so a reminder would be a lie — the link staff
+              would follow is closed. Reopening is the honest first action; the
+              week can also just be built with whatever came in. This is the
+              quiet week where nobody submitted and the period gets stuck at
+              "closed", which used to have no way out inside the app at all. */}
+          <div className="mb-3.5 flex gap-2.5 rounded-cp-panel border-[0.5px] border-hairline bg-surface-subtle px-3.5 py-3">
+            <span className="mt-px shrink-0 text-ink-muted">
+              <ManagerIcon name="lock" size={16} />
+            </span>
+            <div className="text-[12px] leading-[1.5] text-ink-muted">
+              Availability has closed for this week, so there&apos;s no point chasing —
+              the link is shut. Reopen it if you want to give people another go.
+            </div>
+          </div>
+          <button
+            onClick={onReopen}
+            disabled={reopening}
+            className="flex w-full items-center justify-center gap-2 rounded-cp-control bg-accent py-[14px] text-[14px] font-medium text-accent-on transition-[transform] active:scale-[0.98] disabled:opacity-60"
+          >
+            {reopening ? (
+              <Waiting label="Reopening…" />
+            ) : (
+              <>
+                <ManagerIcon name="lock-open" size={16} /> Reopen availability
+              </>
+            )}
+          </button>
+          <div className="my-2.5 flex items-center gap-2.5 text-[11px] text-ink-faint">
+            <span className="h-px flex-1 bg-hairline" />
+            or
+            <span className="h-px flex-1 bg-hairline" />
+          </div>
+          <button
+            onClick={onGenerate}
+            disabled={generating}
+            className="cp-hairline w-full rounded-cp-control bg-surface-card py-3 text-[13px] font-medium text-ink transition-[transform] active:scale-[0.98] disabled:opacity-60"
+          >
+            {generating ? <Waiting label="Generating…" /> : "Build it with what came in"}
+          </button>
+        </>
+      ) : missing.length > 0 ? (
         <>
           <button
             onClick={onRemindAll}
