@@ -233,6 +233,13 @@ export function adminGenerateRota(venueId: string) {
   return adminRequest(`/api/admin/venues/${venueId}/generate`, { method: "POST" });
 }
 
+// Solving refuses a published/confirmed period — it deletes every solver-placed
+// row first, which on a live week destroys the rota staff already have. This is
+// the deliberate way to bring one down before rebuilding it.
+export function adminUnpublishRota(venueId: string) {
+  return adminRequest(`/api/admin/venues/${venueId}/unpublish`, { method: "POST" });
+}
+
 export function adminResetPin(staffId: string): Promise<AdminStaff> {
   return adminRequest(`/api/admin/staff/${staffId}/reset-pin`, { method: "POST" });
 }

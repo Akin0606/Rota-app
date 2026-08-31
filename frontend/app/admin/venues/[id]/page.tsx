@@ -12,6 +12,7 @@ import {
   AdminVenueDetail,
   AdminVenueRota,
   adminGenerateRota,
+  adminUnpublishRota,
   adminResetPin,
   createSupportLoginLink,
   deleteAdminVenue,
@@ -44,6 +45,7 @@ export default function AdminVenueDetailPage() {
   const [error, setError] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [unpublishing, setUnpublishing] = useState(false);
   const [togglingActive, setTogglingActive] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [rota, setRota] = useState<AdminVenueRota | null>(null);
@@ -119,6 +121,24 @@ export default function AdminVenueDetailPage() {
       showToast(err instanceof AdminApiError ? err.message : "Could not trigger solver");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  // Without this the guard on solving is a dead end for support: once a manager
+  // publishes their newest week — the steady state — Trigger solver 400s telling
+  // the operator to unpublish first, and the console had no way to do it.
+  async function handleUnpublish() {
+    if (!venue) return;
+    setUnpublishing(true);
+    try {
+      await adminUnpublishRota(venue.id);
+      showToast("Rota unpublished — staff can no longer see it");
+      setRota(null);
+      setReloadToken((n) => n + 1);
+    } catch (err) {
+      showToast(err instanceof AdminApiError ? err.message : "Could not unpublish");
+    } finally {
+      setUnpublishing(false);
     }
   }
 
@@ -250,6 +270,13 @@ export default function AdminVenueDetailPage() {
           className="rounded-lg border border-hairline bg-surface-card px-3.5 py-2 text-xs font-semibold text-ink-muted disabled:opacity-50"
         >
           {generating ? <Waiting label="Running solver…" /> : "Trigger solver"}
+        </button>
+        <button
+          onClick={handleUnpublish}
+          disabled={unpublishing || !venue.period}
+          className="rounded-lg border border-hairline bg-surface-card px-3.5 py-2 text-xs font-semibold text-ink-muted disabled:opacity-50"
+        >
+          {unpublishing ? <Waiting label="Unpublishing…" /> : "Unpublish"}
         </button>
         <button
           onClick={handleViewRota}
