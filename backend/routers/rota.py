@@ -839,8 +839,29 @@ def reject_swap(period_id: str, swap_id: str, manager: dict = Depends(get_curren
 
 def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
     """Runs the CP-SAT solver for a venue's period and persists the result.
-    Shared by the manager-facing generate endpoint and the admin console's
-    manual-trigger action."""
+    Shared by the manager-facing generate endpoint, the admin console's
+    manual-trigger action, and the cron that solves a week once its availability
+    window closes.
+
+    Refuses a live rota, and the check lives HERE rather than on the endpoint
+    because this is where the destruction happens: the delete below removes every
+    non-manually-assigned row, and `status` is forced back to "generated" — so on
+    a published week this wipes the rota staff have already been emailed, takes
+    the drop/claim/swap rows keyed to those assignments with it, and pulls the
+    week out of the staff app. Guarding only the manager endpoint left the admin
+    console's own generate button (`admin.py`, no status check, runs against
+    `_latest_period`) able to do exactly that to a live venue — the same hole
+    through a different door. Cron is unaffected: it solves a period it has just
+    set to "closed".
+
+    The way back is `unpublish` first, which logs to activity_log so the audit
+    trail shows the week came down deliberately."""
+    if period.get("status") in ("published", "confirmed"):
+        raise HTTPException(
+            status_code=400,
+            detail="This rota is published — staff already have it. Unpublish it first if you want to rebuild the week.",
+        )
+
     period_id = period["id"]
     supabase = get_supabase()
 
@@ -947,24 +968,13 @@ def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
 def generate(period_id: str, manager: dict = Depends(get_current_manager)):
     """Re-solves the week from scratch.
 
-    Refuses a live rota. `run_solver_for_period` deletes every
-    non-manually-assigned row before it solves, so running this on a
-    published/confirmed week silently destroys the rota staff have already been
-    emailed — and takes any drop/claim/swap rows keyed to those assignments with
-    it — while flipping the status back to "generated" so the week disappears
-    from the staff app. The client buries Regenerate behind a confirm on a live
-    week, but a confirm dialog is not a guard: this endpoint is reachable
-    directly, the backend runs on the service-role key with no RLS net, and
-    `unpublish` / `reopen_availability` already validate their own transitions.
-    Pull the rota down with unpublish first — that path logs to activity_log, so
-    the audit trail shows the week came down deliberately."""
+    The live-rota guard lives in `run_solver_for_period`, next to the delete it
+    protects, so every caller inherits it. The client buries Regenerate behind a
+    confirm on a published week, but a confirm dialog is not a guard: this
+    endpoint is reachable directly and the backend runs on the service-role key
+    with no RLS net."""
     venue = get_manager_venue(manager["id"])
     period = _get_period_or_404(venue["id"], period_id)
-    if period["status"] in ("published", "confirmed"):
-        raise HTTPException(
-            status_code=400,
-            detail="This rota is published — staff already have it. Unpublish it first if you want to rebuild the week.",
-        )
     return run_solver_for_period(venue, period)
 
 

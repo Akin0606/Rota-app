@@ -295,3 +295,40 @@ def test_u18_notes_ignore_a_closed_day():
         [U18], subs, [EVE], RULES, shift_days_by_key=SHIFT_DAYS
     )
     assert warnings == []
+
+
+# --------------------------------------------------------------------------- #
+# The live-rota guard sits next to the delete it protects                      #
+# --------------------------------------------------------------------------- #
+# run_solver_for_period removes every non-manually-assigned row before solving,
+# so on a published week it destroys the rota staff already have. Guarding only
+# the manager endpoint left the admin console's own generate button able to do
+# exactly that — these pin the guard to the shared function so every caller,
+# present and future, inherits it.
+
+def test_solver_refuses_a_published_period():
+    import pytest
+    from fastapi import HTTPException
+    from routers.rota import run_solver_for_period
+
+    for status in ("published", "confirmed"):
+        with pytest.raises(HTTPException) as exc:
+            run_solver_for_period({"id": "v"}, {"id": "p", "status": status})
+        assert exc.value.status_code == 400
+        assert "Unpublish it first" in exc.value.detail
+
+
+def test_solver_guard_lets_cron_through():
+    # Cron solves a period it has just set to "closed"; the manager solves a
+    # "collecting" or "generated" one. None may be blocked. They fail later on
+    # the DB call, which is the point — the guard is not what stopped them.
+    from fastapi import HTTPException
+    from routers.rota import run_solver_for_period
+
+    for status in ("closed", "collecting", "generated"):
+        try:
+            run_solver_for_period({"id": "v"}, {"id": "p", "status": status})
+        except HTTPException as e:  # pragma: no cover - only on a regression
+            raise AssertionError(f"guard wrongly blocked status {status!r}") from e
+        except Exception:
+            pass  # got past the guard and into the database; that's a pass here
