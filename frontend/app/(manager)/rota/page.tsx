@@ -11,6 +11,7 @@ import GenerateOverlay from "@/components/manager/generate-overlay";
 import ManagerIcon from "@/components/manager/icon";
 import ManagerRotaMatrix from "@/components/manager/rota-matrix";
 import ManagerRotaReview from "@/components/manager/rota-review";
+import RotaFrontDoor from "@/components/manager/rota-front-door";
 import RotaMoreSheet from "@/components/manager/rota-more-sheet";
 import RotaRiskModal from "@/components/manager/rota-risk-modal";
 import U18LegalBlock from "@/components/manager/u18-legal-block";
@@ -51,24 +52,26 @@ import {
   publishRota,
   rejectClaim,
   rejectSwap,
+  remindStaff,
+  unpublishRota,
 } from "@/lib/api";
+import WeekScrubber, {
+  ScrubberEdgeHint,
+  buildWeekStops,
+} from "@/components/manager/week-scrubber";
 import { STAFF_ROLES } from "@/lib/constants";
-import { formatWeekRange } from "@/lib/utils";
+import {
+  formatWeekRange,
+  mondayISO,
+  planningPeriod,
+  todayIndexInWeek,
+} from "@/lib/utils";
 import Waiting from "@/components/waiting";
 
-// This week's Monday (offset 0) and the following weeks, as YYYY-MM-DD.
-function mondayISO(offsetWeeks: number): string {
-  const d = new Date();
-  const dow = (d.getDay() + 6) % 7; // 0 = Monday
-  d.setDate(d.getDate() - dow + offsetWeeks * 7);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-const WEEK_OPTIONS = [
-  { weekStart: mondayISO(0), label: "This week" },
-  { weekStart: mondayISO(1), label: "Next week" },
-  { weekStart: mondayISO(2), label: "In 2 weeks" },
-];
+// The three This/Next/In-2-weeks pills are gone — see components/manager/
+// week-scrubber.tsx. `mondayISO` moved to lib/utils so the scrubber, this
+// page and Home all agree on which Monday "this week" is (and all resolve it
+// through Europe/London rather than the device clock).
 
 export default function RotaPage() {
   const [periods, setPeriods] = useState<Period[]>([]);
@@ -86,7 +89,7 @@ export default function RotaPage() {
   const [pendingApproveSwapId, setPendingApproveSwapId] = useState<string | null>(null);
   // One unified risk modal for the three confirm paths (add / claim / swap).
   const [risk, setRisk] = useState<{ kind: "add" | "claim" | "swap"; reason: string | null } | null>(null);
-  const [selectedWeek, setSelectedWeek] = useState<string>(WEEK_OPTIONS[0].weekStart);
+  const [selectedWeek, setSelectedWeek] = useState<string>(mondayISO(0));
   const [orientation, setOrientation] = useState<RotaOrientation>("staff-rows");
   const [view, setView] = useState<"review" | "matrix">("review");
   const [reviewDay, setReviewDay] = useState(0);
@@ -112,6 +115,9 @@ export default function RotaPage() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [imageViewOpen, setImageViewOpen] = useState(false);
   const [venueName, setVenueName] = useState("");
+  // Only for the scrubber's left edge, and only as the fallback when a venue
+  // has no periods at all — created_at is a timestamp, not a Monday.
+  const [venueCreatedAt, setVenueCreatedAt] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [pendingAdd, setPendingAdd] = useState<{
@@ -120,6 +126,14 @@ export default function RotaPage() {
     staffId: string;
   } | null>(null);
   const [addSaving, setAddSaving] = useState(false);
+  // R3 — the chase state's own busy flags.
+  const [settingUp, setSettingUp] = useState(false);
+  const [remindingAll, setRemindingAll] = useState(false);
+  const [remindingId, setRemindingId] = useState<string | null>(null);
+  const [remindedIds, setRemindedIds] = useState<string[]>([]);
+  // R2 (iii) — rebuilding a live week has to pull it down from staff first.
+  const [rebuildConfirmOpen, setRebuildConfirmOpen] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
 
   const period = periods.find((p) => p.week_start === selectedWeek) ?? null;
 
@@ -147,11 +161,13 @@ export default function RotaPage() {
         setShifts(shiftsRes);
         setStaff(staffRes);
         setVenueName(venueRes.name);
+        setVenueCreatedAt(venueRes.created_at ?? null);
 
-        const newest = periodsRes[0];
-        if (newest && WEEK_OPTIONS.some((w) => w.weekStart === newest.week_start)) {
-          setSelectedWeek(newest.week_start);
-        }
+        // Land on the week the manager is actually being asked to build —
+        // the same one Home's hero names, so following that button doesn't
+        // drop them on a different week than the one they just read about.
+        const plan = planningPeriod(periodsRes);
+        if (plan) setSelectedWeek(plan.week_start);
       } catch {
         if (!cancelled) setError(true);
       } finally {
@@ -163,6 +179,13 @@ export default function RotaPage() {
       cancelled = true;
     };
   }, [reloadToken]);
+
+  // Open the day view on today when the week being viewed is the current one,
+  // and on Monday otherwise. A manager scrubbing to next week wants the start of
+  // it; a manager on this week wants the day they're standing in.
+  useEffect(() => {
+    setReviewDay(todayIndexInWeek(selectedWeek) ?? 0);
+  }, [selectedWeek]);
 
   // Load the rota whenever the selected week's period changes.
   useEffect(() => {
@@ -356,6 +379,79 @@ export default function RotaPage() {
       setGenError(err instanceof ApiError ? err.message : "Could not generate rota. Try again.");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleSetUpWeek() {
+    setSettingUp(true);
+    try {
+      const created = await ensurePeriod();
+      if (created) {
+        setPeriods((prev) => [created, ...prev.filter((x) => x.week_start !== created.week_start)]);
+        showToast("Week opened — your team can send availability now");
+      }
+    } finally {
+      setSettingUp(false);
+    }
+  }
+
+  async function handleRemindAll() {
+    if (!period) return;
+    setRemindingAll(true);
+    try {
+      const result = await remindStaff({ periodId: period.id });
+      setRemindedIds(assignableStaff.filter((m) => !m.submitted).map((m) => m.id));
+      showToast(
+        result.reminded === 0
+          ? "Everyone's already submitted"
+          : result.email_sent
+            ? `Reminded ${result.reminded} by email`
+            : `Reminded ${result.reminded} — but no emails were delivered`,
+      );
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not send reminders");
+    } finally {
+      setRemindingAll(false);
+    }
+  }
+
+  async function handleRemindOne(member: StaffManager) {
+    setRemindingId(member.id);
+    try {
+      const result = await remindStaff({ staffId: member.id, periodId: period?.id });
+      if (result.email_sent) setRemindedIds((prev) => [...prev, member.id]);
+      showToast(
+        result.email_sent
+          ? `Reminder emailed to ${member.name.split(" ")[0]}`
+          : member.email
+            ? `Could not email ${member.name.split(" ")[0]} — check their email address`
+            : `${member.name.split(" ")[0]} has no email on file — nothing sent`,
+      );
+    } catch {
+      showToast("Could not send reminder");
+    } finally {
+      setRemindingId(null);
+    }
+  }
+
+  // Rebuilding a published week is a real footgun: the solve deletes every
+  // non-manual assignment and staff already have the current rota. The backend
+  // refuses to generate over a live period at all, so this pulls it down first
+  // — which also writes an activity_log row, so the trail shows the week came
+  // down deliberately rather than a rota silently changing under people.
+  async function handleRebuildLive() {
+    if (!period) return;
+    setRebuilding(true);
+    try {
+      const after = await unpublishRota(period.id);
+      setSummary(after);
+      setPeriods((prev) => prev.map((x) => (x.id === period.id ? { ...x, status: after.status } : x)));
+      setRebuildConfirmOpen(false);
+      await handleGenerate();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Could not unpublish this rota");
+    } finally {
+      setRebuilding(false);
     }
   }
 
@@ -581,6 +677,37 @@ export default function RotaPage() {
   const isLive = period?.status === "published" || period?.status === "confirmed";
   const statusLabel = period ? (STATUS_CONFIG[period.status]?.label ?? period.status) : "Not started";
 
+  // R1 — the scrubber's stops, and whether the week being viewed can still be
+  // built. `create_period` (backend/routers/periods.py) refuses any week before
+  // this Monday outright, so a past week is view-only by construction; every
+  // control that routes through ensurePeriod is hidden rather than left to
+  // surface a raw backend error string as UI copy.
+  const weekStops = buildWeekStops(periods, venueCreatedAt);
+  const selectedStop = weekStops.find((w) => w.weekStart === selectedWeek) ?? null;
+  const isPastWeek = selectedStop?.isPast ?? false;
+
+  // Approved, active staff — the roster the rota is actually built from. A
+  // pending self-registrant can PIN in and submit availability but is never
+  // schedulable, so counting them would make readiness read short forever.
+  const assignableStaff = staff.filter((m) => m.is_active && !m.pending);
+
+  // R2 — the entry state machine. Gate on state, never blanket: a manager who
+  // taps back onto a week they published last Thursday and gets told to
+  // "Generate" reads that as "your rota's gone".
+  //   past      · read-only history, no controls that would 400 at the backend
+  //   fresh     · the pre-generation front door (R3), not an empty grid
+  //   draft     · the coverage-first day-view, immediately, no gate
+  //   live      · the same body, read-first, Generate buried behind a confirm
+  const entry: "past" | "fresh" | "draft" | "live" = isPastWeek
+    ? "past"
+    : isLive
+      ? "live"
+      : hasAssignments
+        ? "draft"
+        : "fresh";
+  const showsRota = entry === "draft" || entry === "live" || (entry === "past" && hasAssignments);
+  const canEdit = entry === "draft" || entry === "live";
+
   function renderOpenSlotControl(shiftId: string, dayIndex: number) {
     const key = `${shiftId}:${dayIndex}`;
     const posted = openPostsByKey.get(key);
@@ -638,47 +765,16 @@ export default function RotaPage() {
 
   return (
     <div className="animate-fadeIn px-4 pb-28 pt-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="text-[23px] font-medium tracking-[-0.5px] text-ink">Rota</div>
-        {/* Auto-fill / Copy stay prominent only on an empty week; on a built
-            week they move behind More (B5). */}
-        {period && !hasAssignments && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopyPrevious}
-              disabled={copying}
-              className="cp-hairline rounded-[9px] bg-surface-card px-3 py-2 text-[12px] font-medium text-ink-muted disabled:opacity-60"
-            >
-              {copying ? <Waiting label="Copying…" /> : "Copy last week"}
-            </button>
-            <button
-              onClick={handleGenerate}
-              disabled={generating}
-              className="rounded-[9px] bg-accent px-3 py-2 text-[12px] font-medium text-accent-on disabled:opacity-60"
-            >
-              {generating ? <Waiting label="Generating…" /> : "Auto-fill"}
-            </button>
-          </div>
-        )}
-      </div>
+      {/* Auto-fill and Copy no longer float here. They aren't navigation, they
+          are the two ways to FILL a fresh week, so they live inside the front
+          door below (R2 i) and behind More on a week that's already built. */}
+      <div className="mb-3 text-[23px] font-medium tracking-[-0.5px] text-ink">Rota</div>
 
-      {/* Week switcher — plan up to 2 weeks ahead */}
-      <div className="scrollbar-none mb-4 flex gap-1">
-        {WEEK_OPTIONS.map((opt) => {
-          const active = opt.weekStart === selectedWeek;
-          return (
-            <button
-              key={opt.weekStart}
-              onClick={() => setSelectedWeek(opt.weekStart)}
-              className={`whitespace-nowrap rounded-[9px] px-3 py-1.5 text-[12px] font-medium transition ${
-                active ? "bg-accent text-accent-on" : "cp-hairline bg-surface-card text-ink-muted"
-              }`}
-            >
-              {opt.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* R1 — one bounded, snapping week-strip in place of the three pills.
+          The week you're viewing takes the accent; the real current week keeps a
+          "now" marker that never moves, so scrubbing never loses today. */}
+      <WeekScrubber stops={weekStops} selected={selectedWeek} onSelect={setSelectedWeek} />
+      <ScrubberEdgeHint stop={selectedStop} />
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="text-[13px] font-medium text-ink-label">
@@ -733,25 +829,55 @@ export default function RotaPage() {
         </div>
       )}
 
-      {!period && (
-        <div className="mb-5 rounded-panel border border-hairline bg-surface-card p-4 text-[13px] text-ink-muted">
-          No rota started for this week yet. Hit <span className="font-semibold text-ink-label">Auto-fill</span> to
-          open it and generate from whatever availability has come in.
+      {/* R2 (i) + R3 — a fresh week opens on the chase, not an empty grid. */}
+      {entry === "fresh" && (
+        <RotaFrontDoor
+          weekLabel={`w/c ${formatWeekRange(selectedWeek).split(" – ")[0]}`}
+          hasPeriod={Boolean(period)}
+          staff={assignableStaff}
+          onSetUpWeek={handleSetUpWeek}
+          settingUp={settingUp}
+          onGenerate={handleGenerate}
+          generating={generating}
+          onCopyPrevious={handleCopyPrevious}
+          copying={copying}
+          onRemindAll={handleRemindAll}
+          remindingAll={remindingAll}
+          onRemindOne={handleRemindOne}
+          remindingId={remindingId}
+          remindedIds={remindedIds}
+        />
+      )}
+
+      {/* R2 (past) — a week that's been and gone. The backend refuses to create
+          a period before this Monday, so there is nothing to build here; say so
+          rather than offering controls that would 400. */}
+      {entry === "past" && !hasAssignments && (
+        <div className="mb-4 rounded-cp-card border-[0.5px] border-dashed border-hairline bg-surface-subtle px-4 py-6 text-center text-[13px] text-ink-muted">
+          No rota was built for this week.
         </div>
       )}
 
-      {!period && (
-        <button
-          onClick={handleGenerate}
-          disabled={generating}
-          className="mb-5 w-full rounded-[11px] bg-accent px-4 py-3 text-[13px] font-medium text-accent-on disabled:opacity-60"
-        >
-          {generating ? <Waiting label="Generating…" /> : "Auto-fill this week"}
-        </button>
+      {/* R2 (iii) — read-first. A live rota is what staff are working from, so
+          it leads with a calm statement, not a call to action. */}
+      {entry === "live" && (
+        <div className="mb-3 flex items-center gap-2.5 rounded-cp-panel border-[0.5px] border-avail-border bg-avail-bg px-3.5 py-[13px]">
+          <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-cp-slot bg-avail-bg text-cp-green">
+            <ManagerIcon name="circle-check" size={16} />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[13.5px] font-medium text-cp-green">Published · staff notified</div>
+            <div className="mt-px text-[11.5px] text-ink-muted">
+              {period?.status === "confirmed"
+                ? "Settled — everyone has their shifts for this week."
+                : "The availability window is still open, so this can still change."}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Approvals action-row — someone is waiting on you (B2) */}
-      {period && (
+      {period && entry !== "past" && (
         <ApprovalsRow
           claims={claims}
           swaps={swaps}
@@ -766,12 +892,12 @@ export default function RotaPage() {
       )}
 
       {/* One honest coverage line (B1) — replaces the three stacked cards */}
-      {period && summary && <CoverageSummary slots={coverageSlots} />}
+      {showsRota && summary && <CoverageSummary slots={coverageSlots} />}
 
       {/* Under-18 legal block, its own distinct treatment (B4) */}
-      {period && summary && <U18LegalBlock warnings={summary.warnings} />}
+      {showsRota && summary && <U18LegalBlock warnings={summary.warnings} />}
 
-      {period && view === "matrix" && (
+      {showsRota && view === "matrix" && (
         <button
           onClick={() => setView("review")}
           className="mb-3 flex items-center gap-1.5 text-[12px] font-medium text-accent"
@@ -780,7 +906,7 @@ export default function RotaPage() {
         </button>
       )}
 
-      {period && (
+      {showsRota && (
         <div className={rotaLoading ? "opacity-50 transition-opacity" : "transition-opacity"}>
           {view === "review" ? (
             <ManagerRotaReview
@@ -791,9 +917,9 @@ export default function RotaPage() {
               leave={summary?.leave ?? {}}
               selectedDay={reviewDay}
               onSelectDay={setReviewDay}
-              onAdd={handleAdd}
-              onRemove={handleRemove}
-              renderGapActions={renderOpenSlotControl}
+              onAdd={canEdit ? handleAdd : undefined}
+              onRemove={canEdit ? handleRemove : undefined}
+              renderGapActions={canEdit ? renderOpenSlotControl : undefined}
             />
           ) : (
             <ManagerRotaMatrix
@@ -803,15 +929,15 @@ export default function RotaPage() {
               assignments={summary?.assignments ?? []}
               leave={summary?.leave ?? {}}
               orientation={orientation}
-              onAdd={handleAdd}
-              onRemove={handleRemove}
+              onAdd={canEdit ? handleAdd : undefined}
+              onRemove={canEdit ? handleRemove : undefined}
             />
           )}
         </div>
       )}
 
       {/* Secondary bar: the whole-week grid is a demoted secondary, tools behind More */}
-      {period && (
+      {showsRota && (
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {view === "review" && (
             <button
@@ -831,7 +957,7 @@ export default function RotaPage() {
       )}
 
       {/* Demoted panels — revealed on demand from the More sheet (B5) */}
-      {period && showAvailability && (
+      {showsRota && showAvailability && (
         <div className="mt-4">
           <AvailabilityPanel
             shifts={shifts}
@@ -842,7 +968,7 @@ export default function RotaPage() {
         </div>
       )}
 
-      {period && showNotes && summary && summary.info.length > 0 && (
+      {showsRota && showNotes && summary && summary.info.length > 0 && (
         <div className="mt-4 rounded-panel border border-hairline bg-surface-card p-4">
           <div className="mb-1 text-[13px] font-semibold text-ink-label">Solver notes</div>
           <ul className="list-disc space-y-1 pl-4 text-[12px] text-ink-faint">
@@ -882,11 +1008,13 @@ export default function RotaPage() {
         onExport={handleExport}
         exportingFmt={exportingFmt}
         onViewImage={() => setImageViewOpen(true)}
-        onRegenerate={handleGenerate}
+        onRegenerate={isLive ? () => setRebuildConfirmOpen(true) : handleGenerate}
         generating={generating}
         onCopyPrevious={handleCopyPrevious}
         copying={copying}
-        canCopy={!hasAssignments}
+        canCopy={!hasAssignments && entry !== "past"}
+        isLive={isLive}
+        readOnly={entry === "past"}
         orientation={orientation}
         onToggleOrientation={() =>
           setOrientation((o) => (o === "staff-rows" ? "day-rows" : "staff-rows"))
@@ -976,8 +1104,38 @@ export default function RotaPage() {
         </div>
       )}
 
-      {/* Sticky publish bar */}
-      {period && (
+      {/* Rebuilding a live week: name what it costs before it happens. */}
+      {rebuildConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
+          <div className="cp-hairline w-full max-w-[440px] rounded-card bg-surface-card p-6">
+            <div className="mb-2 text-lg font-medium text-ink">Rebuild this week&apos;s rota?</div>
+            <div className="mb-4 text-sm text-ink-muted">
+              This rota is published — your team already has it. Rebuilding takes it down first, then
+              solves the week again from scratch, so shifts people are expecting can change. Any
+              shifts you placed by hand are kept.
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setRebuildConfirmOpen(false)}
+                className="rounded-xl px-4 py-2.5 text-sm font-medium text-ink-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRebuildLive}
+                disabled={rebuilding || generating}
+                className="rounded-xl bg-cp-red px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {rebuilding ? <Waiting label="Rebuilding…" /> : "Unpublish and rebuild"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sticky publish bar — never on a past week: there is nothing to
+          publish and no gap that can still be filled. */}
+      {showsRota && entry !== "past" && (
         <div className="sticky bottom-0 z-20 -mx-4 mt-6 flex items-center justify-between gap-3 border-t border-hairline bg-surface-card px-4 py-3.5">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[12px] font-medium text-ink">

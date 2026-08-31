@@ -18,8 +18,9 @@ type ManagerRotaMatrixProps = {
   assignments: AssignmentOut[];
   leave: Record<string, number[]>;
   orientation: RotaOrientation;
-  onAdd: (dayIndex: number, shiftId: string, staffId: string) => void;
-  onRemove: (dayIndex: number, shiftId: string, staffId: string) => void;
+  // Omitted on a read-only week — see the note in rota-review.tsx.
+  onAdd?: (dayIndex: number, shiftId: string, staffId: string) => void;
+  onRemove?: (dayIndex: number, shiftId: string, staffId: string) => void;
 };
 
 function initial(name: string): string {
@@ -61,13 +62,27 @@ export default function ManagerRotaMatrix({
     const isAdding = adding?.staff === staffId && adding?.day === dayIndex;
 
     if (shift && a) {
+      const label = compactTimeRange(
+        a.start_time ?? shift.start_time,
+        a.end_time ?? shift.end_time,
+      );
+      if (!onRemove) {
+        return (
+          <div
+            title={shift.name}
+            className="w-full truncate rounded-md bg-accent-light px-1 py-1.5 text-center text-[11px] font-medium text-accent"
+          >
+            {label}
+          </div>
+        );
+      }
       return (
         <button
           onClick={() => onRemove(dayIndex, shift.id, staffId)}
           title={`${shift.name} — tap to remove`}
           className="w-full truncate rounded-md bg-accent-light px-1 py-1.5 text-[11px] font-medium text-accent"
         >
-          {compactTimeRange(a.start_time ?? shift.start_time, a.end_time ?? shift.end_time)}
+          {label}
         </button>
       );
     }
@@ -77,7 +92,7 @@ export default function ManagerRotaMatrix({
           autoFocus
           defaultValue=""
           onChange={(e) => {
-            if (e.target.value) onAdd(dayIndex, e.target.value, staffId);
+            if (e.target.value) onAdd?.(dayIndex, e.target.value, staffId);
             setAdding(null);
           }}
           onBlur={() => setAdding(null)}
@@ -100,6 +115,9 @@ export default function ManagerRotaMatrix({
           Leave
         </div>
       );
+    }
+    if (!onAdd) {
+      return <div className="w-full py-1.5 text-center text-[13px] text-ink-faint">·</div>;
     }
     return (
       <button

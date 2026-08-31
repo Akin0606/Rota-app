@@ -71,15 +71,22 @@
   --c-surface-page: #f4f4f2;
   --c-surface-card: #ffffff;
   --c-surface-subtle: #f6f6f5;
+  /* The status text colours are each used ON their own tint (the bg/border/text
+     triples below), which is the hardest case for contrast — and all three
+     failed it: green 3.0:1, red 3.95:1, amber 2.74:1. Darkened to the same
+     three values the light coverage palette uses, so whichever token family a
+     surface reaches for, "good / warning / bad" is one colour in light mode.
+     Also correct where these double as fills: white on the darker red and green
+     goes UP (the admin enable/disable buttons were 3.30:1). */
   --c-avail-bg: #dcfce7;
   --c-avail-border: #22c55e;
-  --c-avail-text: #16a34a;
+  --c-avail-text: #126c35;
   --c-unavail-bg: #fee2e2;
   --c-unavail-border: #ef4444;
-  --c-unavail-text: #dc2626;
+  --c-unavail-text: #c22a2f;
   --c-preferred-bg: #fef9c3;
   --c-preferred-border: #eab308;
-  --c-preferred-text: #ca8a04;
+  --c-preferred-text: #7d6500;
   --c-unset-bg: #f3f4f6;
   --c-unset-border: #e5e7eb;
   --c-unset-text: #9ca3af;

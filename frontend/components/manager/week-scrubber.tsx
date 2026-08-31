@@ -141,22 +141,28 @@ export default function WeekScrubber({
   const railRef = useRef<HTMLDivElement | null>(null);
   const activeRef = useRef<HTMLButtonElement | null>(null);
 
-  // Bring the viewing chip into view when it changes — otherwise scrubbing to a
-  // week that's off-screen (or landing on a venue with a year of history) leaves
-  // the strip showing somewhere else entirely.
+  // Centre the viewing chip when it changes — otherwise a venue with a few
+  // months of history opens showing some other part of the strip entirely.
+  //
+  // This scrolls the rail directly rather than calling scrollIntoView on the
+  // chip. scrollIntoView walks every scrollable ancestor, so it also moves the
+  // PAGE — landing on the rota page would yank the view down past the header
+  // before the manager has read it. Setting scrollLeft can only ever move the
+  // strip.
   useEffect(() => {
     const el = activeRef.current;
     const rail = railRef.current;
     if (!el || !rail) return;
     if (rail.scrollWidth <= rail.clientWidth) return; // fits — nothing to scroll
+    const target = el.offsetLeft - (rail.clientWidth - el.offsetWidth) / 2;
+    const left = Math.max(0, Math.min(target, rail.scrollWidth - rail.clientWidth));
     const reduce =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    el.scrollIntoView({
-      behavior: reduce ? "auto" : "smooth",
-      inline: "center",
-      block: "nearest",
-    });
+    // Smooth is inert in a non-compositing preview pane (same family as the
+    // frozen-transition limit) — the scroll maths is verified with "auto", the
+    // easing itself needs a real browser.
+    rail.scrollTo({ left, behavior: reduce ? "auto" : "smooth" });
   }, [selected, stops.length]);
 
   // Short history fills the row instead of scrolling — a two-week-old venue
@@ -167,7 +173,11 @@ export default function WeekScrubber({
     <div className="mb-4">
       <div
         ref={railRef}
-        className="scrollbar-none flex snap-x snap-mandatory gap-1.5 overflow-x-auto pb-1.5"
+        // `relative` makes the rail the chips' offsetParent, so their offsetLeft
+        // is measured from the same origin as scrollLeft. Without it offsetLeft
+        // is page-relative and includes the page padding, and the centring maths
+        // below quietly scrolls to the wrong place.
+        className="scrollbar-none relative flex snap-x snap-mandatory gap-1.5 overflow-x-auto pb-1.5"
         role="tablist"
         aria-label="Pick a week"
       >
@@ -184,7 +194,12 @@ export default function WeekScrubber({
               role="tab"
               aria-selected={on}
               onClick={() => onSelect(s.weekStart)}
-              className={`snap-center ${
+              // `relative` is load-bearing, not decoration: the sr-only label
+              // below is absolutely positioned, and without a positioned chip to
+              // contain it, it resolves against the page instead — escaping the
+              // rail's overflow clipping and pushing the whole document 28px
+              // wider than a 375px phone.
+              className={`relative snap-center ${
                 fills ? "flex-1" : "flex-none"
               } min-w-[54px] rounded-[11px] border-[0.5px] px-1.5 pb-[7px] pt-2 text-center transition-[background-color,border-color,transform] active:scale-[0.97] ${
                 on

@@ -32,8 +32,11 @@ type ManagerRotaReviewProps = {
   leave: Record<string, number[]>;
   selectedDay: number;
   onSelectDay: (day: number) => void;
-  onAdd: (dayIndex: number, shiftId: string, staffId: string) => void;
-  onRemove: (dayIndex: number, shiftId: string, staffId: string) => void;
+  // Omitted on a read-only week (a past one). Absent handlers hide the edit
+  // affordances entirely rather than rendering controls that would 400 —
+  // the backend refuses to create a period before this Monday.
+  onAdd?: (dayIndex: number, shiftId: string, staffId: string) => void;
+  onRemove?: (dayIndex: number, shiftId: string, staffId: string) => void;
   // The page's "post as open" control for a gap slot — rendered under a short
   // shift so posting is reachable from the day view (B4 mockup d).
   renderGapActions?: (shiftId: string, dayIndex: number) => ReactNode;
@@ -232,7 +235,7 @@ export default function ManagerRotaReview({
                   autoFocus
                   defaultValue=""
                   onChange={(e) => {
-                    if (e.target.value) onAdd(selectedDay, shift.id, e.target.value);
+                    if (e.target.value) onAdd?.(selectedDay, shift.id, e.target.value);
                     setAddingShift(null);
                   }}
                   onBlur={() => setAddingShift(null)}
@@ -247,14 +250,14 @@ export default function ManagerRotaReview({
                     </option>
                   ))}
                 </select>
-              ) : (
+              ) : onAdd ? (
                 <button
                   onClick={() => setAddingShift(shift.id)}
                   className="flex items-center gap-1.5 rounded-lg border-[0.5px] border-dashed border-hairline px-[11px] py-[7px] text-xs text-ink-faint transition-[transform] hover:!text-accent active:scale-[0.97]"
                 >
                   <ManagerIcon name="plus" size={13} /> Add
                 </button>
-              )}
+              ) : null}
             </div>
 
             {/* Post-as-open control from the page, only when this slot is short */}
@@ -302,15 +305,17 @@ export default function ManagerRotaReview({
             >
               Close
             </button>
-            <button
-              onClick={() => {
-                if (detail && detailShift) onRemove(selectedDay, detailShift.id, detail.staffId);
-                setDetail(null);
-              }}
-              className="flex-1 rounded-[11px] bg-cp-red-soft py-3 text-[13px] font-medium text-cp-red"
-            >
-              Remove from shift
-            </button>
+            {onRemove && (
+              <button
+                onClick={() => {
+                  if (detail && detailShift) onRemove(selectedDay, detailShift.id, detail.staffId);
+                  setDetail(null);
+                }}
+                className="flex-1 rounded-[11px] bg-cp-red-soft py-3 text-[13px] font-medium text-cp-red"
+              >
+                Remove from shift
+              </button>
+            )}
           </>
         }
       >

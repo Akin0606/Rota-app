@@ -113,8 +113,16 @@ export default function PublishPanel({
   ];
 
   return (
+    // overflow-hidden matters: the panel is parked off-screen at translate-x-full
+    // while closed, and a transform doesn't take an element out of the scroll
+    // area — so without this the document scrolls sideways into 375px of blank
+    // space on a phone, on every screen that mounts this. `invisible` when
+    // closed also keeps its whole control set (export, email, image) out of the
+    // tab order rather than leaving a hidden focus trap beside the page.
     <div
-      className={`fixed inset-0 z-50 ${open ? "" : "pointer-events-none"}`}
+      className={`fixed inset-0 z-50 overflow-hidden ${
+        open ? "" : "invisible pointer-events-none"
+      }`}
       aria-hidden={!open}
     >
       {/* Backdrop */}

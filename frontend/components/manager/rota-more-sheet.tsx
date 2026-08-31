@@ -18,6 +18,10 @@ type RotaMoreSheetProps = {
   onCopyPrevious: () => void;
   copying: boolean;
   canCopy: boolean;
+  /** Published/confirmed — rebuilding pulls the rota off staff first. */
+  isLive: boolean;
+  /** A past week: nothing here can be rebuilt or copied into. */
+  readOnly: boolean;
   orientation: string;
   onToggleOrientation: () => void;
   onToggleAvailability: () => void;
@@ -71,6 +75,8 @@ export default function RotaMoreSheet({
   onCopyPrevious,
   copying,
   canCopy,
+  isLive,
+  readOnly,
   orientation,
   onToggleOrientation,
   onToggleAvailability,
@@ -142,29 +148,40 @@ export default function RotaMoreSheet({
           onClick={onToggleOrientation}
         />
 
-        <div className="my-1.5 border-t border-hairline" />
+        {/* Rebuilding lives down here on purpose. Never re-nag a manager to
+            generate a week they already built — and on a live week it is a
+            footgun, so it names the consequence instead of hiding it. */}
+        {!readOnly && (
+          <>
+            <div className="my-1.5 border-t border-hairline" />
 
-        <Row
-          icon="sparkles"
-          label="Re-run auto-fill"
-          sub="Regenerate from availability"
-          onClick={() => {
-            onRegenerate();
-            onClose();
-          }}
-          disabled={generating}
-        />
-        {canCopy && (
-          <Row
-            icon="calendar-bolt"
-            label="Copy from last week"
-            sub="Start from last week's rota"
-            onClick={() => {
-              onCopyPrevious();
-              onClose();
-            }}
-            disabled={copying}
-          />
+            <Row
+              icon="sparkles"
+              label={isLive ? "Rebuild this week" : "Re-run auto-fill"}
+              sub={
+                isLive
+                  ? "Unpublishes first — staff lose the current rota"
+                  : "Regenerate from availability"
+              }
+              onClick={() => {
+                onRegenerate();
+                onClose();
+              }}
+              disabled={generating}
+            />
+            {canCopy && (
+              <Row
+                icon="calendar-bolt"
+                label="Copy from last week"
+                sub="Start from last week's rota"
+                onClick={() => {
+                  onCopyPrevious();
+                  onClose();
+                }}
+                disabled={copying}
+              />
+            )}
+          </>
         )}
       </div>
     </BottomSheet>
