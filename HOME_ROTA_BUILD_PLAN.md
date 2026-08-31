@@ -1,6 +1,11 @@
 # Home + Rota — build plan (Rotally brand)
 
-> **PLAN ONLY — not built.** Grounds the approved v2 mockups
+> **BUILT 2026-08-31** — R1–R4 and H1–H3, in commits `74f00dc` (Home),
+> `9567eda` (rota entry layer) and `2bed2fe` (generate animation), on top of
+> `7687496` (the foundation fixes). Corrections to this doc's grounding facts
+> are marked inline below.
+>
+> Grounds the approved v2 mockups
 > (`ROTA_FLOW_MOCKUPS.html`, `HOME_MOCKUPS.html`) + Dan's
 > `ROTA_DASHBOARD_REDESIGN_BRIEF.md` into a sequenced, verifiable build. Both
 > screens are planned together because they share a brand-reconciliation

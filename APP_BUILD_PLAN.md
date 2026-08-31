@@ -1,6 +1,12 @@
 # App build plan — Rotally refresh, sectioned by audience (Staff · Manager)
 
-> **PLAN ONLY — not built.** Covers the pending design/build work across the app,
+> **BUILT 2026-08-31** — all of it, in six commits `66ca716`…`fa68e07` on
+> `staging` (committed, not pushed). See CLAUDE.md's Learnings for the outcome
+> and the five grounding facts in these plans that turned out to be wrong.
+> Corrections are marked inline below rather than deleted, so the next reader
+> can see what was assumed vs what the code actually said.
+>
+> Covers the pending design/build work across the app,
 > grounded in the *actual current* Rotally design system (verified in
 > `globals.css`, not the stale CLAUDE.md "Design language" bullets). The detailed
 > manager Home + Rota batch specs live in `HOME_ROTA_BUILD_PLAN.md`; this doc is

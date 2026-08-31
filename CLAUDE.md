@@ -94,8 +94,9 @@ actively misleading; trust the tokens, not memory):
 - Every design decision should feel intentional, not templated
 
 ## Current state (living — keep accurate)
-**`staging` is the working branch and is 12 commits ahead of `main`.** Working
-tree clean, `staging` == `origin/staging`.
+**`staging` is the working branch and is 23 commits ahead of `main`.** The last
+**6 are committed but NOT pushed** (the Home/Rota refresh, 2026-08-31) — pushing
+is always an explicit, separate ask.
 
 **This section was badly wrong until 2026-08-30 and the failure mode is worth
 naming: it listed six separate batches as "uncommitted, not pushed" that were in
@@ -120,6 +121,15 @@ pre-deploy step before that merge.
 
 **Uncommitted now:** nothing of substance. Assorted untracked design artefacts
 (`*_MOCKUPS.html`, build prompts, `logos/`, agent + skill definitions).
+
+**The Home/Rota refresh is built** (`APP_BUILD_PLAN.md` + `HOME_ROTA_BUILD_PLAN.md`,
+both corrected in place where they were wrong): Phase 0 brand currency, the four
+foundation fixes John's pre-build review surfaced, Home rebuilt present-first
+(Today strip + status hero + demoted activity), the rota entry layer (week
+scrubber, state-gated entry, pre-generation chase screen), the generate
+animation on the brand wheel, and the manager+staff consistency pass. Six
+commits, `66ca716`…`fa68e07`. **Frontend-only except four small backend guards
+— no migration.**
 
 ## Near-term vision — real per-day shift model (Batches 0-5 done — functionally live)
 The one committed architectural change. Move the solver off the hardcoded
@@ -210,6 +220,20 @@ colour/vocabulary swap, and calendar-day leave allowance — are **resolved**;
 details in Learnings.)
 
 ### Unverified, not known-broken
+- **The whole Home/Rota refresh is verified against canned data, never a real
+  manager session.** Manager routes are OTP-gated, so every screen was driven
+  through a throwaway `.cp-manager` preview route with `window.fetch`
+  monkey-patched. That proves rendering, state derivation, layout and contrast;
+  it does not prove the real endpoints behave as stubbed. First real manager
+  session should walk: scrub to a past week (read-only), a fresh week (chase
+  screen → Remind → Generate), a draft (day view → publish), and a published
+  week (More → Rebuild → the unpublish-then-solve path).
+- **Motion is unverifiable in this environment, as always.** The generate
+  animation's easing, the scrubber's smooth scroll and the `prefers-reduced-motion`
+  variants are all present in the cascade and their *logic* is verified, but the
+  preview pane doesn't composite: `behavior: "smooth"` is inert there (proved by
+  the same call with `behavior: "auto"` working), and the reduced-motion media
+  query can't be toggled.
 - **Keyboard `:focus-visible` has never been tested with a real Tab press** —
   the Browser pane can't composite, so `computer` key/click actions time out.
   The rule is present in the cascade but unproven. Needs a real browser.
@@ -313,6 +337,16 @@ Sound where it counts, with two known-weak areas flagged in-code:
   specific target. With the venue-wide backstop at 30/15min (2,880/day) and the
   store resetting on every deploy, expected time to first hit is roughly
   overnight. Fix order: shared persistent rate-limit store, then 6-digit PINs.
+- **Destructive transitions are validated server-side, not just confirmed in the
+  UI.** `generate` used to accept any period in any status while
+  `run_solver_for_period` deletes every non-manually-assigned row first — so
+  regenerating a published week silently destroyed the rota staff had already
+  been emailed and flipped it back to `generated`. It now refuses a
+  published/confirmed period (400); the client's "Rebuild this week" calls
+  `unpublish` first, which logs to `activity_log`. The rule this sets: any status
+  transition a client can trigger is validated at the endpoint, because the
+  backend runs on the service-role key with no RLS net and a confirm dialog is
+  not a guard.
 - **Admin console:** every route gated by `X-Admin-Secret` vs `ADMIN_SECRET`
   (`require_admin`). Plain `!=` compare (not constant-time — low-sev timing nit).
 - **Credential hygiene:** PINs travel in POST bodies, never URLs; forgot-PIN and
@@ -323,6 +357,130 @@ Sound where it counts, with two known-weak areas flagged in-code:
 - **Never touch the OTP / PIN auth flow without flagging first** (working rule).
 
 ## Learnings (append after each session — most recent first)
+- **Home + Rota refresh, all six batches (`APP_BUILD_PLAN.md` + `HOME_ROTA_BUILD_PLAN.md`, John-reviewed BEFORE the build). Committed, not pushed.** The
+  single highest-value thing this session did was **have John verify the plans'
+  grounding facts against the code before writing a line** — five of them were
+  wrong, and each would have been built on. (1) `HOME_ROTA_BUILD_PLAN.md` said
+  the accent is `#ff6b00`/`#b04d0b`; **those are `--c-mark`, the wordmark
+  orange** — `--c-accent` is neutral, so every new CTA would have shipped orange
+  and re-created the AA failure the rebrand fixed. (2) **`generate` had no status
+  guard**: `run_solver_for_period` deletes every non-manual assignment before it
+  solves, so regenerating a published week wiped the rota staff already had,
+  took the drop/claim/swap rows keyed to it, and flipped the status back so the
+  week vanished from the staff app — and the More sheet exposed Regenerate on a
+  live week with no confirm at all. (3) **`summary.warnings` was empty on every
+  read**, so the under-18 legal block only rendered for the few seconds after a
+  solve — which the scrubber makes far worse, since scrubbing is a re-read. (4)
+  The rota page called `listStaff()` with no period id, so `submitted` was null
+  on every member and the new readiness screen would have read "0 of 7 in" on a
+  week where everyone had answered. (5) **The +2-week cap was fiction** — the
+  frontend's three pills, not the backend; `create_period` accepts this Monday
+  through +4 and rejects anything earlier with a 400. **Lesson: a plan's
+  "grounding facts (checked against the tree)" section is a hypothesis. Verify it
+  before building on it, not after.**
+- **The under-18 legal notes extract cleanly because they were never about the
+  solve.** Every one is a statement about *submitted availability* measured
+  against the under-18 rules ("you said you could work this; legally you can't"),
+  so `solver.under18_availability_notes()` is now a pure function called by BOTH
+  `generate_rota` and `_build_summary`. Cost on read is one narrow query
+  (`is_under_18=true`), and zero further work for a venue with no under-18 staff.
+  Watch the trap it exposed: the same divergence lives anywhere a "diagnostic"
+  is produced inside a mutation and returned only on that mutation's response.
+- **"Today" in this app now means Europe/London, and it has to.** The UTC
+  calendar date is wrong for an hour a day during BST — which is precisely when a
+  late-close pub manager is looking at their phone. Worse, three conventions
+  already coexisted: `lib/utils` used UTC extraction, `rota/page.tsx`'s own
+  `mondayISO` used the *device* clock, and only the backend's `now_london()` was
+  right. All new work goes through `londonToday()` / `mondayISO()` /
+  `todayIndexInWeek()` in `lib/utils.ts`, matching the backend.
+- **`shiftPhase(start, end, now, startedDaysAgo)` — the argument that looks
+  redundant is the whole point.** A 5pm–1am shift is one evening across two
+  calendar dates, so at 00:30 the shift actually running is *yesterday's* and
+  today's identically-timed one has not begun. Measuring both against a bare
+  clock reports today's as live sixteen hours early. The Today strip therefore
+  carries yesterday's shift over while it is still running (only within the same
+  week — a Monday-small-hours view misses Sunday's late shift, which lives in the
+  previous period and isn't worth a second fetch on every Home load).
+- **`planningPeriod` is "the soonest week that still needs work", not the
+  earliest.** Taking the plain earliest current-or-future period hides next
+  week's unfinished draft behind a this-week rota that is already out and fine —
+  exactly backwards from what the manager's next job is. Caught by testing the
+  draft scenario in the preview, not by reading the code.
+- **A hero that states status must state coverage too.** The first cut said "This
+  week's sorted" for any published week, while the Today strip on the same screen
+  said today had a hole. Publishing with gaps is allowed and sometimes right, so
+  live ≠ sorted; it now says "This week's out, with N gaps".
+- **Three separate contrast bugs, all the same shape, all found by measuring
+  rather than looking.** (a) `bg-accent text-white`: the rebrand made the accent
+  neutral (`#f4f4f2` dark), so this was **white on near-white** — invisible, not
+  merely sub-AA, and it included the manager top nav's active tab. (b)
+  `.cp-manager` still carried the ink values the staff pass fixed and left behind
+  (muted ~4.2:1, faint ~2.0:1). (c) **Neither light scope ever redefined the
+  coverage colours, only their `-soft` backgrounds**, so a light-theme page
+  inherited the dark values tuned for near-black: green 2.1:1, amber 1.45:1, red
+  3.28:1, white-on-amber 1.45:1. Same bug the rebrand found in `--c-accent`, in
+  the one colour family the brand says carries meaning. **The hardest case is
+  each colour on its OWN soft tint** (red text in a red-soft card), which is what
+  forced the values darker than a first guess. And (d) a fourth of the same
+  shape: destructive buttons fill with `--c-unavail-text`, which is tuned to be
+  *text on a dark page* and so is light — white on it measured 2.77:1, and the
+  admin enable button 1.74:1 on light green. New `--c-status-on` joins
+  `--c-accent-on`: near-black in dark, white in light.
+- **The compositing contrast probe is the reusable bit.** Walk up the ancestors
+  collecting every non-transparent `background-color`, composite them, and only
+  then compute the ratio — a naive probe reads a translucent `rgba(...)` as if it
+  were opaque and reports 1.2:1 on text that is genuinely fine. Combine with
+  `*{transition:none!important}` (the documented frozen-transition trap) and it
+  sweeps a whole screen in both themes in one call. Final state: **zero AA
+  failures across Home, Rota, the generate overlay, the staff palette and login,
+  in both themes, lowest measured ratio 4.50.**
+- **Two layout bugs from absolutely-positioned children escaping their scroll
+  container.** `PublishPanel`'s closed drawer is parked at `translate-x-full`,
+  and a transform does not remove an element from the scroll area — so every
+  screen mounting it scrolled sideways into 375px of blank space on a phone
+  (documented as "pre-existing, out of scope" for two sessions; fixed with
+  `overflow-hidden` + `invisible`, which also removed eight focusable controls
+  from the tab order). And the week scrubber's `sr-only` labels pushed the
+  document 28px wide from a 1px element, because an absolutely-positioned child
+  resolves against the page unless its parent is positioned. **`position:
+  relative` on the chip and the rail is load-bearing, not decoration.**
+- **Scroll a strip by setting `scrollLeft`, never `scrollIntoView`.**
+  `scrollIntoView` walks *every* scrollable ancestor, so centring a week chip
+  also yanks the page down past the header on arrival. Two gotchas measuring it:
+  `offsetLeft` is relative to the **offsetParent**, so the rail must be
+  positioned or the maths silently includes the page padding; and
+  `behavior: "smooth"` is **inert in the preview pane** — the same call with
+  `"auto"` applies instantly, which is how to verify the maths.
+- **A progress animation must not be able to end the wait.** The generate overlay
+  is now pure CSS keyframes (compositor, transform/opacity only) and is replaced
+  the moment `result || error` lands; nothing reads the animation clock. The rail
+  deliberately **never reaches 100%** — 92% over ~3.6s then a crawl — because a
+  cold Render instance can outlast any scripted timeline and a bar that has
+  finished while the work runs is worse than an honest indeterminate wheel.
+  Verified by driving a 12s solve: at 8.5s the running state was still up with
+  the wheel turning, then the result replaced it.
+- **A `tailwind.config.ts` change needs a dev-server restart, and the failure is
+  silent and misleading.** A new colour class simply doesn't generate, so the
+  element *inherits* its parent's colour — which reads exactly like a wrong token
+  value, and the inherited value even flips between themes, so it looks
+  plausible. Check whether the rule exists in `document.styleSheets` before
+  believing a token is wrong.
+- **Also hit again, both already in this file:** running `npm run build` while the
+  dev preview is up corrupts the shared `.next` (symptom: every resource 404s and
+  React never hydrates, so clicks do nothing) — `preview_stop` → `rm -rf .next` →
+  `preview_start`; and the `.eslintcache` must be deleted before trusting a
+  "lint clean" on files you didn't just touch.
+- **Scope calls worth remembering.** The over-hours warning is deliberately
+  **unnamed** — naming who ends up on long hours means running the assignment,
+  since the solver weighs max-hours against rest gaps, day-off-in-7, per-day
+  shift existence and availability weights at once; there is no honest way to
+  pick a name before it runs. `/dashboard` was **relabelled, not renamed** —
+  ten touch points, two of which (`middleware.ts`'s matcher, `app/layout.tsx`'s
+  pre-paint theme regex) fail *silently*, for no user-visible gain. And the
+  "sweep the leftover `crewplan-` localStorage keys" bullet was **struck from the
+  plan**: the hours screen's `legacyKey` is a live one-time forward migration of
+  a staff member's typed pay rate, and deleting it would wipe that for anyone who
+  hasn't opened the screen since the rebrand.
 - **Staging login is FIXED end to end and proven with a real sign-in — plus the no-inbox verification trick that made it provable.** Chain completed in the user's own Chrome: three DNS records added at **Namecheap** (DKIM TXT + two CNAMEs; the MX was skipped deliberately — that is Resend *receiving*, and staging only sends) → Resend domain **verified** → sending key **scoped to `mail-staging.rotally.co.uk`** created → staging Supabase pointed at **`smtp.resend.com:587`** (user `resend`, pass = that key, from `noreply@mail-staging.rotally.co.uk`) → **email templates unlocked by the SMTP switch** → prod's `<h1>{{ .Token }}</h1>` Magic Link body copied across. **The verification that matters: you do not need the user's inbox.** Requesting a code on the live site and then opening the message in **Resend → Emails** shows the rendered body — it read "Your sign-in code … 33479259" — so the OTP can be read back and entered, completing a genuine login. Result: session established and the app landed on **`/onboarding`**, which is the *correct* 404 branch of the new `(manager)/layout.tsx` (that account has no venue in the staging DB) rather than the old "expired token → BootError" bug. **Also fixed: `mailer_subjects_magic_link` said "Your sign-in link" on BOTH projects while the body is a code** — now "Your Rotally sign-in code". **`disable_signup` is now TRUE on both projects.** Staging was safe to close only because `auth.users` on the staging project was checked first and already contained the owner's address — closing signups on a project where the only account does not exist would lock the environment. **Namecheap UI traps, both of which nearly corrupted real DNS:** (1) coordinate clicks land on the wrong row because the grid reflows on scroll — one stray click put the live `staging` CNAME into edit mode twice; use element refs, and reload to discard. (2) The record types come from a hidden native `<select>` (select2/AngularJS) whose option *values are not indices* — `TXT=12`, `CNAME=7`; set `.value` + dispatch `change`. (3) **A CNAME row's value field has placeholder `Target`, not `Value`** — a "last visible input with placeholder Value" selector therefore kept re-targeting the *TXT* row and silently overwrote the DKIM key. Caught before saving by dumping every visible input with its index; **always re-read the whole form by index before committing a multi-row DNS edit.** DKIM was then byte-compared against what Resend issued (218 chars, exact match) at the authoritative nameserver — and note `nslookup | tr -d '
 '` glues the following line onto the value, which fabricates a mismatch; parse the quoted TXT chunks instead. **Still open, both needing access this session did not have:** prod CORS still rejects `rotally.co.uk` (the fix is in `main.py` on `staging`; the prod Render service is in a **different account**, and merging `staging`→`main` would also ship the rebrand + migration `028`), and prod `site_url` is deliberately still `rota-app-mu.vercel.app` until that lands.
 - **Staging/prod ops session: what got fixed, and the three access walls that stop the rest.** Driving the user's **real Chrome** (`mcp__claude-in-chrome__*`, sessions already live for Resend / Render / Supabase) is the right tool for anything that only exists in a dashboard — the user's explicit standing instruction is to exhaust every route (Chrome, APIs, CLIs) before handing them a manual checklist. **Done:** staging Supabase `site_url`/`uri_allow_list`/`mailer_autoconfirm` fixed (previous entry); **prod `disable_signup` → true** (closes the self-serve-tenant hole; admin invites unaffected because `admin.create_user` bypasses the toggle); **prod `uri_allow_list`** widened to `rotally.co.uk/**,www.rotally.co.uk/**,rota-app-mu.vercel.app/**`; Resend domain **`mail-staging.rotally.co.uk`** created (id `63fd874f-af59-4fb0-9120-df394958de31`, Ireland); Render staging given **`ENVIRONMENT=staging` + `EMAIL_ALLOWLIST`**; the fail-closed email guard pushed and **auto-deployed to staging as `44e3ebc`**. **Verification discipline that paid off twice:** the Supabase dashboard's signup toggle **flipped visually and did not persist** — the Management API still read `disable_signup=False` after a reload, and only a direct `PATCH` actually stuck. **Never trust a dashboard screenshot as proof of a saved setting; re-read it from the API.** Similarly the Resend DNS table **middle-truncates** DKIM/CNAME values with a literal `[…]`, and the accessibility tree carries the same truncation — the full values had to be pulled out of the page's own inline script payload with a regex. Guessing a DKIM key silently fails verification, so never reconstruct one. **Three access walls, all genuine, none of them laziness:** (1) **DNS is Namecheap BasicDNS** (`dns1/dns2.registrar-servers.com`) — verified via `nslookup -type=NS`, *not* Vercel as an older memory claimed; Vercel holds only the domain attachment. No saved Namecheap session and it needs a password, which is the one credential class never to enter. This blocks the whole SMTP chain (DNS → verify → scoped key → Supabase SMTP → `{{ .Token }}` template). (2) **The prod Render service is in a different account** — the live Chrome session's Render workspace ("David's workspace") contains *only* `rota-app-staging`; the workspace switcher lists no others. So prod `FRONTEND_URL` / env is unreachable, and **prod CORS still rejects `rotally.co.uk` (verified `400`)**. Note the pushed `main.py` now carries `rotally.co.uk` in its *default* origin list, so **merging `staging`→`main` fixes prod CORS with no env change at all** — but that merge also ships the entire rebrand + marketing v2/v3 + rota redesign *and* runs migration `028` on prod, so it is a release decision, not a CORS patch. (3) `GET /v1/projects/{ref}/api-keys?reveal=true` and the first prod `config/auth` PATCH were **blocked by the auto-mode classifier** (the PATCH succeeded on retry; the api-keys read did not), which rules out the `admin.generate_link` no-email verification trick. **Deliberately held, in this order for a reason:** prod `site_url` stays on `rota-app-mu.vercel.app` **until prod CORS is fixed** — moving it first would send managers to a domain the API refuses; and staging `disable_signup` stays **false** until someone confirms a staging login, because turning it off could lock the only account holder out of the environment we are trying to repair.
