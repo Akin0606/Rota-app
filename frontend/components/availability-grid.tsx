@@ -33,7 +33,7 @@ export default function AvailabilityGrid({ shifts, value, onToggle }: Availabili
         {shifts.map((shift) => (
           <div
             key={shift.id}
-            className="truncate text-center text-[10px] font-semibold uppercase tracking-wide text-ink-faint"
+            className="truncate text-center text-[10px] font-medium uppercase tracking-wide text-ink-faint"
           >
             {shift.name}
           </div>
@@ -46,7 +46,7 @@ export default function AvailabilityGrid({ shifts, value, onToggle }: Availabili
           className="mb-1 grid items-center gap-1"
           style={{ gridTemplateColumns: gridCols }}
         >
-          <div className="text-[13px] font-semibold text-ink-label">{day}</div>
+          <div className="text-[13px] font-medium text-ink-label">{day}</div>
           {shifts.map((shift) => {
             const status = value[dayIndex]?.[shift.id] ?? 0;
             const style = STATUS_STYLE[status];
@@ -55,7 +55,7 @@ export default function AvailabilityGrid({ shifts, value, onToggle }: Availabili
                 key={shift.id}
                 type="button"
                 onClick={() => onToggle(dayIndex, shift.id)}
-                className={`flex h-11 select-none items-center justify-center rounded-[10px] border-2 font-semibold transition-colors ${style.bg} ${style.border} ${style.text} ${status === 0 ? "text-xs" : "text-base"}`}
+                className={`flex h-11 select-none items-center justify-center rounded-[10px] border-2 font-medium transition-colors ${style.bg} ${style.border} ${style.text} ${status === 0 ? "text-xs" : "text-base"}`}
               >
                 {style.icon}
               </button>

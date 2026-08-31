@@ -380,7 +380,7 @@ export default function TeamPage() {
         Something went wrong loading your team.
         <button
           onClick={() => setReloadToken((n) => n + 1)}
-          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-accent-on"
+          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-medium text-accent-on"
         >
           Try again
         </button>
@@ -391,7 +391,7 @@ export default function TeamPage() {
   return (
     <div className="animate-fadeIn px-5 py-6 pb-24 md:px-10 md:py-8 md:pb-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="text-[26px] font-bold text-ink md:text-[28px]">Team</div>
+        <div className="text-[26px] font-medium text-ink md:text-[28px]">Team</div>
         <div className="flex flex-wrap gap-2.5">
           <button
             onClick={copyLink}
@@ -402,7 +402,7 @@ export default function TeamPage() {
           </button>
           <button
             onClick={openAdd}
-            className="flex items-center gap-1.5 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-semibold text-accent-on"
+            className="flex items-center gap-1.5 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-medium text-accent-on"
           >
             <ManagerIcon name="plus" size={14} />
             Add team member
@@ -427,20 +427,20 @@ export default function TeamPage() {
           </div>
           {venue.join_pin ? (
             <div className="flex items-center gap-2.5">
-              <span className="rounded-lg bg-surface-subtle px-3 py-2 text-[15px] font-bold tracking-[0.24em] text-ink">
+              <span className="rounded-lg bg-surface-subtle px-3 py-2 text-[15px] font-medium tracking-[0.24em] text-ink">
                 {venue.join_pin}
               </span>
               <button
                 onClick={() => handleJoinCode("rotate")}
                 disabled={joinBusy}
-                className="text-xs font-semibold text-accent disabled:opacity-60"
+                className="text-xs font-medium text-accent disabled:opacity-60"
               >
                 Reset
               </button>
               <button
                 onClick={() => handleJoinCode("disable")}
                 disabled={joinBusy}
-                className="text-xs font-semibold text-ink-muted disabled:opacity-60"
+                className="text-xs font-medium text-ink-muted disabled:opacity-60"
               >
                 Turn off
               </button>
@@ -449,7 +449,7 @@ export default function TeamPage() {
             <button
               onClick={() => handleJoinCode("rotate")}
               disabled={joinBusy}
-              className="shrink-0 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-semibold text-accent-on disabled:opacity-60"
+              className="shrink-0 rounded-cp-control bg-accent px-4 py-2.5 text-[13px] font-medium text-accent-on disabled:opacity-60"
             >
               Turn on joining
             </button>
@@ -465,9 +465,9 @@ export default function TeamPage() {
         if (pendingApprovals.length === 0) return null;
         return (
           <div className="mb-5">
-            <div className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-ink">
+            <div className="mb-2 flex items-center gap-2 text-[13px] font-medium text-ink">
               Pending approvals
-              <span className="rounded-full bg-cp-amber-soft px-2 py-0.5 text-[11px] font-semibold text-cp-amber">
+              <span className="rounded-full bg-cp-amber-soft px-2 py-0.5 text-[11px] font-medium text-cp-amber">
                 {pendingApprovals.length}
               </span>
             </div>
@@ -498,10 +498,10 @@ export default function TeamPage() {
 
       {pendingOnly && (
         <div className="mb-4 flex items-center gap-2 text-[13px] text-ink-muted">
-          <span className="rounded-full bg-cp-amber-soft px-2.5 py-1 text-[11px] font-semibold text-cp-amber">
+          <span className="rounded-full bg-cp-amber-soft px-2.5 py-1 text-[11px] font-medium text-cp-amber">
             Showing pending
           </span>
-          <button onClick={() => setPendingOnly(false)} className="font-semibold text-accent">
+          <button onClick={() => setPendingOnly(false)} className="font-medium text-accent">
             Show all
           </button>
         </div>
@@ -546,7 +546,7 @@ export default function TeamPage() {
                   <div className="flex items-center gap-1.5 text-xs text-ink-faint">
                     {member.role}
                     {member.is_under_18 && (
-                      <span className="rounded-[5px] bg-accent-light px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+                      <span className="rounded-[5px] bg-accent-light px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
                         U18
                       </span>
                     )}
@@ -607,7 +607,7 @@ export default function TeamPage() {
               <button
                 onClick={handleApprove}
                 disabled={saving}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-accent-on disabled:opacity-60"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-medium text-accent-on disabled:opacity-60"
               >
                 <ManagerIcon name="check" size={15} />
                 {saving ? <Waiting label="Saving…" /> : "Approve & add"}
@@ -624,7 +624,7 @@ export default function TeamPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-semibold text-accent-on disabled:opacity-60"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-cp-control bg-accent py-3.5 text-center text-sm font-medium text-accent-on disabled:opacity-60"
               >
                 <ManagerIcon name="check" size={15} />
                 {saving ? <Waiting label="Saving…" /> : sheetMode === "add" ? "Add to team" : "Save changes"}
@@ -822,24 +822,24 @@ export default function TeamPage() {
 
       <Modal open={!!removeTarget} onClose={() => setRemoveTarget(null)} title="Remove this person?">
         <div className="mb-5 text-[13px] text-ink-muted">
-          <span className="font-semibold text-ink">Remove</span> takes{" "}
-          <span className="font-semibold text-ink">{removeTarget?.name}</span> off the schedule — their PIN
+          <span className="font-medium text-ink">Remove</span> takes{" "}
+          <span className="font-medium text-ink">{removeTarget?.name}</span> off the schedule — their PIN
           stops working and they won&apos;t be rostered again, but their details are kept in case you add them
           back. To honour a data-deletion request, use{" "}
-          <span className="font-semibold text-ink">Erase data</span>: that permanently anonymises their name,
+          <span className="font-medium text-ink">Erase data</span>: that permanently anonymises their name,
           email, phone and PIN and can&apos;t be undone. Past rota history stays intact either way.
         </div>
         <div className="flex gap-2.5">
           <button
             onClick={() => setRemoveTarget(null)}
-            className="flex-1 rounded-xl bg-unset-bg py-3.5 text-center text-sm font-semibold text-ink-muted"
+            className="flex-1 rounded-xl bg-unset-bg py-3.5 text-center text-sm font-medium text-ink-muted"
           >
             Cancel
           </button>
           <button
             onClick={handleRemove}
             disabled={removing}
-            className="flex-1 rounded-xl bg-cp-red py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
+            className="flex-1 rounded-xl bg-cp-red py-3.5 text-center text-sm font-medium text-status-on disabled:opacity-60"
           >
             {removing ? <Waiting label="Removing…" /> : "Remove"}
           </button>

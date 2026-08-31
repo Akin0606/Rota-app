@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Modal from "@/components/modal";
 import Toast from "@/components/toast";
 import Icon, { IconName } from "@/components/staff/icon";
+import StaffLoading from "@/components/staff/staff-loading";
 import MetricCard from "@/components/staff/metric-card";
 import ModeToggle from "@/components/staff/mode-toggle";
 import StaffScreen, { FootNote, ScreenTitle, SectionLabel, StaffTopBar } from "@/components/staff/screen";
@@ -160,7 +161,7 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
     }
   }
 
-  if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
+  if (loading) return <StaffLoading />;
   if (error) return <CenteredMessage>{error}</CenteredMessage>;
 
   const today = todayISO();

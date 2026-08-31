@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Icon from "@/components/staff/icon";
+import StaffLoading from "@/components/staff/staff-loading";
 import Modal from "@/components/modal";
 import ModeToggle from "@/components/staff/mode-toggle";
 import ProgressBar from "@/components/staff/progress-bar";
@@ -402,7 +403,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
     }
   }
 
-  if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
+  if (loading) return <StaffLoading />;
   if (error || !data) return <CenteredMessage>{error || "Something went wrong."}</CenteredMessage>;
 
   const weekStart = parseISODate(selectedWeek);

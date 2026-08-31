@@ -64,10 +64,10 @@ export default function RotaImageView({
 
   function NameLabel({ member }: { member: StaffManager }) {
     return (
-      <div className="flex items-center gap-1 truncate text-[10px] font-semibold text-ink-label">
+      <div className="flex items-center gap-1 truncate text-[10px] font-medium text-ink-label">
         <span className="truncate">{member.name}</span>
         {member.is_under_18 && (
-          <span className="shrink-0 rounded bg-accent-light px-[4px] py-[1px] text-[7px] font-bold text-accent">
+          <span className="shrink-0 rounded bg-accent-light px-[4px] py-[1px] text-[7px] font-medium text-accent">
             U18
           </span>
         )}
@@ -81,7 +81,7 @@ export default function RotaImageView({
     if (shift) {
       return (
         <div
-          className="truncate rounded-md px-1 py-1 text-center text-[10px] font-semibold leading-tight"
+          className="truncate rounded-md px-1 py-1 text-center text-[10px] font-medium leading-tight"
           style={{ background: `${shift.color}22`, color: shift.color }}
           title={`${shift.name} ${compactTimeRange(shift.start_time, shift.end_time)}`}
         >
@@ -116,12 +116,12 @@ export default function RotaImageView({
         <div className="rounded-card border border-hairline bg-surface-card p-5">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <div className="text-lg font-bold text-ink">{venueName}</div>
-              <div className="text-sm font-semibold text-ink-muted">{formatWeekRange(weekStart)}</div>
+              <div className="text-lg font-medium text-ink">{venueName}</div>
+              <div className="text-sm font-medium text-ink-muted">{formatWeekRange(weekStart)}</div>
             </div>
             <div className="text-right">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">{statusLabel}</div>
-              <div className="mt-1 text-sm font-bold text-ink">rota<span className="text-accent">lly</span></div>
+              <div className="text-[11px] font-medium uppercase tracking-wide text-ink-faint">{statusLabel}</div>
+              <div className="mt-1 text-sm font-medium text-ink">rota<span className="text-accent">lly</span></div>
             </div>
           </div>
 
@@ -134,14 +134,14 @@ export default function RotaImageView({
                 <div />
                 {DAY_LABELS.map((d, i) => (
                   <div key={d} className="min-w-0 border-l border-surface-page px-0.5 py-2 text-center">
-                    <div className="truncate text-[9px] font-semibold uppercase text-ink-faint">{d}</div>
-                    <div className="text-xs font-bold text-ink">{dateForDay(weekStart, i)}</div>
+                    <div className="truncate text-[9px] font-medium uppercase text-ink-faint">{d}</div>
+                    <div className="text-xs font-medium text-ink">{dateForDay(weekStart, i)}</div>
                   </div>
                 ))}
               </div>
               {Array.from(roleGroups.entries()).map(([role, members]) => (
                 <div key={role}>
-                  <div className="px-0.5 pb-1 pt-2.5 text-[9px] font-semibold uppercase tracking-wide text-ink-faint">
+                  <div className="px-0.5 pb-1 pt-2.5 text-[9px] font-medium uppercase tracking-wide text-ink-faint">
                     {role}
                   </div>
                   {members.map((member, ri) => (
@@ -175,10 +175,10 @@ export default function RotaImageView({
                 <div />
                 {activeStaff.map((member) => (
                   <div key={member.id} className="min-w-0 border-l border-surface-page px-0.5 py-2 text-center">
-                    <div className="mx-auto flex w-fit items-center gap-1 truncate text-[10px] font-semibold text-ink-label">
+                    <div className="mx-auto flex w-fit items-center gap-1 truncate text-[10px] font-medium text-ink-label">
                       <span className="truncate">{member.name}</span>
                       {member.is_under_18 && (
-                        <span className="shrink-0 rounded bg-accent-light px-[4px] py-[1px] text-[7px] font-bold text-accent">
+                        <span className="shrink-0 rounded bg-accent-light px-[4px] py-[1px] text-[7px] font-medium text-accent">
                           U18
                         </span>
                       )}
@@ -193,7 +193,7 @@ export default function RotaImageView({
                   style={{ gridTemplateColumns: `${LABEL_COL} repeat(${activeStaff.length}, 1fr)` }}
                 >
                   <div className={`min-w-0 flex items-center gap-1 p-1 ${di < DAY_LABELS.length - 1 ? "border-b border-surface-page" : ""}`}>
-                    <div className="truncate text-[9px] font-semibold uppercase text-ink-faint">{d}</div>
+                    <div className="truncate text-[9px] font-medium uppercase text-ink-faint">{d}</div>
                   </div>
                   {activeStaff.map((member) => (
                     <div

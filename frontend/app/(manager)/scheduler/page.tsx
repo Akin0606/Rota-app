@@ -402,7 +402,7 @@ export default function SchedulerPage() {
           <div className="flex items-center gap-2 text-[12px] text-ink-muted">
             <ManagerIcon name="shield" size={14} className="text-accent" /> Under-18 rules · 5 hard constraints
           </div>
-          <span className="rounded-cp-badge bg-accent-light px-2 py-1 text-[9px] font-semibold tracking-[0.05em] text-accent">
+          <span className="rounded-cp-badge bg-accent-light px-2 py-1 text-[9px] font-medium tracking-[0.05em] text-accent">
             ALWAYS ON
           </span>
         </div>
@@ -497,7 +497,7 @@ export default function SchedulerPage() {
             <div className="min-w-[120px] text-[13px] font-medium text-ink">
               {w.week_label}
               {w.is_override && (
-                <span className="ml-2 rounded-cp-badge bg-accent-light px-2 py-0.5 text-[9px] font-semibold text-accent">
+                <span className="ml-2 rounded-cp-badge bg-accent-light px-2 py-0.5 text-[9px] font-medium text-accent">
                   Manual
                 </span>
               )}
@@ -565,7 +565,7 @@ export default function SchedulerPage() {
               <button
                 onClick={() => submitOverride(true)}
                 disabled={savingOverride}
-                className="rounded-cp-control bg-cp-red px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
+                className="rounded-cp-control bg-cp-red px-4 py-2.5 text-[13px] font-medium text-status-on disabled:opacity-60"
               >
                 {savingOverride ? <Waiting label="Saving…" /> : "Save anyway"}
               </button>
@@ -591,7 +591,7 @@ export default function SchedulerPage() {
               <button
                 onClick={() => submitDayOff(false, true)}
                 disabled={savingDayOff}
-                className="rounded-cp-control bg-cp-red px-4 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
+                className="rounded-cp-control bg-cp-red px-4 py-2.5 text-[13px] font-medium text-status-on disabled:opacity-60"
               >
                 {savingDayOff ? <Waiting label="Saving…" /> : "Turn off anyway"}
               </button>
@@ -620,7 +620,7 @@ export default function SchedulerPage() {
 function SectionLabel({ title, hint }: { title: string; hint?: string }) {
   return (
     <div className="mb-3 mt-6 flex items-center justify-between px-1">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-faint">{title}</span>
+      <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-faint">{title}</span>
       {hint && <span className="text-[11px] text-ink-faint">{hint}</span>}
     </div>
   );

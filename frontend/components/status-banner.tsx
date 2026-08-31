@@ -12,7 +12,7 @@ export default function StatusBanner({ status }: { status: string }) {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.collecting;
 
   return (
-    <div className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-semibold ${config.bg} ${config.text}`}>
+    <div className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium ${config.bg} ${config.text}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${config.dot}`} />
       {config.label}
     </div>

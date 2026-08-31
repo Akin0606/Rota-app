@@ -195,7 +195,7 @@ function ResultState({
             <ManagerIcon name="alert-triangle" size={16} />
           </span>
           <div className="text-[12px] leading-[1.45] text-ink">
-            <strong className="font-semibold">
+            <strong className="font-medium">
               {gaps} shift{gaps === 1 ? "" : "s"} couldn&apos;t be filled
             </strong>{" "}
             — {shownGaps.join(", ")}

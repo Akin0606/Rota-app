@@ -27,7 +27,7 @@ function KindTag({ kind }: { kind: "claim" | "swap" }) {
       : "bg-[rgba(59,130,246,0.12)] text-[#2563eb]";
   return (
     <span
-      className={`shrink-0 rounded-[5px] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] ${styles}`}
+      className={`shrink-0 rounded-[5px] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.06em] ${styles}`}
     >
       {kind}
     </span>

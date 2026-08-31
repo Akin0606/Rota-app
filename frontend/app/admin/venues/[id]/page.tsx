@@ -267,7 +267,7 @@ export default function AdminVenueDetailPage() {
         <button
           onClick={handleToggleActive}
           disabled={togglingActive}
-          className={`rounded-lg px-3.5 py-2 text-xs font-semibold text-white disabled:opacity-50 ${
+          className={`rounded-lg px-3.5 py-2 text-xs font-semibold text-status-on disabled:opacity-50 ${
             venue.is_active ? "bg-unavail-text" : "bg-avail-text"
           }`}
         >
@@ -387,7 +387,7 @@ export default function AdminVenueDetailPage() {
             setDeleteConfirm("");
             setDeleteOpen(true);
           }}
-          className="rounded-lg bg-unavail-text px-3.5 py-2 text-xs font-semibold text-white"
+          className="rounded-lg bg-unavail-text px-3.5 py-2 text-xs font-semibold text-status-on"
         >
           Delete venue
         </button>
@@ -445,7 +445,7 @@ export default function AdminVenueDetailPage() {
           <button
             onClick={handleDelete}
             disabled={deleting || deleteConfirm !== venue.name}
-            className="flex-1 rounded-xl bg-unavail-text py-3.5 text-center text-sm font-semibold text-white disabled:opacity-40"
+            className="flex-1 rounded-xl bg-unavail-text py-3.5 text-center text-sm font-semibold text-status-on disabled:opacity-40"
           >
             {deleting ? <Waiting label="Deleting…" /> : "Delete permanently"}
           </button>

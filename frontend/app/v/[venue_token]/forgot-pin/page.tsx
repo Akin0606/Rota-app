@@ -48,15 +48,15 @@ export default function ForgotPinPage({ params }: { params: { venue_token: strin
               <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-avail-bg text-[28px]">
                 ✉️
               </div>
-              <div className="mb-2 text-2xl font-bold text-ink">Check your email</div>
+              <div className="mb-2 text-2xl font-medium text-ink">Check your email</div>
               <div className="text-sm leading-relaxed text-ink-muted">
-                If <span className="font-semibold text-ink">{email}</span> matches a staff member here,
+                If <span className="font-medium text-ink">{email}</span> matches a staff member here,
                 we&apos;ve sent your PIN.
               </div>
             </>
           ) : (
             <>
-              <div className="mb-1.5 text-2xl font-bold text-ink">Forgot your PIN?</div>
+              <div className="mb-1.5 text-2xl font-medium text-ink">Forgot your PIN?</div>
               <div className="mb-8 text-sm text-ink-faint">
                 Enter your email and we&apos;ll send it to you
               </div>
@@ -71,14 +71,14 @@ export default function ForgotPinPage({ params }: { params: { venue_token: strin
               <button
                 onClick={handleSend}
                 disabled={sending}
-                className="w-full rounded-control bg-accent py-4 text-center text-base font-semibold text-accent-on disabled:opacity-60"
+                className="w-full rounded-control bg-accent py-4 text-center text-base font-medium text-accent-on disabled:opacity-60"
               >
                 {sending ? <Waiting label="Sending…" /> : "Send my PIN"}
               </button>
             </>
           )}
 
-          <Link href={`/v/${venue_token}`} className="mt-6 text-[13px] font-semibold text-accent">
+          <Link href={`/v/${venue_token}`} className="mt-6 text-[13px] font-medium text-accent">
             ← Back to PIN entry
           </Link>
         </div>

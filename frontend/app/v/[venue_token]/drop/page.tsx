@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import Modal from "@/components/modal";
 import BackButton from "@/components/staff/back-button";
+import StaffLoading from "@/components/staff/staff-loading";
 import CalendarBlock from "@/components/staff/calendar-block";
 import Icon, { IconName } from "@/components/staff/icon";
 import ModeToggle from "@/components/staff/mode-toggle";
@@ -200,7 +201,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
     }
   }
 
-  if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
+  if (loading) return <StaffLoading />;
   if (error || !data) return <CenteredMessage>{error || "Something went wrong."}</CenteredMessage>;
 
   if (!data.period) {
@@ -506,7 +507,7 @@ export default function DropShiftPage({ params }: { params: { venue_token: strin
               <button
                 onClick={confirmDrop}
                 disabled={dropping}
-                className="rounded-cp-control bg-unavail-text px-5 py-2.5 text-[13px] font-medium text-white disabled:opacity-60"
+                className="rounded-cp-control bg-unavail-text px-5 py-2.5 text-[13px] font-medium text-status-on disabled:opacity-60"
               >
                 {dropping ? <Waiting label="Dropping…" /> : "Drop shift"}
               </button>

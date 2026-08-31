@@ -53,7 +53,7 @@ export default function RotaGrid({
     if (shift && a) {
       return (
         <div
-          className="flex items-start justify-between gap-1 rounded-md px-2 py-1.5 text-[11px] font-semibold leading-tight"
+          className="flex items-start justify-between gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium leading-tight"
           style={{ background: `${shift.color}22`, color: shift.color }}
         >
           <span className="truncate">
@@ -122,8 +122,8 @@ export default function RotaGrid({
             <div />
             {DAY_LABELS.map((d, i) => (
               <div key={d} className="border-l border-surface-page px-2 py-3.5 text-center">
-                <div className="text-[11px] font-semibold uppercase text-ink-faint">{d}</div>
-                <div className="text-base font-bold text-ink">{dateForDay(weekStart, i)}</div>
+                <div className="text-[11px] font-medium uppercase text-ink-faint">{d}</div>
+                <div className="text-base font-medium text-ink">{dateForDay(weekStart, i)}</div>
               </div>
             ))}
           </div>
@@ -133,7 +133,7 @@ export default function RotaGrid({
               className={`grid grid-cols-[110px_repeat(7,minmax(120px,1fr))] ${ri < activeStaff.length - 1 ? "border-b border-surface-page" : ""}`}
             >
               <div className="flex flex-col justify-center p-3">
-                <div className="truncate text-xs font-semibold text-ink-label">{member.name}</div>
+                <div className="truncate text-xs font-medium text-ink-label">{member.name}</div>
                 <div className="truncate text-[10px] text-ink-faint">{member.role}</div>
               </div>
               {DAY_LABELS.map((_, di) => (
@@ -154,7 +154,7 @@ export default function RotaGrid({
             <div />
             {activeStaff.map((member) => (
               <div key={member.id} className="border-l border-surface-page px-2 py-3.5 text-center">
-                <div className="truncate text-xs font-semibold text-ink-label">{member.name}</div>
+                <div className="truncate text-xs font-medium text-ink-label">{member.name}</div>
                 <div className="truncate text-[10px] text-ink-faint">{member.role}</div>
               </div>
             ))}
@@ -166,8 +166,8 @@ export default function RotaGrid({
               style={{ gridTemplateColumns: `110px repeat(${activeStaff.length}, minmax(120px, 1fr))` }}
             >
               <div className="flex items-center gap-1.5 p-3">
-                <div className="text-[11px] font-semibold uppercase text-ink-faint">{d}</div>
-                <div className="text-base font-bold text-ink">{dateForDay(weekStart, di)}</div>
+                <div className="text-[11px] font-medium uppercase text-ink-faint">{d}</div>
+                <div className="text-base font-medium text-ink">{dateForDay(weekStart, di)}</div>
               </div>
               {activeStaff.map((member) => (
                 <div key={member.id} className="flex min-h-[52px] flex-col justify-center border-l border-surface-page p-1.5">

@@ -146,7 +146,7 @@ export default function ManagerRotaMatrix({
       <span className="flex items-center gap-1.5 whitespace-nowrap text-[13px] font-medium text-ink">
         {member.name.split(" ")[0]}
         {member.is_under_18 && (
-          <span className="rounded bg-accent-light px-[5px] py-0.5 text-[8px] font-semibold text-accent">
+          <span className="rounded bg-accent-light px-[5px] py-0.5 text-[8px] font-medium text-accent">
             U18
           </span>
         )}
@@ -175,7 +175,7 @@ export default function ManagerRotaMatrix({
           <thead>
             <tr>
               <th
-                className={`${stickyCol} z-[3] px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-faint`}
+                className={`${stickyCol} z-[3] px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-ink-faint`}
               >
                 Staff
               </th>
@@ -192,7 +192,7 @@ export default function ManagerRotaMatrix({
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-3 pb-1.5 pt-3 text-left text-[12px] font-semibold text-ink-muted"
+                    className="px-3 pb-1.5 pt-3 text-left text-[12px] font-medium text-ink-muted"
                   >
                     {role}
                   </td>
@@ -230,7 +230,7 @@ export default function ManagerRotaMatrix({
         <thead>
           <tr>
             <th
-              className={`${stickyCol} z-[3] px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-faint`}
+              className={`${stickyCol} z-[3] px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-ink-faint`}
             >
               Day
             </th>

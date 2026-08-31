@@ -621,7 +621,7 @@ export default function RotaPage() {
         Something went wrong loading the rota.
         <button
           onClick={() => setReloadToken((n) => n + 1)}
-          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-accent-on"
+          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-medium text-accent-on"
         >
           Try again
         </button>
@@ -720,7 +720,7 @@ export default function RotaPage() {
           <button
             onClick={() => handleCancelOpen(posted.id)}
             disabled={cancelingOpenId === posted.id}
-            className="text-[12px] font-semibold text-unavail-text disabled:opacity-60"
+            className="text-[12px] font-medium text-unavail-text disabled:opacity-60"
           >
             {cancelingOpenId === posted.id ? "…" : "Withdraw"}
           </button>
@@ -743,7 +743,7 @@ export default function RotaPage() {
           <button
             onClick={() => handlePostOpen(dayIndex, shiftId)}
             disabled={posting}
-            className="rounded-md bg-accent px-2 py-1 text-[12px] font-semibold text-accent-on disabled:opacity-60"
+            className="rounded-md bg-accent px-2 py-1 text-[12px] font-medium text-accent-on disabled:opacity-60"
           >
             {posting ? "…" : "Post"}
           </button>
@@ -756,7 +756,7 @@ export default function RotaPage() {
     return (
       <button
         onClick={() => openPostPicker(shiftId, dayIndex)}
-        className="flex items-center gap-1.5 rounded-lg border border-dashed border-hairline px-2.5 py-1.5 text-[12px] font-semibold text-accent"
+        className="flex items-center gap-1.5 rounded-lg border border-dashed border-hairline px-2.5 py-1.5 text-[12px] font-medium text-accent"
       >
         <ManagerIcon name="plus" size={13} /> Post as open
       </button>
@@ -801,7 +801,7 @@ export default function RotaPage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <div
-                className={`text-[13px] font-semibold ${
+                className={`text-[13px] font-medium ${
                   publishResult.failed > 0 ? "text-unavail-text" : "text-ink-label"
                 }`}
               >
@@ -970,7 +970,7 @@ export default function RotaPage() {
 
       {showsRota && showNotes && summary && summary.info.length > 0 && (
         <div className="mt-4 rounded-panel border border-hairline bg-surface-card p-4">
-          <div className="mb-1 text-[13px] font-semibold text-ink-label">Solver notes</div>
+          <div className="mb-1 text-[13px] font-medium text-ink-label">Solver notes</div>
           <ul className="list-disc space-y-1 pl-4 text-[12px] text-ink-faint">
             {summary.info.map((n, i) => (
               <li key={i}>{n}</li>
@@ -1046,23 +1046,23 @@ export default function RotaPage() {
       {clearTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
           <div className="w-full max-w-[440px] rounded-card border border-unavail-border bg-surface-card p-6">
-            <div className="mb-2 text-lg font-bold text-ink">Clear this submission?</div>
+            <div className="mb-2 text-lg font-medium text-ink">Clear this submission?</div>
             <div className="mb-4 text-sm text-ink-muted">
-              This removes all of <span className="font-semibold text-ink-label">{clearTarget.staffName}</span>
+              This removes all of <span className="font-medium text-ink-label">{clearTarget.staffName}</span>
               &apos;s submitted availability for this week. They&apos;ll need to resubmit — this can&apos;t be
               undone.
             </div>
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setClearTarget(null)}
-                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+                className="rounded-xl px-4 py-2.5 text-sm font-medium text-ink-muted"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmClearSubmission}
                 disabled={clearingId !== null}
-                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                className="rounded-xl bg-unavail-text px-5 py-2.5 text-sm font-medium text-status-on disabled:opacity-60"
               >
                 {clearingId ? <Waiting label="Clearing…" /> : "Clear submission"}
               </button>
@@ -1124,7 +1124,7 @@ export default function RotaPage() {
               <button
                 onClick={handleRebuildLive}
                 disabled={rebuilding || generating}
-                className="rounded-xl bg-cp-red px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+                className="rounded-xl bg-cp-red px-5 py-2.5 text-sm font-medium text-status-on disabled:opacity-60"
               >
                 {rebuilding ? <Waiting label="Rebuilding…" /> : "Unpublish and rebuild"}
               </button>

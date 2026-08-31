@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import CalendarBlock from "@/components/staff/calendar-block";
+import StaffLoading from "@/components/staff/staff-loading";
 import Icon from "@/components/staff/icon";
 import ModeToggle from "@/components/staff/mode-toggle";
 import StaffScreen, { FootNote, ScreenTitle, StaffTopBar } from "@/components/staff/screen";
@@ -95,7 +96,7 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
     URL.revokeObjectURL(url);
   }
 
-  if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
+  if (loading) return <StaffLoading />;
   if (error || !data) return <CenteredMessage>{error || "Something went wrong."}</CenteredMessage>;
 
   if (!data.period) {

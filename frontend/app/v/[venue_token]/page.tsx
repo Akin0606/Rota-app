@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import ModeToggle from "@/components/staff/mode-toggle";
+import StaffLoading from "@/components/staff/staff-loading";
 import Toast from "@/components/toast";
 import { ApiError, authenticatePin, getVenueInfo, joinTeam } from "@/lib/api";
 import { deviceKey, pinStorageKey } from "@/lib/utils";
@@ -153,7 +154,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
     }
   }
 
-  if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
+  if (loading) return <StaffLoading />;
   if (inactiveMsg) return <CenteredMessage>{inactiveMsg}</CenteredMessage>;
   if (notFound) return <CenteredMessage>This link isn&apos;t valid.</CenteredMessage>;
 
@@ -377,7 +378,7 @@ function CenteredMessage({ children }: { children: React.ReactNode }) {
 
 export default function PinEntryPage({ params }: { params: { venue_token: string } }) {
   return (
-    <Suspense fallback={<CenteredMessage>Loading…</CenteredMessage>}>
+    <Suspense fallback={<StaffLoading />}>
       <PinEntryContent venue_token={params.venue_token} />
     </Suspense>
   );

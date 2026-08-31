@@ -27,7 +27,7 @@ export default function ClaimsPanel({ claims, shifts, busyId, onApprove, onRejec
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left"
       >
-        <span className="text-[13px] font-semibold text-warn-text">
+        <span className="text-[13px] font-medium text-warn-text">
           Shift claims awaiting approval
           <span className="ml-2 font-normal opacity-80">{claims.length}</span>
         </span>
@@ -45,7 +45,7 @@ export default function ClaimsPanel({ claims, shifts, busyId, onApprove, onRejec
                 className="rounded-lg border border-hairline bg-surface-card p-3.5"
               >
                 <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
-                  <span className="font-semibold text-ink-label">
+                  <span className="font-medium text-ink-label">
                     {DAY_LABELS[claim.day_index]} · {shift?.name ?? "Shift"}
                   </span>
                   <span className="text-ink-faint">
@@ -57,7 +57,7 @@ export default function ClaimsPanel({ claims, shifts, busyId, onApprove, onRejec
                   <button
                     onClick={() => onApprove(claim.assignment_id)}
                     disabled={busy}
-                    className="rounded-lg bg-accent px-3 py-1.5 text-[12px] font-semibold text-accent-on disabled:opacity-50"
+                    className="rounded-lg bg-accent px-3 py-1.5 text-[12px] font-medium text-accent-on disabled:opacity-50"
                   >
                     {busy ? <Waiting label="Working…" /> : "Approve"}
                   </button>

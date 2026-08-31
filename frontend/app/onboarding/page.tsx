@@ -527,7 +527,7 @@ function OnboardingWizard() {
   // ── Renders ───────────────────────────────────────────────────────────────
   if (resendWall) return <ResendWall />;
   if (bootError) return <BootError onRetry={() => window.location.reload()} />;
-  if (checking) return <Centered>Loading…</Centered>;
+  if (checking) return <Centered><Waiting label="Loading…" /></Centered>;
 
   return (
     <div className="cp-manager cp-onboarding">
@@ -1126,7 +1126,7 @@ function Centered({ children }: { children: React.ReactNode }) {
 
 export default function OnboardingPage() {
   return (
-    <Suspense fallback={<Centered>Loading…</Centered>}>
+    <Suspense fallback={<Centered><Waiting label="Loading…" /></Centered>}>
       <OnboardingWizard />
     </Suspense>
   );

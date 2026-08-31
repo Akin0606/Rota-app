@@ -56,6 +56,12 @@ const config: Config = {
           border: "var(--c-unavail-border)",
           text: "var(--c-unavail-text)",
         },
+        // Foreground for text sitting ON a solid status fill (a destructive
+        // button, the admin enable/disable toggle). Flips per theme, because
+        // the status colours are light on dark and dark on light.
+        status: {
+          on: "var(--c-status-on)",
+        },
         preferred: {
           bg: "var(--c-preferred-bg)",
           border: "var(--c-preferred-border)",

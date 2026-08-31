@@ -92,7 +92,7 @@ export default function LeavePage() {
         Something went wrong loading leave requests.
         <button
           onClick={() => setReloadToken((n) => n + 1)}
-          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-accent-on"
+          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-medium text-accent-on"
         >
           Try again
         </button>
@@ -109,9 +109,9 @@ export default function LeavePage() {
 
   return (
     <div className="animate-fadeIn px-5 py-6 pb-24 md:px-10 md:py-8 md:pb-8">
-      <div className="mb-6 text-[26px] font-bold text-ink md:text-[28px]">Leave</div>
+      <div className="mb-6 text-[26px] font-medium text-ink md:text-[28px]">Leave</div>
 
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+      <div className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-faint">
         Pending requests{pending.length > 0 ? ` (${pending.length})` : ""}
       </div>
       {pending.length === 0 ? (
@@ -125,7 +125,7 @@ export default function LeavePage() {
             return (
               <div key={r.id} className="rounded-panel border border-warn-dot bg-warn-bg p-4">
                 <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-ink">{r.staff_name}</span>
+                  <span className="text-sm font-medium text-ink">{r.staff_name}</span>
                   <span className="text-[13px] font-medium text-ink-label">
                     {formatDateRange(r.start_date, r.end_date)}
                   </span>
@@ -148,7 +148,7 @@ export default function LeavePage() {
                   <button
                     onClick={() => handleApprove(r)}
                     disabled={busy}
-                    className="rounded-lg bg-accent px-3.5 py-1.5 text-[12px] font-semibold text-accent-on disabled:opacity-50"
+                    className="rounded-lg bg-accent px-3.5 py-1.5 text-[12px] font-medium text-accent-on disabled:opacity-50"
                   >
                     {busy ? <Waiting label="Working…" /> : "Approve"}
                   </button>
@@ -166,7 +166,7 @@ export default function LeavePage() {
         </div>
       )}
 
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">History</div>
+      <div className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-faint">History</div>
       {history.length === 0 ? (
         <div className="rounded-panel border border-hairline bg-surface-card p-6 text-center text-sm text-ink-faint">
           No decided requests yet.
@@ -181,11 +181,11 @@ export default function LeavePage() {
                 className="flex items-center justify-between gap-3 rounded-panel border border-hairline bg-surface-card p-3.5"
               >
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-ink">{r.staff_name}</div>
+                  <div className="truncate text-sm font-medium text-ink">{r.staff_name}</div>
                   <div className="text-[12px] text-ink-faint">{formatDateRange(r.start_date, r.end_date)}</div>
                 </div>
                 <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.bg} ${status.text}`}
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${status.bg} ${status.text}`}
                 >
                   {status.label}
                 </span>

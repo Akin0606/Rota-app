@@ -61,7 +61,7 @@ export default function AvailabilityPanel({
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left"
       >
-        <span className="text-[13px] font-semibold text-ink-label">
+        <span className="text-[13px] font-medium text-ink-label">
           Availability submissions
           {staffRows.length > 0 && (
             <span className="ml-2 font-normal text-ink-faint">
@@ -104,11 +104,11 @@ export default function AvailabilityPanel({
               <table className="w-full min-w-[640px] border-collapse text-[12px]">
                 <thead>
                   <tr>
-                    <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold text-ink-faint">
+                    <th className="whitespace-nowrap px-2 py-1.5 text-left font-medium text-ink-faint">
                       Staff
                     </th>
                     {DAY_LABELS.map((day) => (
-                      <th key={day} className="px-2 py-1.5 text-center font-semibold text-ink-faint">
+                      <th key={day} className="px-2 py-1.5 text-center font-medium text-ink-faint">
                         {day}
                       </th>
                     ))}
@@ -125,7 +125,7 @@ export default function AvailabilityPanel({
                     }
                     return (
                       <tr key={staffId} className="border-t border-surface-page">
-                        <td className="whitespace-nowrap px-2 py-2 font-semibold text-ink-label">{name}</td>
+                        <td className="whitespace-nowrap px-2 py-2 font-medium text-ink-label">{name}</td>
                         {DAY_LABELS.map((_, dayIndex) => {
                           const dayEntries = byDay.get(dayIndex) ?? [];
                           const note = dayEntries.find((e) => e.note)?.note;
@@ -163,7 +163,7 @@ export default function AvailabilityPanel({
                                     <span
                                       key={shift.id}
                                       title={`${shift.name} — ${style.label.toLowerCase()}`}
-                                      className={`inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] border px-1.5 text-[10px] font-semibold ${style.bg} ${style.border} ${style.text}`}
+                                      className={`inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] border px-1.5 text-[10px] font-medium ${style.bg} ${style.border} ${style.text}`}
                                     >
                                       {abbreviate(shift.name)}
                                     </span>

@@ -211,7 +211,7 @@ export default function ManagerRotaReview({
                     </span>
                     {member.name.split(" ")[0]}
                     {member.is_under_18 && (
-                      <span className="rounded bg-accent-light px-[5px] py-0.5 text-[8px] font-semibold text-accent">
+                      <span className="rounded bg-accent-light px-[5px] py-0.5 text-[8px] font-medium text-accent">
                         U18
                       </span>
                     )}
@@ -331,7 +331,7 @@ export default function ManagerRotaReview({
                 )}
               </span>
               {detailMember?.is_under_18 && (
-                <span className="rounded bg-accent-light px-[5px] py-0.5 text-[8px] font-semibold text-accent">
+                <span className="rounded bg-accent-light px-[5px] py-0.5 text-[8px] font-medium text-accent">
                   U18
                 </span>
               )}

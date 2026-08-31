@@ -19,7 +19,7 @@ export default function U18LegalBlock({ warnings }: { warnings: string[] }) {
         <span className="text-[12.5px] font-medium text-cp-red">
           The law blocked {warnings.length === 1 ? "an assignment" : "these assignments"}
         </span>
-        <span className="ml-auto rounded-[5px] border-[0.5px] border-cp-red/40 px-1.5 py-px text-[9px] font-semibold uppercase tracking-[0.06em] text-cp-red">
+        <span className="ml-auto rounded-[5px] border-[0.5px] border-cp-red/40 px-1.5 py-px text-[9px] font-medium uppercase tracking-[0.06em] text-cp-red">
           Legal
         </span>
       </div>

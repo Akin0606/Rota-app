@@ -152,13 +152,13 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, onDelete, show
       <div className="flex items-center gap-1.5">
         <span>Min</span>
         <button type="button" aria-label="Decrease min staff" onClick={() => onChange(clampStaff(min - 1, max))} className="flex h-7 w-7 items-center justify-center rounded-md bg-cp-icon text-ink">−</button>
-        <span className="w-4 text-center font-semibold text-ink">{min}</span>
+        <span className="w-4 text-center font-medium text-ink">{min}</span>
         <button type="button" aria-label="Increase min staff" onClick={() => onChange(clampStaff(min + 1, max))} className="flex h-7 w-7 items-center justify-center rounded-md bg-cp-icon text-ink">+</button>
       </div>
       <div className="flex items-center gap-1.5">
         <span>Max</span>
         <button type="button" aria-label="Decrease max staff" onClick={() => onChange(clampStaff(min, max - 1))} className="flex h-7 w-7 items-center justify-center rounded-md bg-cp-icon text-ink">−</button>
-        <span className="w-4 text-center font-semibold text-ink">{max}</span>
+        <span className="w-4 text-center font-medium text-ink">{max}</span>
         <button type="button" aria-label="Increase max staff" onClick={() => onChange(clampStaff(min, max + 1))} className="flex h-7 w-7 items-center justify-center rounded-md bg-cp-icon text-ink">+</button>
       </div>
     </div>
@@ -194,7 +194,9 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, onDelete, show
       }
     >
       {loading ? (
-        <div className="py-8 text-center text-sm text-ink-muted">Loading…</div>
+        <div className="py-8 text-center text-sm text-ink-muted">
+          <Waiting label="Loading…" />
+        </div>
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
@@ -250,7 +252,7 @@ export default function ShiftDayEditor({ shift, onClose, onSaved, onDelete, show
               {days.map((d) => (
                 <div key={d.day_index} className="rounded-xl border border-hairline p-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-ink">{DAY_LABELS[d.day_index]}</span>
+                    <span className="text-sm font-medium text-ink">{DAY_LABELS[d.day_index]}</span>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-ink-faint">{d.open ? "Open" : "Closed"}</span>
                       <Switch checked={d.open} onChange={(v) => toggleOpen(d.day_index, v)} label={`${DAY_LABELS[d.day_index]} open`} />

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import Icon from "@/components/staff/icon";
+import StaffLoading from "@/components/staff/staff-loading";
 import ModeToggle from "@/components/staff/mode-toggle";
 import StaffScreen, { StaffTopBar } from "@/components/staff/screen";
 import NotificationBell from "@/components/notification-bell";
@@ -159,7 +160,7 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
     }
   }
 
-  if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
+  if (loading) return <StaffLoading />;
   if (error || !auth) return <CenteredMessage>{error || "Something went wrong."}</CenteredMessage>;
 
   const firstName = auth.staff.name.split(" ")[0];
@@ -423,14 +424,14 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setAcceptTarget(null)}
-                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+                className="rounded-xl px-4 py-2.5 text-sm font-medium text-ink-muted"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmAccept}
                 disabled={resolving}
-                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-on disabled:opacity-60"
+                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-accent-on disabled:opacity-60"
               >
                 {resolving ? <Waiting label="Accepting…" /> : "Accept shift"}
               </button>
@@ -450,14 +451,14 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setAcceptSwapTarget(null)}
-                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink-muted"
+                className="rounded-xl px-4 py-2.5 text-sm font-medium text-ink-muted"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmAcceptSwap}
                 disabled={resolvingSwap}
-                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-accent-on disabled:opacity-60"
+                className="rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-accent-on disabled:opacity-60"
               >
                 {resolvingSwap ? <Waiting label="Accepting…" /> : "Accept swap"}
               </button>

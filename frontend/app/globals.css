@@ -51,6 +51,12 @@
   /* Foreground for anything sitting ON an accent surface. The accent is
      bright enough that white fails AA on it (2.86:1) — near-black is 6.85:1. */
   --c-accent-on: #0c0c0d;
+  /* Same problem, same shape, for a SOLID status fill (a destructive button on
+     --c-unavail-text or --cp-red, the admin enable button on --c-avail-text).
+     Those values are tuned to be *text on a dark page*, so they're light — and
+     white on them measures 2.77:1 (red) and 1.74:1 (green). Near-black clears
+     both: 6.90 and 10.9. Light mode inverts, where the same fills are dark. */
+  --c-status-on: #0c0c0d;
   /* The brand orange. Used by the wordmark and nothing else — every
      other surface is neutral, and colour in the UI means coverage. */
   --c-mark: #ff6b00;
@@ -97,6 +103,8 @@
   --c-shadow: rgba(0, 0, 0, 0.1);
   color-scheme: light;
   --c-accent-on: #ffffff;
+  /* See the dark-mode note: in light the status fills are dark, so this flips. */
+  --c-status-on: #ffffff;
   /* The brand orange. Used by the wordmark and nothing else — every
      other surface is neutral, and colour in the UI means coverage. */
   --c-mark: #b04d0b;

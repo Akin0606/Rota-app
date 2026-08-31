@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import Modal from "@/components/modal";
 import CalendarBlock from "@/components/staff/calendar-block";
+import StaffLoading from "@/components/staff/staff-loading";
 import ModeToggle from "@/components/staff/mode-toggle";
 import ProgressBar from "@/components/staff/progress-bar";
 import StaffScreen, { FootNote, ScreenTitle, SectionLabel, StaffTopBar } from "@/components/staff/screen";
@@ -108,7 +109,7 @@ export default function StaffHoursPage({ params }: { params: { venue_token: stri
     setEditing(false);
   }
 
-  if (loading) return <CenteredMessage>Loading…</CenteredMessage>;
+  if (loading) return <StaffLoading />;
   if (error || !data) return <CenteredMessage>{error || "Something went wrong."}</CenteredMessage>;
 
   if (!data.period) {

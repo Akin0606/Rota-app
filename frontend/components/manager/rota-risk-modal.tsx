@@ -56,7 +56,7 @@ export default function RotaRiskModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6">
       <div className="w-full max-w-[440px] rounded-card border-[0.5px] border-warn-dot bg-surface-card p-[18px]">
-        <span className="mb-2.5 inline-block rounded-[5px] bg-cp-amber-soft px-2 py-[3px] text-[9.5px] font-semibold uppercase tracking-[0.07em] text-cp-amber">
+        <span className="mb-2.5 inline-block rounded-[5px] bg-cp-amber-soft px-2 py-[3px] text-[9.5px] font-medium uppercase tracking-[0.07em] text-cp-amber">
           {tag}
         </span>
         <div className="mb-1.5 font-display text-[16px] font-medium text-ink">{title}</div>

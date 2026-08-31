@@ -142,7 +142,7 @@ export default function PublishPanel({
       >
         <div className="flex items-start justify-between border-b border-hairline p-5">
           <div>
-            <div className="flex items-center gap-2 text-[15px] font-bold text-ink">
+            <div className="flex items-center gap-2 text-[15px] font-medium text-ink">
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-avail-bg text-avail-text">
                 ✓
               </span>
@@ -171,7 +171,7 @@ export default function PublishPanel({
           <div className="rounded-panel border border-hairline bg-surface-card p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[14px] font-semibold text-ink">View as Image</div>
+                <div className="text-[14px] font-medium text-ink">View as Image</div>
                 <div className="truncate text-[12px] text-ink-muted">Clean layout — screenshot to share</div>
               </div>
               <button
@@ -179,7 +179,7 @@ export default function PublishPanel({
                   onViewImage();
                   onClose();
                 }}
-                className="shrink-0 rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-semibold text-accent-on"
+                className="shrink-0 rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-medium text-accent-on"
               >
                 View
               </button>
@@ -189,13 +189,13 @@ export default function PublishPanel({
             <div key={a.key} className="rounded-panel border border-hairline bg-surface-card p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[14px] font-semibold text-ink">{a.title}</div>
+                  <div className="text-[14px] font-medium text-ink">{a.title}</div>
                   <div className="truncate text-[12px] text-ink-muted">{a.sub}</div>
                 </div>
                 <button
                   onClick={a.onClick}
                   disabled={a.state.status === "loading"}
-                  className="shrink-0 rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-semibold text-accent-on disabled:opacity-50"
+                  className="shrink-0 rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-medium text-accent-on disabled:opacity-50"
                 >
                   {a.state.status === "loading" ? "…" : a.cta}
                 </button>

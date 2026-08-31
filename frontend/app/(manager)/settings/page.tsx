@@ -338,7 +338,7 @@ export default function SettingsPage() {
         Something went wrong loading settings.
         <button
           onClick={() => setReloadToken((n) => n + 1)}
-          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-accent-on"
+          className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-medium text-accent-on"
         >
           Try again
         </button>
@@ -348,14 +348,14 @@ export default function SettingsPage() {
 
   return (
     <div className="animate-fadeIn px-5 py-6 pb-24 md:px-10 md:py-8 md:pb-8">
-      <div className="mb-7 text-[26px] font-bold text-ink md:text-[28px]">Settings</div>
+      <div className="mb-7 text-[26px] font-medium text-ink md:text-[28px]">Settings</div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:max-w-[840px]">
         {/* Appearance */}
         <div className="rounded-panel border border-hairline bg-surface-card p-6 md:col-span-2">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-base font-bold text-ink">Appearance</div>
+              <div className="text-base font-medium text-ink">Appearance</div>
               <div className="text-[13px] text-ink-faint">Choose how Rotally looks on this device.</div>
             </div>
             <ThemeToggle />
@@ -364,7 +364,7 @@ export default function SettingsPage() {
 
         {/* Venue */}
         <div className="overflow-hidden rounded-panel border border-hairline bg-surface-card">
-          <div className="px-6 pt-5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+          <div className="px-6 pt-5 text-xs font-medium uppercase tracking-wide text-ink-faint">
             Venue
           </div>
           <div className="flex items-center gap-3 px-6 py-3.5">
@@ -389,7 +389,7 @@ export default function SettingsPage() {
 
         {/* Roles */}
         <div className="rounded-panel border border-hairline bg-surface-card p-6">
-          <div className="mb-1 text-base font-bold text-ink">Roles &amp; stations</div>
+          <div className="mb-1 text-base font-medium text-ink">Roles &amp; stations</div>
           <div className="mb-4 text-[13px] text-ink-faint">
             What staff can be assigned to. Tap a role to edit who works it, or add a new one.
           </div>
@@ -424,7 +424,7 @@ export default function SettingsPage() {
         >
           <SettingsIconBox name="users" />
           <div className="min-w-0 flex-1">
-            <div className="text-base font-bold text-ink">Team</div>
+            <div className="text-base font-medium text-ink">Team</div>
             <div className="text-[13px] text-ink-faint">
               {staffCount === null ? "Manage your staff" : `${staffCount} active staff member${staffCount === 1 ? "" : "s"}`}
             </div>
@@ -474,23 +474,23 @@ export default function SettingsPage() {
 
         {/* Shifts */}
         <div className="rounded-panel border border-hairline bg-surface-card p-6 md:col-span-2">
-          <div className="mb-1 text-base font-bold text-ink">Shift Types</div>
+          <div className="mb-1 text-base font-medium text-ink">Shift Types</div>
           {venue?.needs_shift_recapture && (
             <div className="mb-4 flex items-start gap-2.5 rounded-input border border-accent-border bg-accent-light px-3.5 py-3 text-[13px] text-accent">
               <ManagerIcon name="info-circle" size={16} />
               <span>
-                We set your evening shifts to a placeholder <span className="font-semibold">11pm</span> close.
-                <span className="font-semibold"> Tap a shift</span> to enter the real closing time
+                We set your evening shifts to a placeholder <span className="font-medium">11pm</span> close.
+                <span className="font-medium"> Tap a shift</span> to enter the real closing time
                 (a 1am or 2:30am close is fine) — this clears once you save.
               </span>
             </div>
           )}
           <div className="mb-4 text-[13px] text-ink-faint">
             We started you with a Day and an Evening shift — rename them or add more (e.g. a lunch
-            service) here. <span className="font-semibold text-ink">Tap a shift</span> to set which days
+            service) here. <span className="font-medium text-ink">Tap a shift</span> to set which days
             it runs and different hours per day (e.g. a later close on weekends). Max hours/week and min
             rest live in{" "}
-            <a href="/scheduler" className="font-semibold text-accent">
+            <a href="/scheduler" className="font-medium text-accent">
               Scheduler
             </a>
             .
@@ -609,7 +609,7 @@ export default function SettingsPage() {
           <div className="mt-2 flex flex-col gap-2">
             <button
               onClick={handleAddShift}
-              className="mt-1 rounded-[10px] border-2 border-dashed border-accent-border py-3 text-center text-[13px] font-semibold text-accent"
+              className="mt-1 rounded-[10px] border-2 border-dashed border-accent-border py-3 text-center text-[13px] font-medium text-accent"
             >
               + Add shift
             </button>
@@ -618,11 +618,11 @@ export default function SettingsPage() {
 
         {/* Availability window + notifications */}
         <div className="rounded-panel border border-hairline bg-surface-card p-6">
-          <div className="mb-1 text-base font-bold text-ink">Availability &amp; Notifications</div>
+          <div className="mb-1 text-base font-medium text-ink">Availability &amp; Notifications</div>
           <div className="mb-4 text-[13px] text-ink-faint">
             The availability window is now automatic — it opens, reminds and closes itself around each
             week&apos;s shifts. Adjust the timing in{" "}
-            <a href="/scheduler" className="font-semibold text-accent">
+            <a href="/scheduler" className="font-medium text-accent">
               Scheduler
             </a>
             .
@@ -632,7 +632,7 @@ export default function SettingsPage() {
               <select
                 value={rules.review_email_day}
                 onChange={(e) => setRules((r) => (r ? { ...r, review_email_day: e.target.value } : r))}
-                className="rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-semibold text-ink outline-none"
+                className="rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-medium text-ink outline-none"
               >
                 {DAY_NAMES.map((d) => (
                   <option key={d} value={d}>{d}</option>
@@ -644,11 +644,11 @@ export default function SettingsPage() {
 
         {/* Holiday */}
         <div className="rounded-panel border border-hairline bg-surface-card p-6">
-          <div className="mb-1 text-base font-bold text-ink">Holiday</div>
+          <div className="mb-1 text-base font-medium text-ink">Holiday</div>
           <div className="mb-4 text-[13px] text-ink-faint">
             Sets what every staff member sees on their Time off screen. Each person&apos;s own
             entitlement is worked out pro-rata from the days a week they work — set that per person in{" "}
-            <a href="/team" className="font-semibold text-accent">
+            <a href="/team" className="font-medium text-accent">
               Team
             </a>
             .
@@ -658,7 +658,7 @@ export default function SettingsPage() {
               <select
                 value={leaveSettings?.leave_year_start_month ?? 1}
                 onChange={(e) => saveLeaveSettings({ leave_year_start_month: Number(e.target.value) })}
-                className="rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-semibold text-ink outline-none"
+                className="rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-medium text-ink outline-none"
               >
                 {MONTH_NAMES.map((m, i) => (
                   <option key={m} value={i + 1}>{m}</option>
@@ -673,7 +673,7 @@ export default function SettingsPage() {
                 step="0.5"
                 defaultValue={leaveSettings?.full_time_leave_days ?? 28}
                 onBlur={(e) => saveLeaveSettings({ full_time_leave_days: Number(e.target.value) })}
-                className="w-24 rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-semibold text-ink outline-none"
+                className="w-24 rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-medium text-ink outline-none"
               />
             </RuleRow>
           </div>
@@ -686,7 +686,7 @@ export default function SettingsPage() {
         {/* Unpublish */}
         {livePeriods.length > 0 && (
           <div className="rounded-panel border border-hairline bg-surface-card p-6 md:col-span-2">
-            <div className="mb-1 text-base font-bold text-ink">Live Rotas</div>
+            <div className="mb-1 text-base font-medium text-ink">Live Rotas</div>
             <div className="mb-4 text-[13px] text-ink-faint">
               Unpublish a rota to pull it off the staff-facing view and make changes before
               re-publishing. Assignments stay intact — this doesn&apos;t recall emails already sent.
@@ -698,7 +698,7 @@ export default function SettingsPage() {
                   className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-surface-subtle px-3.5 py-3"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="text-sm font-semibold text-ink">{formatWeekRange(p.week_start)}</div>
+                    <div className="text-sm font-medium text-ink">{formatWeekRange(p.week_start)}</div>
                     <StatusBanner status={p.status} />
                   </div>
                   <button
@@ -715,7 +715,7 @@ export default function SettingsPage() {
 
         {generatedPeriods.length > 0 && (
           <div className="rounded-panel border border-hairline bg-surface-card p-6 md:col-span-2">
-            <div className="mb-1 text-base font-bold text-ink">Generated (not published)</div>
+            <div className="mb-1 text-base font-medium text-ink">Generated (not published)</div>
             <div className="mb-4 text-[13px] text-ink-faint">
               These rotas have been solved but not published. Reopen a week to unlock the availability
               grid so staff can submit or amend again before you re-generate — assignments are kept.
@@ -727,7 +727,7 @@ export default function SettingsPage() {
                   className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] bg-surface-subtle px-3.5 py-3"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="text-sm font-semibold text-ink">{formatWeekRange(p.week_start)}</div>
+                    <div className="text-sm font-medium text-ink">{formatWeekRange(p.week_start)}</div>
                     <StatusBanner status={p.status} />
                   </div>
                   <button
@@ -747,7 +747,7 @@ export default function SettingsPage() {
       <button
         onClick={handleSaveAll}
         disabled={saving}
-        className="mt-6 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-accent-on disabled:opacity-60"
+        className="mt-6 rounded-xl bg-accent px-6 py-3 text-sm font-medium text-accent-on disabled:opacity-60"
       >
         {saving ? <Waiting label="Saving…" /> : "Save Changes"}
       </button>
@@ -759,7 +759,7 @@ export default function SettingsPage() {
       >
         <div className="mb-5 text-[13px] text-ink-muted">
           Staff won&apos;t be able to see the rota for{" "}
-          <span className="font-semibold text-ink">
+          <span className="font-medium text-ink">
             {unpublishTarget ? formatWeekRange(unpublishTarget.week_start) : ""}
           </span>{" "}
           until you re-publish it. Assignments aren&apos;t touched, and any drop, claim or swap
@@ -768,14 +768,14 @@ export default function SettingsPage() {
         <div className="flex gap-2.5">
           <button
             onClick={() => setUnpublishTarget(null)}
-            className="flex-1 rounded-xl bg-unset-bg py-3.5 text-center text-sm font-semibold text-ink-muted"
+            className="flex-1 rounded-xl bg-unset-bg py-3.5 text-center text-sm font-medium text-ink-muted"
           >
             Cancel
           </button>
           <button
             onClick={handleUnpublish}
             disabled={unpublishing}
-            className="flex-1 rounded-xl bg-unavail-text py-3.5 text-center text-sm font-semibold text-white disabled:opacity-60"
+            className="flex-1 rounded-xl bg-unavail-text py-3.5 text-center text-sm font-medium text-status-on disabled:opacity-60"
           >
             {unpublishing ? <Waiting label="Unpublishing…" /> : "Unpublish"}
           </button>
