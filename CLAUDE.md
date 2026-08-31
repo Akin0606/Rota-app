@@ -383,6 +383,31 @@ Sound where it counts, with two known-weak areas flagged in-code:
   through +4 and rejects anything earlier with a 400. **Lesson: a plan's
   "grounding facts (checked against the tree)" section is a hypothesis. Verify it
   before building on it, not after.**
+- **Reviewing the FINISHED code found eight more bugs, two of them live in the
+  product's normal steady state — a plan review is not a substitute for a code
+  review.** (1) **Home's staff modal showed one week's shifts under another
+  week's heading.** Two independent `??` chains looked equivalent and weren't:
+  `planningRota` is only fetched once the planning week has been *built*, so with
+  this week published and next week collecting the shifts fell through to
+  today's while the label stayed on next week's — a manager checking someone's
+  hours before approving a swap got a wrong answer with nothing to signal it.
+  Derive both from one source. (2) **A solve that placed nobody was treated as a
+  fresh week.** `run_solver_for_period` sets status to `generated` even when it
+  inserts zero rows, which our own pilot data can produce (mostly under-18s, an
+  Evening shift past their curfew) — so the manager was sent back to the chase
+  screen to email reminders pointing at an availability link the backend had
+  already closed, with the coverage summary hidden behind `showsRota` so the gaps
+  the solve had just reported were invisible. **`entry` must not be derived from
+  "has assignments" alone**, and `windowClosed` is now tied to the same
+  `status == "collecting"` predicate the backend uses for editability, so the two
+  can't drift. Also: **inferring "already solved" from whether `warnings` was
+  passed was wrong** — `copy_previous` passes a warning without having solved, so
+  the under-18 block blanked on exactly the response that painted the screen. The
+  flag is explicit now and the recompute *appends*. And the guard I added
+  **created a dead end for support**: once a manager publishes their newest week,
+  the admin console's Generate 400s telling the operator to unpublish first,
+  which the console couldn't do — a fix that removes a capability has to put one
+  back.
 - **The under-18 legal notes extract cleanly because they were never about the
   solve.** Every one is a statement about *submitted availability* measured
   against the under-18 rules ("you said you could work this; legally you can't"),
@@ -426,7 +451,10 @@ Sound where it counts, with two known-weak areas flagged in-code:
   3.28:1, white-on-amber 1.45:1. Same bug the rebrand found in `--c-accent`, in
   the one colour family the brand says carries meaning. **The hardest case is
   each colour on its OWN soft tint** (red text in a red-soft card), which is what
-  forced the values darker than a first guess. And (d) a fourth of the same
+  forced the values darker than a first guess — and note the tint composites over
+  whatever is *beneath* it, so the identical pairing passes at 4.52 on the page
+  and fails at 4.20 inside a card. A token pair isn't "AA" on its own; it is AA
+  on a stated background. And (d) a fourth of the same
   shape: destructive buttons fill with `--c-unavail-text`, which is tuned to be
   *text on a dark page* and so is light — white on it measured 2.77:1, and the
   admin enable button 1.74:1 on light green. New `--c-status-on` joins
