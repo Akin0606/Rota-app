@@ -878,7 +878,10 @@ export default function RotaPage() {
           rather than offering controls that would 400. */}
       {entry === "past" && !hasAssignments && (
         <div className="mb-4 rounded-cp-card border-[0.5px] border-dashed border-hairline bg-surface-subtle px-4 py-6 text-center text-[13px] text-ink-muted">
-          No rota was built for this week.
+          {/* `hasAssignments` is false while the week's rota is still in flight,
+              so without this a historical week that DOES have one announces
+              "nothing was built" for a beat before the grid arrives. */}
+          {rotaLoading ? <Waiting label="Loading this week…" /> : "No rota was built for this week."}
         </div>
       )}
 
