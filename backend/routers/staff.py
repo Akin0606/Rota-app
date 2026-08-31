@@ -442,11 +442,17 @@ def remind(payload: RemindRequest, manager: dict = Depends(get_current_manager))
     venue = get_manager_venue(manager["id"])
     supabase = get_supabase()
 
+    # Pending self-registrants are excluded, the same as every other
+    # assignable-roster query (solver, give/swap targets, copy-previous). They
+    # are `is_active=true, pending=true`, so an is_active filter alone would
+    # email people the manager hasn't approved onto the team — and would return
+    # a "reminded N" count larger than the list of names the manager just saw.
     active = (
         supabase.table("staff_members")
         .select("id, name, email, pin")
         .eq("venue_id", venue["id"])
         .eq("is_active", True)
+        .eq("pending", False)
         .execute()
         .data
     )

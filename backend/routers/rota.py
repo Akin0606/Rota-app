@@ -30,6 +30,7 @@ from services.solver import (
     PREFERRED,
     check_manual_assignment,
     generate_rota,
+    under18_availability_notes,
 )
 
 
@@ -230,6 +231,52 @@ def _build_summary(
             )
 
     leave_blocked = leave.blocked_days_for_week(supabase, venue_id, str(period["week_start"]))
+
+    # Under-18 legal notes on a plain read.
+    #
+    # These used to arrive ONLY on the generate response, which meant the
+    # manager's hard-legal-block panel was empty on every page load, every
+    # refresh and every week change — visible for the few seconds after a solve
+    # and then gone. A legal block that disappears when you look away is not a
+    # safety feature, and the week scrubber makes every interaction a re-read.
+    #
+    # They are pure functions of submitted availability, shift hours and the
+    # is_under_18 flag (never of what the solver chose), so recomputing them
+    # here is exact, not an approximation. Cost is one narrow query — and zero
+    # further work for a venue with no under-18 staff, which is the only reason
+    # this is affordable on a summary that runs on every edit.
+    #
+    # A caller that already solved passes its own warnings/info through
+    # untouched: generate_rota calls the same function, so recomputing would
+    # duplicate every line.
+    if warnings is None and info is None:
+        u18_staff = (
+            supabase.table("staff_members")
+            .select("id, name, is_under_18")
+            .eq("venue_id", venue_id)
+            .eq("is_active", True)
+            .eq("pending", False)
+            .eq("is_under_18", True)
+            .execute()
+            .data
+        )
+        if u18_staff:
+            rules_res = (
+                supabase.table("scheduling_rules")
+                .select("max_hours_per_week, min_rest_hours, require_day_off")
+                .eq("venue_id", venue_id)
+                .limit(1)
+                .execute()
+            )
+            rules = rules_res.data[0] if rules_res.data else {}
+            warnings, info = under18_availability_notes(
+                u18_staff,
+                submissions,
+                shifts,
+                rules,
+                shift_days_by_key=shift_days_idx,
+                leave_days=leave_blocked,
+            )
 
     return {
         "period_id": period["id"],
@@ -898,8 +945,26 @@ def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
 
 @router.post("/{period_id}/generate", response_model=RotaSummaryOut)
 def generate(period_id: str, manager: dict = Depends(get_current_manager)):
+    """Re-solves the week from scratch.
+
+    Refuses a live rota. `run_solver_for_period` deletes every
+    non-manually-assigned row before it solves, so running this on a
+    published/confirmed week silently destroys the rota staff have already been
+    emailed — and takes any drop/claim/swap rows keyed to those assignments with
+    it — while flipping the status back to "generated" so the week disappears
+    from the staff app. The client buries Regenerate behind a confirm on a live
+    week, but a confirm dialog is not a guard: this endpoint is reachable
+    directly, the backend runs on the service-role key with no RLS net, and
+    `unpublish` / `reopen_availability` already validate their own transitions.
+    Pull the rota down with unpublish first — that path logs to activity_log, so
+    the audit trail shows the week came down deliberately."""
     venue = get_manager_venue(manager["id"])
     period = _get_period_or_404(venue["id"], period_id)
+    if period["status"] in ("published", "confirmed"):
+        raise HTTPException(
+            status_code=400,
+            detail="This rota is published — staff already have it. Unpublish it first if you want to rebuild the week.",
+        )
     return run_solver_for_period(venue, period)
 
 
@@ -1387,18 +1452,22 @@ def reopen_availability(period_id: str, manager: dict = Depends(get_current_mana
     input. This is the in-app path that previously required hand-run SQL: there
     was no way back from "generated" once the solver had run.
 
-    Only "generated" reopens — a published/confirmed rota is live to staff and
-    must be pulled back with unpublish first. The existing assignments are left
-    in place (a later Auto-fill or re-solve overwrites them); this only flips
-    the status so the availability grid unlocks (editable == status ==
-    "collecting")."""
+    "generated" and "closed" both reopen — a published/confirmed rota is live to
+    staff and must be pulled back with unpublish first. "closed" matters because
+    it can be TERMINAL: cron closes the window and immediately solves, but a week
+    where nobody submitted anything makes run_solver_for_period early-return
+    without advancing the status, so the period sits at "closed" with no in-app
+    way back. That is precisely the quiet week where a manager most needs to
+    reopen and chase. The existing assignments are left in place (a later
+    Auto-fill or re-solve overwrites them); this only flips the status so the
+    availability grid unlocks (editable == status == "collecting")."""
     venue = get_manager_venue(manager["id"])
     period = _get_period_or_404(venue["id"], period_id)
 
-    if period["status"] != "generated":
+    if period["status"] not in ("generated", "closed"):
         raise HTTPException(
             status_code=400,
-            detail="Only a generated (unpublished) rota can be reopened for availability. Unpublish it first if it's live.",
+            detail="Only an unpublished rota can be reopened for availability. Unpublish it first if it's live.",
         )
 
     supabase = get_supabase()

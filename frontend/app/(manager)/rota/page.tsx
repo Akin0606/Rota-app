@@ -177,17 +177,23 @@ export default function RotaPage() {
       }
       setRotaLoading(true);
       try {
-        const [rotaRes, subsRes, claimsRes, swapsRes] = await Promise.all([
+        // listStaff is re-fetched per period on purpose: `submitted` is only
+        // populated when a period_id is passed, and the initial load can't know
+        // one yet. Without this the readiness screen reads "0 of 7 in" on a week
+        // where everybody has answered.
+        const [rotaRes, subsRes, claimsRes, swapsRes, staffRes] = await Promise.all([
           getRota(period.id),
           getPeriodSubmissions(period.id),
           getClaims(period.id),
           getSwaps(period.id),
+          listStaff(period.id),
         ]);
         if (cancelled) return;
         setSummary(rotaRes);
         setSubmissions(subsRes.submissions);
         setClaims(claimsRes.claims);
         setSwaps(swapsRes.swaps);
+        setStaff(staffRes);
       } catch {
         if (!cancelled) {
           setSummary(null);

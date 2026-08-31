@@ -48,7 +48,11 @@ export type ManagerIconName =
   | "broom"
   | "home"
   | "lock"
-  | "dots";
+  | "dots"
+  | "pencil"
+  | "circle-plus"
+  | "moon-stars"
+  | "share";
 
 const PATHS: Record<ManagerIconName, string[]> = {
   moon: ["M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z"],
@@ -221,6 +225,26 @@ const PATHS: Record<ManagerIconName, string[]> = {
     "M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z",
     "M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0",
     "M8 11v-4a4 4 0 1 1 8 0v4",
+  ],
+  pencil: [
+    "M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4",
+    "M13.5 6.5l4 4",
+  ],
+  "circle-plus": ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0", "M9 12h6", "M12 9v6"],
+  // The Today strip's "on tonight" glyph — a crescent, because a pub's live
+  // shift is the evening one. Distinct from `moon` (the theme toggle) by the
+  // two stars, so the two never read as the same control.
+  "moon-stars": [
+    "M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z",
+    "M17 4a2 2 0 0 0 2 2a2 2 0 0 0 -2 2a2 2 0 0 0 -2 -2a2 2 0 0 0 2 -2",
+    "M19 11h2m-1 -1v2",
+  ],
+  share: [
+    "M6 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0",
+    "M18 6m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0",
+    "M18 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0",
+    "M8.7 10.7l6.6 -3.4",
+    "M8.7 13.3l6.6 3.4",
   ],
   dots: [
     "M5 12a1 1 0 1 0 2 0a1 1 0 0 0 -2 0",

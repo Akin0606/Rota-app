@@ -172,6 +172,90 @@ export function formatWeekOf(weekStart: string): string {
   });
 }
 
+// --- "Today", in the venue's timezone ------------------------------------
+// Every "what day is it" in the manager app resolves against **Europe/London**,
+// not the device clock and not UTC. Two reasons, and both bite in practice:
+//
+//   · UTC is wrong for an hour a day. The UK is UTC+1 from late March to late
+//     October, so between midnight and 1am London time `getUTCDate()` still
+//     reports yesterday — which is exactly when a late-close pub manager is
+//     looking at their phone. Today's line-up would show last night's.
+//   · The device clock is wrong for anyone away from the venue. The rota belongs
+//     to the pub, not to wherever the manager happens to be standing.
+//
+// This matches the backend, which already resolves its own windows through
+// `services/schedule_windows.now_london()`.
+const LONDON_DATE = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/London",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/** Today at the venue, as YYYY-MM-DD. en-CA formats ISO-style by definition. */
+export function londonToday(): string {
+  return LONDON_DATE.format(new Date());
+}
+
+/**
+ * The Monday of the venue's current week (offset 0), or N weeks either side, as
+ * YYYY-MM-DD. Negative offsets look back. The week-start strings the backend
+ * stores are plain calendar dates, so this does its arithmetic in the same
+ * timezone-free space rather than on a Date with an hour in it.
+ */
+export function mondayISO(offsetWeeks = 0): string {
+  const today = parseISODate(londonToday());
+  const dow = (today.getUTCDay() + 6) % 7; // 0 = Monday
+  const monday = new Date(today.getTime() + (offsetWeeks * 7 - dow) * 86_400_000);
+  return monday.toISOString().slice(0, 10);
+}
+
+/**
+ * Where today sits inside a given week: 0 (Mon) .. 6 (Sun), or null when today
+ * isn't in that week at all. Callers read null as "this week isn't the current
+ * one", which is how the Today strip knows to stay quiet.
+ */
+export function todayIndexInWeek(weekStart: string): number | null {
+  const diff = Math.round(
+    (parseISODate(londonToday()).getTime() - parseISODate(weekStart).getTime()) / 86_400_000,
+  );
+  return diff >= 0 && diff <= 6 ? diff : null;
+}
+
+/** Whole weeks from the venue's current week. Negative = past, 0 = this week. */
+export function weekOffsetFromNow(weekStart: string): number {
+  return Math.round(
+    (parseISODate(weekStart).getTime() - parseISODate(mondayISO(0)).getTime()) /
+      (7 * 86_400_000),
+  );
+}
+
+// --- Which period is which -----------------------------------------------
+// Home and Rota each used to answer "what period am I looking at?" their own
+// way, and the Today strip needs a third answer. One definition each, here, so
+// the two screens can't disagree about what "this week" means.
+
+/** The period whose week contains today, whatever its status. Null if none. */
+export function periodForToday<T extends { week_start: string }>(periods: T[]): T | null {
+  return periods.find((p) => todayIndexInWeek(p.week_start) !== null) ?? null;
+}
+
+/**
+ * The week the manager is being asked to *build*: the one still collecting
+ * availability, else the nearest current-or-future period. A venue whose only
+ * periods are in the past has nothing to plan — null, and the caller shows the
+ * front door for this week instead of narrating a week that's been and gone.
+ */
+export function planningPeriod<T extends { week_start: string; status: string }>(
+  periods: T[],
+): T | null {
+  const collecting = periods.find((p) => p.status === "collecting");
+  if (collecting) return collecting;
+  const upcoming = periods.filter((p) => weekOffsetFromNow(p.week_start) >= 0);
+  if (!upcoming.length) return null;
+  return upcoming.reduce((a, b) => (a.week_start <= b.week_start ? a : b));
+}
+
 // How many whole weeks ahead a week-start is relative to the current week's
 // Monday. 0 = this week, 1 = next week.
 export function weeksFromThisWeek(weekStart: string): number {

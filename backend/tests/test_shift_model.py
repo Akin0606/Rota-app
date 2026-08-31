@@ -226,3 +226,72 @@ def test_submission_demand_slots_drops_closed_day():
     assert (MON, "eve") not in slots      # the phantom-gap fix
     assert (SAT, "eve") not in slots
     assert (FRI, "ghost") in slots        # unknown shift still counts (required=1)
+
+
+# --------------------------------------------------------------------------- #
+# Under-18 legal notes must survive a plain read, not only a solve             #
+# --------------------------------------------------------------------------- #
+# They used to be produced inside generate_rota and returned only on the
+# generate response, so the manager's hard-legal-block panel was empty on every
+# page load and every week change. These pin the extraction: the notes are a
+# pure function of submitted availability, and the solver emits exactly the same
+# set — so there is one definition and the panel can't say two different things.
+
+def test_u18_notes_are_derivable_without_solving():
+    from services.solver import under18_availability_notes
+
+    # Available for the illegal Friday late-close and the legal Sunday evening.
+    subs = [
+        {"staff_id": "u18", "day_index": FRI, "shift_id": "eve", "status": 3},
+        {"staff_id": "u18", "day_index": SUN, "shift_id": "eve", "status": 3},
+    ]
+    warnings, _info = under18_availability_notes(
+        [U18], subs, [EVE], RULES, shift_days_by_key=SHIFT_DAYS
+    )
+    # Friday is 9.5h AND touches night; the daily-hours rule is checked first,
+    # so that is the one named — the same order the solver applies.
+    assert len(warnings) == 1, warnings
+    assert "Friday" in warnings[0] and "8h daily limit" in warnings[0], warnings
+    # Sunday's evening is night-safe and 8h, so it must NOT be flagged.
+    assert "Sunday" not in warnings[0], warnings
+
+
+def test_u18_notes_match_the_solvers_own_warnings():
+    from services.solver import under18_availability_notes
+
+    subs = [
+        {"staff_id": "u18", "day_index": FRI, "shift_id": "eve", "status": 3},
+        {"staff_id": "u18", "day_index": SAT, "shift_id": "eve", "status": 3},
+        {"staff_id": "u18", "day_index": SUN, "shift_id": "eve", "status": 3},
+    ]
+    pure, _ = under18_availability_notes(
+        [U18], subs, [EVE], RULES, shift_days_by_key=SHIFT_DAYS
+    )
+    solved = generate_rota(
+        [U18], [EVE], subs, RULES, shift_days_by_key=SHIFT_DAYS
+    )["warnings"]
+    assert pure == solved
+    assert pure  # and it actually said something
+
+
+def test_u18_notes_stay_silent_for_an_adult():
+    from services.solver import under18_availability_notes
+
+    subs = [{"staff_id": "ad", "day_index": FRI, "shift_id": "eve", "status": 3}]
+    warnings, info = under18_availability_notes(
+        [ADULT], subs, [EVE], RULES, shift_days_by_key=SHIFT_DAYS
+    )
+    assert warnings == []
+    assert info == []
+
+
+def test_u18_notes_ignore_a_closed_day():
+    from services.solver import under18_availability_notes
+
+    # Monday has no shift_days row — the shift doesn't run, so availability for
+    # it is not a legal problem, it's simply not a slot.
+    subs = [{"staff_id": "u18", "day_index": MON, "shift_id": "eve", "status": 3}]
+    warnings, _ = under18_availability_notes(
+        [U18], subs, [EVE], RULES, shift_days_by_key=SHIFT_DAYS
+    )
+    assert warnings == []
