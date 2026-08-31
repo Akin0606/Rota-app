@@ -341,9 +341,14 @@ Sound where it counts, with two known-weak areas flagged in-code:
   UI.** `generate` used to accept any period in any status while
   `run_solver_for_period` deletes every non-manually-assigned row first — so
   regenerating a published week silently destroyed the rota staff had already
-  been emailed and flipped it back to `generated`. It now refuses a
-  published/confirmed period (400); the client's "Rebuild this week" calls
-  `unpublish` first, which logs to `activity_log`. The rule this sets: any status
+  been emailed and flipped it back to `generated`. The guard now lives in
+  `run_solver_for_period` itself — **next to the delete, not on one of its
+  callers** — because guarding only the manager endpoint left the admin console's
+  own generate button (`admin.py`, no status check, runs against
+  `_latest_period`) able to do exactly that to a live venue. Cron is unaffected;
+  it solves a period it has just set to `closed`. The client's "Rebuild this
+  week" calls `unpublish` first, which logs to `activity_log`. The rule this
+  sets: any status
   transition a client can trigger is validated at the endpoint, because the
   backend runs on the service-role key with no RLS net and a confirm dialog is
   not a guard.
