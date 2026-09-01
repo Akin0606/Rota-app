@@ -94,10 +94,22 @@ actively misleading; trust the tokens, not memory):
 - Every design decision should feel intentional, not templated
 
 ## Current state (living — keep accurate)
-**`staging` is the working branch and is 33 commits ahead of `main`.** Working
-tree clean, `staging` == `origin/staging` — the Home/Rota refresh (16 commits,
-2026-08-31) is **pushed and deployed to staging**. Nothing is merged to `main`,
-so prod is untouched and migration `028` still has not run there.
+**`staging` is the working branch, 38 commits ahead of `main`, and the newest
+commits are NOT pushed.** `FIX_PLAN.md` batches **0, 1, 3 and 2** are built and
+committed locally (`ee18af0`, `57fc701`, `a396ee5`, `55ec56e`) — nothing is on
+`origin/staging` yet, so **staging.rotally.co.uk is still running the pre-fix
+code**. Nothing is merged to `main`, so prod is untouched and migration `028`
+still has not run there. **No migration in any of these four batches.**
+
+**Uncommitted and NOT from this work — leave alone:** a Stripe billing feature
+(`routers/billing.py`, `scripts/setup_stripe.py`, `(manager)/billing/page.tsx`,
+plus edits to `config.py`, `main.py`, `middleware.ts`, `nav.tsx`,
+`(manager)/layout.tsx`, `package.json`, and additions inside `schemas.py` and
+`lib/api.ts`). It appeared mid-session from a concurrent session. A `git add -A`
+swept it into the batch 2 commit once; that was undone and the two *mixed* files
+were reconstructed from their committed base so batch 2 carries only its own
+changes. **Stage explicitly by path, never `git add -A`, while that work is in
+flight.**
 
 **This section was badly wrong until 2026-08-30 and the failure mode is worth
 naming: it listed six separate batches as "uncommitted, not pushed" that were in
@@ -363,6 +375,86 @@ Sound where it counts, with two known-weak areas flagged in-code:
 - **Never touch the OTP / PIN auth flow without flagging first** (working rule).
 
 ## Learnings (append after each session — most recent first)
+- **`FIX_PLAN.md` batches 0/1/3/2 built — and the highest-value act was again
+  having John verify the plan's grounding facts before a line was written.** Four
+  were wrong. (1) The plan counted **six** period pickers; there are **nine**, and
+  two of the missing ones sat inside batch 2's own blast radius —
+  `cron.send_review_email_for_venue` uses the exact rule A9 splits, so batch 2's
+  own exit test ("dashboard, team and admin name the same week") could not have
+  passed as scoped, because the *email the manager actually reads* was not in the
+  list. (2) B1's note claimed `exists_on_day` needs the full shift row; it reads
+  only `shift["id"]`. (3) I7's "the page already fetches roles" — it does not;
+  `listRoles` appears nowhere in `rota/page.tsx`, and the picker must emit role
+  **names**, because `claim_shift` string-compares `required_role` against
+  `staff_members.role`, so ids would have made every posted shift unclaimable by
+  auto-approve. (4) I4's suggested fix ("a 8-digit" → "an 8-digit") would have
+  re-hardcoded a length the previous session deliberately made per-environment.
+  **A fifth was found by building rather than reasoning: batch 0 predicted the
+  `propagate_fields` divergence test "fails today". It passes** —
+  `propagate_fields` already pushes only the columns it is handed; the flattening
+  is entirely in the Scheduler caller, exactly as the plan's own grounding fact 4
+  says. The plan contradicted itself, and only writing the test settled it.
+- **The dangerous item in a fix plan is the fix that trades one failure for its
+  mirror image.** Batch 2's A1 was specified as "the published period covering
+  today, else the newest published". That closes the no-show bug (publish next
+  week and staff lose *this* week) and opens its inverse: all eight
+  drop/give/swap/claim endpoints scope by the single resolved period, so a staff
+  member who learns on Tuesday they cannot work next Wednesday would get a bare
+  404 "Shift not found" — most real drop/swap traffic. The resolution was to stop
+  asking the question on the mutation path at all: **mutations now resolve their
+  period FROM the assignment or swap they name**, which also makes tenancy an
+  explicit assertion rather than something implied by having started from a
+  venue-scoped period.
+- **A resolver that creates rows is a phantom generator whatever it is called.**
+  The plan's `collection_period` was specified "created if absent". But
+  `compute_window` returns the soonest week whose *close* has not passed and never
+  looks at `opens_at`, so with the default offsets there is a ~24h gap after every
+  close where it names next week before that week has opened. Any staff PIN auth
+  in that gap — every login, every hub load — would have created the period early,
+  and `open_availability_for_venue` then early-returns on `if existing.data`,
+  **silently skipping auto-submit and the availability-open email** with no log
+  line and no error. Creation stays with the opener, which is idempotent and does
+  the whole job. There is now a standing test asserting no resolver function ever
+  writes.
+- **The test harness was the real prerequisite, and the plan costed it as free.**
+  Batch 0 read like a quick safety net; two of its four items were untestable
+  because every picker calls a module-level `get_supabase()`.
+  `tests/fake_supabase.py` is an in-memory chainable stand-in that makes
+  router-level code testable at all (76 → 106 tests) and is reusable by batches 4,
+  6, 7 and 9. **The gotcha: routers do `from database import get_supabase`, so the
+  name to patch is the one bound in the *router* module — patching
+  `database.get_supabase` does nothing to an already-imported router.**
+- **Verifying against real staging rows beat any amount of reasoning, and cost one
+  read-only query.** The Supabase MCP here is bound to **production**, but the
+  `SUPABASE_ACCESS_TOKEN` in the gitignored root `.env` reaches the *staging*
+  project through the Management API's `POST /v1/projects/{ref}/database/query`.
+  Loading The Gatehouse's three real periods into the fake and running the old and
+  new rules side by side showed staff were being shown a week with **6 assignments
+  while standing in one with 30 assignments and 84 submissions**, and that all
+  three resolvers stop targeting the phantom. The staging `activity_log` confirmed
+  the causal chain to the second: real open of w/c 09-07 at 21:59, published
+  23:23:14, phantom w/c 09-14 created **23:23:59 — 45 seconds later**.
+- **`(auto)` in the activity-log detail is the discriminator that makes phantom
+  cleanup safe.** The real opener logs "Availability opened for week of <date>";
+  only the auto-create path appended " (auto)". That is what separates a phantom
+  from a week a manager deliberately opened up to four weeks ahead, which must
+  never be deleted. `scripts/cleanup_orphan_periods.py` requires all four of
+  collecting / no submissions / no assignments / `(auto)`-logged, is dry-run by
+  default, names its target project and refuses production without an explicit
+  flag. **Prod dry run: no orphans.** The staging DELETE was **blocked by the
+  auto-mode classifier** (as this file already records for direct Supabase
+  writes), so the better fix was made in the app instead: `planningPeriod` now
+  ignores anything later than the collection week, which stops a phantom being
+  announced as the manager's next job **whether or not the row is ever cleaned
+  up**. A correctness fix that depends on data surgery is not finished.
+- **`git add -A <dir>` is unsafe in a repo another session is writing to.** A
+  concurrent session added a Stripe billing feature mid-batch; `git add -A
+  backend/ frontend/` swept ~660 lines of it into the batch 2 commit, including
+  two files (`schemas.py`, `lib/api.ts`) where both sessions had edited adjacent
+  lines. Recovery: `git reset --soft HEAD~1`, unstage everything, restore the two
+  mixed files from their committed base, re-apply only this batch's edits, stage
+  that, then copy the full mixed versions back into the working tree so the other
+  session's work survives unstaged. **Stage explicitly by path.**
 - **Home + Rota refresh, all six batches (`APP_BUILD_PLAN.md` + `HOME_ROTA_BUILD_PLAN.md`, John-reviewed BEFORE the build). Committed, not pushed.** The
   single highest-value thing this session did was **have John verify the plans'
   grounding facts against the code before writing a line** — five of them were
