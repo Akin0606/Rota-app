@@ -7,6 +7,7 @@ from routers import (
     activity,
     admin,
     availability,
+    billing,
     cron,
     leave,
     onboarding,
@@ -54,6 +55,7 @@ app.add_middleware(
 )
 
 app.include_router(availability.router)
+app.include_router(billing.router)
 app.include_router(venue.router)
 app.include_router(shifts.router)
 app.include_router(staff.router)

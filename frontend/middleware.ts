@@ -60,6 +60,12 @@ export async function middleware(request: NextRequest) {
   // rendered dashboard reaching another is exactly the leak this prevents.
   supabaseResponse.headers.set("Cache-Control", "private, no-store");
 
+  // The manager layout needs to know the current path to exempt /billing from
+  // the subscription gate (expired trial → redirect to /billing, but /billing
+  // itself must stay reachable). Layouts don't receive the URL in App Router,
+  // so we thread it through a request header the layout reads via headers().
+  supabaseResponse.headers.set("x-pathname", request.nextUrl.pathname);
+
   // Returned as-is on purpose: building a fresh NextResponse here would drop
   // the refreshed cookies setAll just wrote, putting browser and server out of
   // sync and logging the manager out mid-session.
@@ -75,5 +81,6 @@ export const config = {
     "/team/:path*",
     "/leave/:path*",
     "/onboarding/:path*",
+    "/billing/:path*",
   ],
 };

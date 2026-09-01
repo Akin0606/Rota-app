@@ -26,6 +26,7 @@ const TABS: { label: string; href: string; icon: ManagerIconName }[] = [
   { label: "Staff", href: "/team", icon: "users" },
   { label: "Leave", href: "/leave", icon: "calendar-off" },
   { label: "Settings", href: "/settings", icon: "sliders" },
+  { label: "Billing", href: "/billing", icon: "coins" },
 ];
 
 export default function ManagerNav() {

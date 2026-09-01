@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import ManagerNav from "@/components/manager/nav";
@@ -74,6 +75,23 @@ export default async function ManagerLayout({ children }: { children: React.Reac
   const setupState = venue.setup_state as { completed?: boolean } | null;
   if (setupState && !setupState.completed) {
     redirect("/onboarding");
+  }
+
+  // Subscription gate: expired trials and cancelled subscriptions are
+  // redirected to /billing so the manager can subscribe. The billing page
+  // itself is exempt — otherwise it'd be an infinite redirect.
+  const reqHeaders = headers();
+  const pathname = reqHeaders.get("x-pathname") ?? "";
+  const isBillingPage = pathname === "/billing" || pathname.startsWith("/billing/");
+
+  if (!isBillingPage) {
+    const subStatus = (venue as Record<string, unknown>).subscription_status as string | undefined;
+    const subEndsAt = (venue as Record<string, unknown>).subscription_ends_at as string | undefined;
+    const trialExpired =
+      subStatus === "trialing" && subEndsAt && new Date(subEndsAt) < new Date();
+    if (subStatus === "cancelled" || trialExpired) {
+      redirect("/billing");
+    }
   }
 
   if (venue.is_active === false) {

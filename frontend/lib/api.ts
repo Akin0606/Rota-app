@@ -587,6 +587,17 @@ export type Venue = {
   // True for venues backfilled from a free-text 'close' — prompt the manager to
   // enter real per-day close times. Cleared when they save any per-day schedule.
   needs_shift_recapture?: boolean;
+  subscription_status?: string;
+  subscription_started_at?: string | null;
+  subscription_ends_at?: string | null;
+};
+
+export type BillingStatus = {
+  subscription_status: string;
+  subscription_started_at: string | null;
+  subscription_ends_at: string | null;
+  stripe_customer_id: string | null;
+  has_subscription: boolean;
 };
 
 export type SetupState = { step?: number; completed?: boolean } | null;
@@ -1297,6 +1308,20 @@ export function rejectLeave(requestId: string, managerNote?: string): Promise<Le
     method: "POST",
     body: JSON.stringify({ manager_note: managerNote ?? null }),
   });
+}
+
+// --- Billing (Stripe subscriptions) -----------------------------------------
+
+export function createCheckoutSession(): Promise<{ client_secret: string }> {
+  return authedRequest(`/api/billing/checkout`, { method: "POST" });
+}
+
+export function createPortalSession(): Promise<{ url: string }> {
+  return authedRequest(`/api/billing/portal`, { method: "POST" });
+}
+
+export function getBillingStatus(): Promise<BillingStatus> {
+  return authedRequest(`/api/billing/status`);
 }
 
 export { ApiError };

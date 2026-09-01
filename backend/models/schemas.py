@@ -227,6 +227,11 @@ class VenueOut(BaseModel):
     # close times via the per-day editor; cleared the moment they save a
     # per-day schedule (PUT /shifts/{id}/days).
     needs_shift_recapture: bool = False
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+    subscription_status: str = "trialing"
+    subscription_started_at: Optional[str] = None
+    subscription_ends_at: Optional[str] = None
 
 
 class OnboardingActivateRequest(BaseModel):
