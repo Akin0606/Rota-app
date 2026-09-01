@@ -26,6 +26,7 @@ import {
   Claim,
   EmailDelivery,
   Period,
+  Role,
   RotaSummary,
   Shift,
   StaffManager,
@@ -46,6 +47,7 @@ import {
   getSwaps,
   getVenue,
   listPeriods,
+  listRoles,
   listShifts,
   listStaff,
   postOpenShift,
@@ -60,7 +62,6 @@ import WeekScrubber, {
   ScrubberEdgeHint,
   buildWeekStops,
 } from "@/components/manager/week-scrubber";
-import { STAFF_ROLES } from "@/lib/constants";
 import {
   formatWeekRange,
   mondayISO,
@@ -78,6 +79,7 @@ export default function RotaPage() {
   const [periods, setPeriods] = useState<Period[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [staff, setStaff] = useState<StaffManager[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [summary, setSummary] = useState<RotaSummary | null>(null);
   const [submissions, setSubmissions] = useState<SubmissionEntry[]>([]);
   const [clearTarget, setClearTarget] = useState<{ staffId: string; staffName: string } | null>(null);
@@ -152,16 +154,18 @@ export default function RotaPage() {
       setLoading(true);
       setError(false);
       try {
-        const [periodsRes, shiftsRes, staffRes, venueRes] = await Promise.all([
+        const [periodsRes, shiftsRes, staffRes, venueRes, rolesRes] = await Promise.all([
           listPeriods(),
           listShifts(),
           listStaff(),
           getVenue(),
+          listRoles(),
         ]);
         if (cancelled) return;
         setPeriods(periodsRes);
         setShifts(shiftsRes);
         setStaff(staffRes);
+        setRoles(rolesRes);
         setVenueName(venueRes.name);
         setVenueCreatedAt(venueRes.created_at ?? null);
 
@@ -705,6 +709,21 @@ export default function RotaPage() {
 
   const hasAssignments = (summary?.assignments.filter((a) => a.staff_id).length ?? 0) > 0;
   const isLive = period?.status === "published" || period?.status === "confirmed";
+
+  // H1 — a hero that states status must state coverage too. Publishing with
+  // gaps is allowed and sometimes right, so live is not the same as sorted:
+  // the coverage line at the top of this very screen would otherwise stand in
+  // flat contradiction to a hero claiming everyone has their shifts.
+  const windowNote =
+    period?.status === "confirmed"
+      ? ""
+      : " The availability window is still open, so this can still change.";
+  const liveDetail =
+    gapSlots > 0
+      ? `${gapSlots} slot${gapSlots === 1 ? " still needs" : "s still need"} cover.${windowNote}`
+      : period?.status === "confirmed"
+        ? "Settled — everyone has their shifts for this week."
+        : `Everyone's covered.${windowNote}`;
   const statusLabel = period ? (STATUS_CONFIG[period.status]?.label ?? period.status) : "Not started";
 
   // R1 — the scrubber's stops, and whether the week being viewed can still be
@@ -793,8 +812,12 @@ export default function RotaPage() {
             className="rounded-md border border-hairline bg-surface-card px-1.5 py-1 text-[12px] outline-none"
           >
             <option value="">Any role</option>
-            {STAFF_ROLES.map((r) => (
-              <option key={r} value={r}>{r}</option>
+            {/* I7 — the venue's own roles, not a hardcoded list. The value is
+                the role NAME on purpose: claim_shift compares required_role to
+                staff_members.role as a string, so an id here would make every
+                posted shift silently unclaimable by auto-approve. */}
+            {roles.map((r) => (
+              <option key={r.id} value={r.name}>{r.name}</option>
             ))}
           </select>
           <button
@@ -934,11 +957,7 @@ export default function RotaPage() {
           </span>
           <div className="min-w-0">
             <div className="text-[13.5px] font-medium text-cp-green">Published · staff notified</div>
-            <div className="mt-px text-[11.5px] text-ink-muted">
-              {period?.status === "confirmed"
-                ? "Settled — everyone has their shifts for this week."
-                : "The availability window is still open, so this can still change."}
-            </div>
+            <div className="mt-px text-[11.5px] text-ink-muted">{liveDetail}</div>
           </div>
         </div>
       )}

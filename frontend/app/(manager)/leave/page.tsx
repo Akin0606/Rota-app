@@ -130,6 +130,13 @@ export default function LeavePage() {
                     {formatDateRange(r.start_date, r.end_date)}
                   </span>
                 </div>
+                {/* H3 — what the range actually costs. The backend computes it
+                    (working days, not calendar days) so both sides of the app
+                    quote the same number; approving without it shown is the
+                    manager agreeing to a figure only the staff member can see. */}
+                <div className="mb-2 text-[12px] text-ink-muted">
+                  {r.days} day{r.days === 1 ? "" : "s"} off their allowance
+                </div>
                 {r.reason && <div className="mb-2 text-[13px] text-ink-muted">{r.reason}</div>}
                 {r.conflicting_assignments > 0 && (
                   <div className="mb-2.5 rounded-lg bg-unavail-bg px-3 py-2 text-[12px] font-medium text-unavail-text">

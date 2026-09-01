@@ -1255,6 +1255,19 @@ def post_open_shift(
     if not shift:
         raise HTTPException(status_code=404, detail="Shift not found")
 
+    # A shift that doesn't run on this day can't be posted for it. Without this
+    # the row is invisible rather than merely wrong: nothing can ever claim it
+    # (claim_shift runs the same existence check and blocks) and it never shows
+    # as uncovered (a closed day carries no demand), so the manager who created
+    # it has no surface that reports it. Every other write path onto an
+    # assignment already gates here via check_manual_assignment; this one is
+    # the exception because it has no staff member to check.
+    if not shift_bounds.exists_on_day(shift, payload.day_index, _load_shift_days_index(list(shifts_by_id))):
+        raise HTTPException(
+            status_code=400,
+            detail=f"The {shift['name']} shift doesn't run on {DAY_NAMES[payload.day_index]}.",
+        )
+
     supabase.table("rota_assignments").insert(
         {
             "period_id": period_id,

@@ -835,7 +835,7 @@ function OnboardingWizard() {
             <div className="ob-av">{m.name.charAt(0).toUpperCase()}</div>
             <div style={{ flex: 1 }}>
               <div className="ob-rn">{m.name}{m.u18 && <span className="ob-u18">U18</span>}</div>
-              <div className="ob-rt">pending — you&apos;ll set roles</div>
+              <div className="ob-rt">role not set yet</div>
             </div>
             <span className="rm" onClick={() => setTeam((t) => t.filter((_, j) => j !== i))} style={{ cursor: "pointer", color: "var(--faint)" }}>
               <OIcon name="x" size={15} />
@@ -883,7 +883,7 @@ function OnboardingWizard() {
             </div>
           </div>
         ))}
-        <Why>This is the target the auto-scheduler fills. Quieter shifts scale down on their own.</Why>
+        <Why>This is the target the auto-scheduler fills.</Why>
       </div>
     );
   }

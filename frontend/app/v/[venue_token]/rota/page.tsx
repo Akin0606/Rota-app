@@ -134,7 +134,16 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
   const myAssignmentsByDay = new Map(myAssignments.map((a) => [a.day_index, a]));
 
   const myShifts = myAssignments
-    .map((a) => shiftsById.get(a.shift_id!))
+    // Resolve each shift's real per-day hours before totalling. Without this
+    // the header reports the shift-level representative time while the rows
+    // below it show the real one, so a venue whose Fri/Sat run later than its
+    // weekdays sees a total that contradicts its own list.
+    .map((a) => {
+      const base = shiftsById.get(a.shift_id!);
+      return base
+        ? { ...base, start_time: a.start_time ?? base.start_time, end_time: a.end_time ?? base.end_time }
+        : undefined;
+    })
     .filter((s): s is NonNullable<typeof s> => Boolean(s));
   const { hours, unmeasured } = sumShiftHours(myShifts);
 

@@ -120,7 +120,7 @@ function EmailStep({
       </button>
 
       <div className="mt-4 text-center text-xs leading-relaxed text-ink-faint">
-        We&apos;ll email you a {OTP_LENGTH}-digit code — no password to remember.
+        We&apos;ll email you a sign-in code — {OTP_LENGTH} digits, no password to remember.
       </div>
       <div className="mt-2 text-center text-xs text-ink-muted">
         Staff member?{" "}

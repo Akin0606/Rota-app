@@ -111,6 +111,21 @@ def list_staff(
 
     submitted_staff_ids: set[str] = set()
     if period_id:
+        # Same reasoning as `remind` below: the ids are only membership-tested
+        # against this venue's own roster, so a foreign period can't leak a
+        # name — but the backend runs on the service-role key with no RLS net,
+        # so an unscoped read is never left to be copied forward.
+        owns_period = (
+            supabase.table("availability_periods")
+            .select("id")
+            .eq("id", period_id)
+            .eq("venue_id", venue["id"])
+            .limit(1)
+            .execute()
+            .data
+        )
+        if not owns_period:
+            raise HTTPException(status_code=404, detail="Period not found")
         subs = (
             supabase.table("availability_submissions")
             .select("staff_id")

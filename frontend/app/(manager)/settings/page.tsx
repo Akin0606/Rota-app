@@ -460,16 +460,6 @@ export default function SettingsPage() {
               Coming soon
             </span>
           </div>
-          <div className="flex items-center gap-3 border-t border-hairline px-6 py-3.5">
-            <SettingsIconBox name="plug" />
-            <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium text-ink">Integrations</div>
-              <div className="text-xs text-ink-faint">Square, Xero</div>
-            </div>
-            <span className="rounded-full bg-surface-subtle px-2.5 py-1 text-[11px] font-medium text-ink-faint">
-              Coming soon
-            </span>
-          </div>
         </div>
 
         {/* Shifts */}

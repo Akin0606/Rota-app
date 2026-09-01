@@ -562,7 +562,7 @@ export default function TeamPage() {
                       member.submitted ? "bg-cp-green-soft text-cp-green" : "bg-cp-amber-soft text-cp-amber"
                     }`}
                   >
-                    {member.submitted ? "Submitted" : "Pending"}
+                    {member.submitted ? "Submitted" : "Not sent"}
                   </span>
                 ) : null}
                 <ManagerIcon name="chevron-right" size={16} className="shrink-0 text-ink-faint" />
