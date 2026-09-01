@@ -38,7 +38,7 @@ def create_checkout_session(manager: dict = Depends(get_current_manager)):
         customer=customer_id,
         line_items=[{"price": settings.stripe_price_id, "quantity": 1}],
         mode="subscription",
-        ui_mode="embedded",
+        ui_mode="embedded_page",
         return_url=f"{settings.frontend_url}/billing?session_id={{CHECKOUT_SESSION_ID}}",
         metadata={"venue_id": venue["id"]},
     )
