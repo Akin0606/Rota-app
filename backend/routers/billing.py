@@ -41,8 +41,6 @@ def create_checkout_session(manager: dict = Depends(get_current_manager)):
         ui_mode="embedded",
         return_url=f"{settings.frontend_url}/billing?session_id={{CHECKOUT_SESSION_ID}}",
         metadata={"venue_id": venue["id"]},
-        automatic_tax={"enabled": True},
-        tax_id_collection={"enabled": True},
     )
 
     return {"client_secret": session.client_secret}
