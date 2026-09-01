@@ -8,7 +8,7 @@ from models.schemas import (
     ShiftScheduleUpdateRequest,
     ShiftUpdateRequest,
 )
-from services import shift_days_service
+from services import cron_scheduler, shift_days_service
 from services.auth_service import get_current_manager, get_manager_venue
 
 router = APIRouter(prefix="/api/shifts", tags=["shifts"])
@@ -78,6 +78,13 @@ def create_shift(payload: ShiftCreateRequest, manager: dict = Depends(get_curren
         supabase, shift["id"], payload.start_time, payload.end_time,
         payload.min_staff, payload.max_staff,
     )
+    # The notice window is derived from the venue's earliest shift start, so a
+    # shift change moves every open/remind/close job. Nothing here used to
+    # refresh them: it limped because create_venue seeded a period and a read
+    # path invented one whenever the cadence slipped, and batch 2 removes both
+    # of those. Without this the jobs a venue gets at creation — when it has no
+    # shifts and therefore no window at all — would be the jobs it keeps.
+    cron_scheduler.refresh_jobs()
     return shift
 
 
@@ -125,6 +132,13 @@ def update_shift(
     # per-day divergence in the columns it didn't touch). The per-day editor
     # (PUT /days) is the path for divergent schedules and closed days.
     shift_days_service.propagate_fields(supabase, shift_id, updates)
+    # The notice window is derived from the venue's earliest shift start, so a
+    # shift change moves every open/remind/close job. Nothing here used to
+    # refresh them: it limped because create_venue seeded a period and a read
+    # path invented one whenever the cadence slipped, and batch 2 removes both
+    # of those. Without this the jobs a venue gets at creation — when it has no
+    # shifts and therefore no window at all — would be the jobs it keeps.
+    cron_scheduler.refresh_jobs()
     return updated
 
 
@@ -162,6 +176,13 @@ def set_shift_schedule(
         supabase.table("venues").update({"needs_shift_recapture": False}).eq("id", venue["id"]).execute()
 
     updated = _get_shift_or_404(venue["id"], shift_id)
+    # The notice window is derived from the venue's earliest shift start, so a
+    # shift change moves every open/remind/close job. Nothing here used to
+    # refresh them: it limped because create_venue seeded a period and a read
+    # path invented one whenever the cadence slipped, and batch 2 removes both
+    # of those. Without this the jobs a venue gets at creation — when it has no
+    # shifts and therefore no window at all — would be the jobs it keeps.
+    cron_scheduler.refresh_jobs()
     return {"shift_id": shift_id, "days": shift_days_service.get_schedule(supabase, updated)}
 
 
@@ -173,4 +194,11 @@ def delete_shift(shift_id: str, manager: dict = Depends(get_current_manager)):
 
     # shift_days rows cascade via the FK (migration 026).
     supabase.table("shifts").delete().eq("id", shift_id).execute()
+    # The notice window is derived from the venue's earliest shift start, so a
+    # shift change moves every open/remind/close job. Nothing here used to
+    # refresh them: it limped because create_venue seeded a period and a read
+    # path invented one whenever the cadence slipped, and batch 2 removes both
+    # of those. Without this the jobs a venue gets at creation — when it has no
+    # shifts and therefore no window at all — would be the jobs it keeps.
+    cron_scheduler.refresh_jobs()
     return {"status": "ok"}

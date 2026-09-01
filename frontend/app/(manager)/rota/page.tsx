@@ -172,7 +172,7 @@ export default function RotaPage() {
         // Land on the week the manager is actually being asked to build —
         // the same one Home's hero names, so following that button doesn't
         // drop them on a different week than the one they just read about.
-        const plan = planningPeriod(periodsRes);
+        const plan = planningPeriod(periodsRes, venueRes.current_week_start);
         if (plan) setSelectedWeek(plan.week_start);
       } catch {
         if (!cancelled) setError(true);

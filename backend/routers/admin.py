@@ -22,7 +22,7 @@ from models.schemas import (
 )
 from routers.rota import _build_summary, run_solver_for_period
 from routers.staff import _generate_unique_pin
-from services import email_service, onboarding
+from services import email_service, onboarding, period_resolver
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -47,18 +47,6 @@ def _get_venue_or_404(venue_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Venue not found")
     return res.data[0]
 
-
-def _latest_period(venue_id: str) -> Optional[dict]:
-    supabase = get_supabase()
-    res = (
-        supabase.table("availability_periods")
-        .select("*")
-        .eq("venue_id", venue_id)
-        .order("week_start", desc=True)
-        .limit(1)
-        .execute()
-    )
-    return res.data[0] if res.data else None
 
 
 @router.get("/venues", response_model=list[AdminVenueOut], dependencies=[Depends(require_admin)])
@@ -324,7 +312,11 @@ def get_venue_detail(venue_id: str):
         .data
     )
 
-    period = _latest_period(venue_id)
+    # A9 — the submitted flags are a *collection* question, so they follow the
+    # notice window. The old rule was newest-of-any-status, which a phantom
+    # period captured by definition: support saw "0 of 8 submitted" for a week
+    # nobody had ever been asked about.
+    period = period_resolver.collection_period(venue_id)
     submitted_ids: set[str] = set()
     if period:
         subs = (
@@ -504,7 +496,9 @@ def get_venue_rota(venue_id: str):
         .data
     )
 
-    period = _latest_period(venue_id)
+    # A9 — the rota view wants the newest week that actually has a rota, not
+    # the newest row of any kind.
+    period = period_resolver.newest_rota_period(venue_id)
     summary = _build_summary(venue_id, period) if period else None
 
     return {
@@ -527,7 +521,12 @@ def get_venue_rota(venue_id: str):
 )
 def admin_generate_rota(venue_id: str):
     venue = _get_venue_or_404(venue_id)
-    period = _latest_period(venue_id)
+    # A9 — support's "generate" means "build the week this venue is currently
+    # on". That is the collection week while it is unsolved (the common failure
+    # being a week the cron closed and the solve then failed on), and otherwise
+    # the newest week that has a rota. run_solver_for_period still refuses a
+    # published/confirmed period; unpublish below is the way out of that.
+    period = period_resolver.collection_period(venue_id) or period_resolver.newest_rota_period(venue_id)
     if not period:
         raise HTTPException(status_code=404, detail="This venue has no availability period yet")
 
@@ -554,7 +553,8 @@ def admin_unpublish_rota(venue_id: str):
     row as the manager-facing endpoint, so a rota only ever comes down one way.
     """
     venue = _get_venue_or_404(venue_id)
-    period = _latest_period(venue_id)
+    # A9 — you unpublish a week that has a rota, by definition.
+    period = period_resolver.newest_rota_period(venue_id)
     if not period:
         raise HTTPException(status_code=404, detail="This venue has no availability period yet")
     if period["status"] not in ("published", "confirmed"):

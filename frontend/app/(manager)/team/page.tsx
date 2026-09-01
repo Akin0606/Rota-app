@@ -31,6 +31,7 @@ import {
   rotateJoinCode,
   updateStaff,
 } from "@/lib/api";
+import { formatWeekOf } from "@/lib/utils";
 import type { ManagerIconName } from "@/components/manager/icon";
 import Waiting from "@/components/waiting";
 
@@ -77,6 +78,9 @@ export default function TeamPage() {
   const [staff, setStaff] = useState<StaffManager[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [period, setPeriod] = useState<Period | null>(null);
+  // A11 — name the week. "this week" was wrong whenever collection had
+  // moved on, and it is the line a manager reads just before deciding
+  // whether to chase someone.
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -117,7 +121,17 @@ export default function TeamPage() {
           listRoles().catch(() => []),
         ]);
         if (cancelled) return;
-        const current = periodsRes.find((p) => p.status === "collecting") ?? periodsRes[0] ?? null;
+        // A10 — the week the backend says it is collecting for. This used to be
+        // "first collecting, else the newest row of any status", and that
+        // fallback is why Team named a different week from Home whenever
+        // nothing was collecting — which is exactly the state the phantom loop
+        // produced.
+        const current =
+          (venueRes.current_week_start
+            ? periodsRes.find((p) => p.week_start === venueRes.current_week_start)
+            : null) ??
+          periodsRes.find((p) => p.status === "collecting") ??
+          null;
         const staffRes = await listStaff(current?.id);
         if (cancelled) return;
         setVenue(venueRes);
@@ -388,6 +402,11 @@ export default function TeamPage() {
     );
   }
 
+  // A11 — name the week. "this week" was wrong whenever collection had moved
+  // on, and it is the line a manager reads immediately before deciding whether
+  // to chase someone.
+  const periodLabel = period ? `w/c ${formatWeekOf(period.week_start)}` : "the open week";
+
   return (
     <div className="animate-fadeIn px-5 py-6 pb-24 md:px-10 md:py-8 md:pb-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -644,8 +663,8 @@ export default function TeamPage() {
                 {editingMember.submitted === null
                   ? "No open week to submit for"
                   : editingMember.submitted
-                    ? "Submitted this week"
-                    : "Hasn't submitted this week yet"}
+                    ? `Submitted for ${periodLabel}`
+                    : `Hasn't submitted for ${periodLabel} yet`}
               </div>
             </div>
             <button onClick={() => handleResetPin(editingMember)} className="shrink-0 px-1 text-xs font-medium text-accent">

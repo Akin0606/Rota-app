@@ -579,6 +579,11 @@ export type Venue = {
   // Onboarding save-and-resume (§1). {step} while in-flight, {completed} when
   // done, null on a legacy/already-onboarded venue.
   setup_state: SetupState | null;
+  // A2 — the Monday the backend's notice window is currently collecting for.
+  // The one authoritative answer to "which week is this app asking about", so
+  // Home, Rota, Team and the admin console can stop each guessing their own.
+  // null when the venue has no shifts yet, so no window can be derived.
+  current_week_start?: string | null;
   // True for venues backfilled from a free-text 'close' — prompt the manager to
   // enter real per-day close times. Cleared when they save any per-day schedule.
   needs_shift_recapture?: boolean;

@@ -8,7 +8,7 @@ from database import get_supabase
 from routers.availability import _most_recent_submission_pattern
 from routers.rota import _build_summary, run_solver_for_period
 from routers.staff import _reminder_context
-from services import cron_scheduler, email_service, notice_window, schedule_windows
+from services import cron_scheduler, email_service, notice_window, period_resolver, schedule_windows
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])
 
@@ -187,18 +187,15 @@ def close_availability_for_venue(venue: dict) -> Optional[dict]:
     """Closes the venue's currently-collecting period and runs the solver.
     No-op if there's nothing collecting (already closed, or never opened)."""
     supabase = get_supabase()
-    period_res = (
-        supabase.table("availability_periods")
-        .select("*")
-        .eq("venue_id", venue["id"])
-        .eq("status", "collecting")
-        .order("week_start", desc=True)
-        .limit(1)
-        .execute()
-    )
-    if not period_res.data:
+    # A13 — the week the notice window points at, not merely the newest open
+    # one. Those differ whenever a manager has planned ahead (create_period
+    # allows +4 weeks): the old rule could close a +3 planning week and hand it
+    # straight to the solver. Consequence worth knowing: a planning week no
+    # longer auto-closes. That is deliberate — the manager closes it by
+    # generating, which is how a planning week has always been built.
+    period = period_resolver.collection_period(venue["id"])
+    if not period or period["status"] != "collecting":
         return None
-    period = period_res.data[0]
 
     supabase.table("availability_periods").update({"status": "closed"}).eq("id", period["id"]).execute()
     supabase.table("activity_log").insert(
@@ -254,17 +251,13 @@ def send_review_email_for_venue(venue: dict) -> Optional[dict]:
     if not venue.get("manager_email"):
         return None
 
-    period_res = (
-        supabase.table("availability_periods")
-        .select("*")
-        .eq("venue_id", venue["id"])
-        .order("week_start", desc=True)
-        .limit(1)
-        .execute()
-    )
-    if not period_res.data:
+    # A picker the fix plan's grounding facts missed: newest-of-any-status, the
+    # same rule A9 splits in the admin console. So the email a manager actually
+    # reads could name a different week from every screen in the app. It reports
+    # submitted-vs-total, which is a collection question.
+    period = period_resolver.collection_period(venue["id"])
+    if not period:
         return None
-    period = period_res.data[0]
 
     staff = (
         supabase.table("staff_members")
@@ -320,18 +313,12 @@ def send_reminders_for_venue(venue: dict) -> Optional[dict]:
     supabase = get_supabase()
     settings = get_settings()
 
-    period_res = (
-        supabase.table("availability_periods")
-        .select("*")
-        .eq("venue_id", venue["id"])
-        .eq("status", "collecting")
-        .order("week_start", desc=True)
-        .limit(1)
-        .execute()
-    )
-    if not period_res.data:
+    # A13 — chase for the week the window is collecting for. Chasing the newest
+    # open week meant people were reminded about a week they were never asked
+    # about, while the week actually closing soon went unchased.
+    period = period_resolver.collection_period(venue["id"])
+    if not period or period["status"] != "collecting":
         return None
-    period = period_res.data[0]
 
     active = (
         supabase.table("staff_members")

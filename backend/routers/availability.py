@@ -19,6 +19,7 @@ from models.schemas import (
     ClaimSubmitResponse,
     ForgotPinRequest,
     PinAuthRequest,
+    StaffRotaRequest,
     StaffJoinRequest,
     StaffJoinResponse,
     StaffRotaOut,
@@ -26,7 +27,7 @@ from models.schemas import (
     WeekAvailabilityOut,
     WeekAvailabilityRequest,
 )
-from services import email_service, notice_window, rate_limit, shift_bounds, swap_guard
+from services import email_service, notice_window, period_resolver, rate_limit, shift_bounds, swap_guard
 from services.auth_service import INACTIVE_VENUE_MESSAGE
 from services.pin_service import generate_unique_pin
 from services.solver import UNAVAILABLE, check_manual_assignment
@@ -124,67 +125,6 @@ def _get_staff_by_pin(venue_id: str, pin: str) -> dict:
     if not res.data:
         raise HTTPException(status_code=401, detail="Incorrect PIN")
     return res.data[0]
-
-
-def _get_current_period(venue_id: str) -> Optional[dict]:
-    supabase = get_supabase()
-    res = (
-        supabase.table("availability_periods")
-        .select("*")
-        .eq("venue_id", venue_id)
-        .eq("status", "collecting")
-        .order("week_start", desc=True)
-        .limit(1)
-        .execute()
-    )
-    return res.data[0] if res.data else None
-
-
-def _get_or_create_current_period(venue_id: str) -> dict:
-    """Returns the venue's open (collecting) period, creating one on the fly if
-    none exists. This guarantees a staff member who taps the venue link always
-    has a week to fill in, even if the open/close cron timing left a gap."""
-    existing = _get_current_period(venue_id)
-    if existing:
-        return existing
-
-    from datetime import date, timedelta
-
-    supabase = get_supabase()
-    today = date.today()
-    this_monday = today - timedelta(days=today.weekday())
-
-    # Pick the earliest upcoming week (from this week) that doesn't already have
-    # a period, so we don't collide with a closed/generated week.
-    taken = {
-        str(r["week_start"])
-        for r in supabase.table("availability_periods")
-        .select("week_start")
-        .eq("venue_id", venue_id)
-        .gte("week_start", this_monday.isoformat())
-        .execute()
-        .data
-    }
-    candidate = this_monday
-    for _ in range(8):
-        if candidate.isoformat() not in taken:
-            break
-        candidate = candidate + timedelta(days=7)
-
-    period = (
-        supabase.table("availability_periods")
-        .insert({"venue_id": venue_id, "week_start": candidate.isoformat(), "status": "collecting"})
-        .execute()
-        .data[0]
-    )
-    supabase.table("activity_log").insert(
-        {
-            "venue_id": venue_id,
-            "action": "availability_opened",
-            "detail": f"Availability opened for week of {candidate.isoformat()} (auto)",
-        }
-    ).execute()
-    return period
 
 
 # Staff can plan availability up to this many weeks ahead of the current week.
@@ -340,19 +280,29 @@ def authenticate(venue_token: str, payload: PinAuthRequest, request: Request):
     # single valid login can't reset an in-progress venue-wide brute-force.
     rate_limit.clear(lock_key)
 
-    # Always give the staff member an open week to fill — create one on the fly
-    # if the cron cycle left a gap.
-    period = _get_or_create_current_period(venue["id"])
+    # A4 — read-only. This used to create a period when none was collecting,
+    # which made every staff login a potential phantom generator; worse, the row
+    # it created made cron.open_availability_for_venue early-return, silently
+    # skipping auto-submit and the availability-open email for that week.
+    # None is a real answer here — the window hasn't opened yet — and the
+    # response schema has always allowed it.
+    period = period_resolver.collection_period(venue["id"])
     supabase = get_supabase()
     saved = (
-        supabase.table("availability_submissions")
-        .select("day_index, shift_id, status, note, auto_submitted")
-        .eq("period_id", period["id"])
-        .eq("staff_id", staff["id"])
-        .execute()
-        .data
+        (
+            supabase.table("availability_submissions")
+            .select("day_index, shift_id, status, note, auto_submitted")
+            .eq("period_id", period["id"])
+            .eq("staff_id", staff["id"])
+            .execute()
+            .data
+        )
+        if period
+        else []
     )
-    auto_submitted = period["status"] == "collecting" and any(r.get("auto_submitted") for r in saved)
+    auto_submitted = bool(period) and period["status"] == "collecting" and any(
+        r.get("auto_submitted") for r in saved
+    )
     submissions = [{k: v for k, v in r.items() if k != "auto_submitted"} for r in saved]
 
     return {
@@ -633,7 +583,20 @@ def submit_availability(venue_token: str, payload: AvailabilitySubmitRequest):
             raise HTTPException(status_code=400, detail="Availability for that week has already closed")
         period = _get_or_create_period_for_week(venue["id"], monday)
     else:
-        period = _get_or_create_current_period(venue["id"])
+        # A4 — creating here is legitimate (the staff member is actively
+        # submitting), but it must be the week the notice window points at.
+        # The old heuristic took "the earliest week without a period", which is
+        # what manufactured phantoms nothing pointed at.
+        week = period_resolver.collection_week(venue["id"])
+        if week is not None:
+            period = _get_or_create_period_for_week(venue["id"], week)
+        else:
+            period = period_resolver.collection_period(venue["id"])
+            if period is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Availability isn't open for this venue yet.",
+                )
 
     supabase = get_supabase()
 
@@ -714,24 +677,6 @@ def forgot_pin(venue_token: str, payload: ForgotPinRequest):
     return {"status": "ok"}
 
 
-def _get_published_period(venue_id: str) -> Optional[dict]:
-    """The active rota staff should see — provisional (status "published") or
-    confirmed, whichever is the most recent week. Both are equally "live" from
-    a staff member's point of view; confirmed just means the window has
-    closed on it, not that it's any more or less visible."""
-    supabase = get_supabase()
-    res = (
-        supabase.table("availability_periods")
-        .select("*")
-        .eq("venue_id", venue_id)
-        .in_("status", ["published", "confirmed"])
-        .order("week_start", desc=True)
-        .limit(1)
-        .execute()
-    )
-    return res.data[0] if res.data else None
-
-
 def _pending_swaps_for_staff(period_id: str, staff_id: str) -> list[dict]:
     """Swap proposals the caller is party to (either side), still unresolved.
     Resolved swaps (approved/declined/rejected) are omitted — their effect is
@@ -784,8 +729,79 @@ def _swap_side_from_assignment(assignment: dict) -> dict:
     return {"assignment_id": assignment["id"], "day_index": assignment["day_index"], "shift_id": assignment["shift_id"]}
 
 
-def _build_staff_rota(venue: dict, staff_id: str) -> dict:
-    period = _get_published_period(venue["id"])
+def _period_for_assignment(venue_id: str, assignment_id: str) -> Optional[dict]:
+    """The live period an assignment belongs to, resolved FROM the assignment.
+
+    A1/D2. Mutations used to ask "which week is live?" and then look for the
+    assignment inside it. That question has exactly one answer per venue, so a
+    staff member could only ever act on one week: publishing next week made
+    this week's shifts undroppable, and resolving the other way would have made
+    next week's undroppable instead. Both directions are real traffic — someone
+    who learns on Tuesday that they cannot work next Wednesday has to be able to
+    give it away.
+
+    Starting from the assignment removes the question. Tenancy is asserted
+    explicitly (the period must belong to this venue), which is a stronger
+    check than the one it replaces, not a weaker one — the old form only
+    implied it by having started from a venue-scoped period.
+    """
+    supabase = get_supabase()
+    rows = (
+        supabase.table("rota_assignments")
+        .select("period_id")
+        .eq("id", assignment_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not rows:
+        return None
+    return _live_period_by_id(venue_id, rows[0]["period_id"])
+
+
+def _period_for_swap(venue_id: str, swap_id: str) -> Optional[dict]:
+    """Same as _period_for_assignment, keyed on a swap proposal instead."""
+    supabase = get_supabase()
+    rows = (
+        supabase.table("shift_swaps")
+        .select("period_id")
+        .eq("id", swap_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not rows:
+        return None
+    return _live_period_by_id(venue_id, rows[0]["period_id"])
+
+
+def _live_period_by_id(venue_id: str, period_id: str) -> Optional[dict]:
+    """A period by id, but only if it belongs to this venue and is live.
+
+    Returning None for a foreign or non-live period (rather than raising) keeps
+    every caller's existing 404 wording, so a cross-tenant id is indistinguishable
+    from a missing one.
+    """
+    rows = (
+        get_supabase()
+        .table("availability_periods")
+        .select("*")
+        .eq("id", period_id)
+        .eq("venue_id", venue_id)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if not rows:
+        return None
+    return rows[0] if rows[0]["status"] in period_resolver.LIVE_STATUSES else None
+
+
+def _build_staff_rota(venue: dict, staff_id: str, week_start: Optional[str] = None) -> dict:
+    # A1 — the live week covering today, or an explicitly requested week. Every
+    # mutation resolves its own period from the assignment or swap it names, so
+    # this only decides what a staff member is *shown*, not what they may act on.
+    period = period_resolver.staff_rota_period(venue["id"], week_start)
     if not period:
         return {"venue_name": venue["name"], "staff_id": staff_id, "period": None}
 
@@ -865,14 +881,14 @@ def _build_staff_rota(venue: dict, staff_id: str) -> dict:
 
 
 @router.post("/{venue_token}/rota", response_model=StaffRotaOut)
-def get_staff_rota(venue_token: str, payload: PinAuthRequest):
+def get_staff_rota(venue_token: str, payload: StaffRotaRequest):
     # POST (not GET) so the PIN travels in the request body, never the URL —
     # a URL-borne credential lands in access logs, proxy logs, browser history
     # and Referer headers. A read done over POST; the staff cache classifies it
     # by path tail, not method, so caching is unaffected.
     venue = _get_venue_or_404(venue_token)
     staff = _get_staff_by_pin(venue["id"], payload.pin)
-    return _build_staff_rota(venue, staff["id"])
+    return _build_staff_rota(venue, staff["id"], payload.week_start)
 
 
 @router.post("/{venue_token}/rota/drop", response_model=StaffRotaOut)
@@ -887,7 +903,7 @@ def drop_shift(venue_token: str, payload: AvailabilityDropRequest):
     staff = _get_staff_by_pin(venue["id"], payload.pin)
     supabase = get_supabase()
 
-    period = _get_published_period(venue["id"])
+    period = _period_for_assignment(venue["id"], payload.assignment_id)
     if not period:
         raise HTTPException(status_code=404, detail="No published rota found")
 
@@ -965,7 +981,7 @@ def claim_shift(venue_token: str, payload: AvailabilityClaimRequest):
     staff = _get_staff_by_pin(venue["id"], payload.pin)
     supabase = get_supabase()
 
-    period = _get_published_period(venue["id"])
+    period = _period_for_assignment(venue["id"], payload.assignment_id)
     if not period:
         raise HTTPException(status_code=404, detail="No published rota found")
 
@@ -1162,7 +1178,7 @@ def give_shift(venue_token: str, payload: AvailabilityGiveRequest):
     staff = _get_staff_by_pin(venue["id"], payload.pin)
     supabase = get_supabase()
 
-    period = _get_published_period(venue["id"])
+    period = _period_for_assignment(venue["id"], payload.assignment_id)
     if not period:
         raise HTTPException(status_code=404, detail="No published rota found")
 
@@ -1252,7 +1268,7 @@ def accept_give(venue_token: str, payload: AvailabilityGiveActionRequest):
     staff = _get_staff_by_pin(venue["id"], payload.pin)
     supabase = get_supabase()
 
-    period = _get_published_period(venue["id"])
+    period = _period_for_assignment(venue["id"], payload.assignment_id)
     if not period:
         raise HTTPException(status_code=404, detail="No published rota found")
 
@@ -1405,7 +1421,7 @@ def decline_give(venue_token: str, payload: AvailabilityGiveActionRequest):
     staff = _get_staff_by_pin(venue["id"], payload.pin)
     supabase = get_supabase()
 
-    period = _get_published_period(venue["id"])
+    period = _period_for_assignment(venue["id"], payload.assignment_id)
     if not period:
         raise HTTPException(status_code=404, detail="No published rota found")
 
@@ -1449,7 +1465,7 @@ def decline_give(venue_token: str, payload: AvailabilityGiveActionRequest):
 def _own_open_assignment(period_id: str, staff_id: str, assignment_id: str) -> dict:
     """Fetches an assignment the caller owns outright — not already dropped,
     given, or tied up in another swap. Shared validation for both sides of a
-    swap proposal. period_id is already venue-scoped (via _get_published_period)
+    swap proposal. period_id is already venue-scoped (via _period_for_swap)
     and staff_id is validated venue-scoped by the caller, so no separate
     venue check is needed here."""
     supabase = get_supabase()
@@ -1487,7 +1503,7 @@ def propose_swap(venue_token: str, payload: AvailabilitySwapProposeRequest):
     staff = _get_staff_by_pin(venue["id"], payload.pin)
     supabase = get_supabase()
 
-    period = _get_published_period(venue["id"])
+    period = _period_for_assignment(venue["id"], payload.assignment_id)
     if not period:
         raise HTTPException(status_code=404, detail="No published rota found")
 
@@ -1589,7 +1605,7 @@ def accept_swap(venue_token: str, payload: AvailabilitySwapActionRequest):
     staff = _get_staff_by_pin(venue["id"], payload.pin)
     supabase = get_supabase()
 
-    period = _get_published_period(venue["id"])
+    period = _period_for_swap(venue["id"], payload.swap_id)
     if not period:
         raise HTTPException(status_code=404, detail="No published rota found")
 
@@ -1735,7 +1751,7 @@ def decline_swap(venue_token: str, payload: AvailabilitySwapActionRequest):
     staff = _get_staff_by_pin(venue["id"], payload.pin)
     supabase = get_supabase()
 
-    period = _get_published_period(venue["id"])
+    period = _period_for_swap(venue["id"], payload.swap_id)
     if not period:
         raise HTTPException(status_code=404, detail="No published rota found")
 

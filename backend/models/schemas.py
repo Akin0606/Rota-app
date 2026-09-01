@@ -71,6 +71,16 @@ class PinAuthRequest(BaseModel):
     pin: str = Field(pattern=r"^\d{4}$")
 
 
+class StaffRotaRequest(PinAuthRequest):
+    """A1 — the staff rota is week-addressable. Omitted means "the live week
+    covering today, else the most recent live one", which is what a staff
+    member opening the app wants. Its own model rather than a field on
+    PinAuthRequest, which several unrelated endpoints share.
+    """
+
+    week_start: Optional[str] = None
+
+
 class AvailabilityAuthResponse(BaseModel):
     staff: StaffOut
     venue_name: str
@@ -205,6 +215,13 @@ class VenueOut(BaseModel):
     # Onboarding save-and-resume (§1). {"step": N} while in-flight,
     # {"completed": true} when done, None on a legacy/already-onboarded venue.
     setup_state: Optional[dict] = None
+    # A2/D5 — the Monday the notice window is currently collecting for, so every
+    # manager surface can name the same week instead of each guessing from the
+    # period list. Deliberately here and not on PeriodOut: that model is
+    # embedded in five other schemas, all built as inline dicts, and computing
+    # it per period would mean three extra queries for every period serialized.
+    # None when the venue has no shifts yet, so no window can be derived.
+    current_week_start: Optional[str] = None
     # True for venues the per-day migration backfilled from a free-text 'close'
     # (a safe '11:00pm' placeholder). Prompts the manager to enter the real
     # close times via the per-day editor; cleared the moment they save a

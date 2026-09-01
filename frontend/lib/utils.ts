@@ -259,10 +259,36 @@ export function periodForToday<T extends { week_start: string }>(periods: T[]): 
  */
 export function planningPeriod<T extends { week_start: string; status: string }>(
   periods: T[],
+  currentWeekStart?: string | null,
 ): T | null {
-  const upcoming = periods
+  // A2 — seeded from the backend's own answer (venue.current_week_start, the
+  // week the notice window is collecting for) rather than guessed from the list
+  // alone. Two kinds of week are not the manager's next job:
+  //
+  //   * a `collecting` week EARLIER than the window's — nobody can submit to it
+  //     any more, so it is a leftover. That is exactly the period venue creation
+  //     used to insert (this week, collecting, close date already past), and the
+  //     ASC sort below let it capture this forever.
+  //   * anything LATER than the window's week — speculative planning, still
+  //     reachable from the rota scrubber, but not the thing due next. This is
+  //     what stopped an auto-created phantom two weeks out from being announced
+  //     as the manager's next job, and it holds whether or not that row has been
+  //     cleaned up, so the fix does not depend on data surgery.
+  //
+  // A this-week draft still at `generated` is real unfinished work and stays the
+  // next job even once collection has moved on. And if the scope filter would
+  // leave nothing at all, it is ignored rather than showing the front door to a
+  // manager who does have a week to work on.
+  const inScope = (p: T) => {
+    if (!currentWeekStart) return true;
+    if (p.status === "collecting" && p.week_start < currentWeekStart) return false;
+    return p.week_start <= currentWeekStart;
+  };
+  const all = periods
     .filter((p) => weekOffsetFromNow(p.week_start) >= 0)
     .sort((a, b) => a.week_start.localeCompare(b.week_start));
+  const scoped = all.filter(inScope);
+  const upcoming = scoped.length ? scoped : all;
   if (!upcoming.length) return null;
   const needsWork = upcoming.find(
     (p) => p.status !== "published" && p.status !== "confirmed",

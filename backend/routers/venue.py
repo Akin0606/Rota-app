@@ -1,4 +1,3 @@
-from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -12,7 +11,7 @@ from models.schemas import (
     VenueOut,
     VenueUpdateRequest,
 )
-from services import cron_scheduler, schedule_windows
+from services import cron_scheduler, period_resolver, schedule_windows
 from services.auth_service import get_current_manager, get_manager_venue
 from services.pin_service import generate_pin, generate_venue_slug, generate_venue_token
 
@@ -23,7 +22,11 @@ router = APIRouter(prefix="/api/venue", tags=["venue"])
 def get_venue(manager: dict = Depends(get_current_manager)):
     # Readable even when inactive, so the app can show a clear "inactive" screen
     # rather than redirecting as if the account has no venue.
-    return get_manager_venue(manager["id"], require_active=False)
+    venue = get_manager_venue(manager["id"], require_active=False)
+    # One window computation per venue read, shared by Home, Rota and Team —
+    # all three already fetch this, so naming the same week costs no round trip.
+    week = period_resolver.collection_week(venue["id"])
+    return {**venue, "current_week_start": week.isoformat() if week else None}
 
 
 @router.post("", response_model=VenueOut)
@@ -78,11 +81,12 @@ def create_venue(payload: VenueCreateRequest, manager: dict = Depends(get_curren
         {"venue_id": venue["id"], **schedule_windows.default_window()}
     ).execute()
 
-    today = date.today()
-    week_start = today - timedelta(days=today.weekday())
-    supabase.table("availability_periods").insert(
-        {"venue_id": venue["id"], "week_start": week_start.isoformat(), "status": "collecting"}
-    ).execute()
+    # A3 — deliberately no availability period here. A venue with no shifts has
+    # nothing to collect for: the notice window is derived from shift start
+    # times, so a period created now is one no window points at, with a close
+    # date already in the past. It was the row planningPeriod() locked onto for
+    # the life of the venue. cron.open_availability_for_venue creates the first
+    # real period once there are shifts to derive a window from.
 
     supabase.table("activity_log").insert(
         {"venue_id": venue["id"], "action": "venue_created", "detail": f"{payload.name} was set up"}

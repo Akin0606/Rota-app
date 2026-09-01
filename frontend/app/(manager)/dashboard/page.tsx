@@ -194,7 +194,7 @@ export default function HomePage() {
         ]);
         if (cancelled) return;
 
-        const plan = planningPeriod(periodsRes);
+        const plan = planningPeriod(periodsRes, venueRes.current_week_start);
         const now = periodForToday(periodsRes);
 
         // At most two rota fetches, usually one or none: a week still collecting
