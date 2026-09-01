@@ -98,7 +98,22 @@ export default function BillingPage() {
   const needsSubscription = !isActive && (trialExpired || status === "cancelled");
   const showManage = isActive || status === "past_due";
 
-  if (showCheckout && stripePromise) {
+  if (showCheckout) {
+    if (!stripePromise) {
+      return (
+        <div className="px-5 py-8 md:px-8">
+          <div className="rounded-card border border-hairline bg-surface-card p-6 text-center">
+            <p className="text-sm text-ink-muted">Billing is not configured yet — contact support.</p>
+            <button
+              onClick={() => setShowCheckout(false)}
+              className="mt-4 rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-accent-on"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="px-5 py-8 md:px-8">
         <button
@@ -134,14 +149,22 @@ export default function BillingPage() {
               Current plan
             </div>
             <div className="text-lg font-medium">Rotally Pro</div>
-            <div className="mt-1 text-sm text-ink-muted">£49/month per venue</div>
+            <div className="mt-1 text-sm text-ink-muted">£29/month per venue</div>
           </div>
           <StatusPill status={status} />
         </div>
 
-        {isTrial && !trialExpired && trialDaysLeft !== null && (
-          <div className="mt-4 rounded-xl border border-cp-amber-soft bg-cp-amber-soft p-3 text-sm text-cp-amber">
-            Your trial ends in {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} — subscribe to keep using Rotally.
+        {isTrial && !trialExpired && (
+          <div className="mt-4 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-ink-muted">Trial ends</span>
+              <span>{formatDate(billing?.subscription_ends_at ?? null)}</span>
+            </div>
+            {trialDaysLeft !== null && (
+              <div className="rounded-xl border border-cp-amber-soft bg-cp-amber-soft p-3 text-sm text-cp-amber">
+                {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left — subscribe to keep using Rotally.
+              </div>
+            )}
           </div>
         )}
 
@@ -189,21 +212,19 @@ export default function BillingPage() {
 
       {/* Actions */}
       <div className="flex flex-wrap gap-3">
-        {needsSubscription && stripePromise && (
+        {(needsSubscription || (isTrial && !trialExpired)) && (
           <button
-            onClick={() => { setError(null); setShowCheckout(true); }}
+            onClick={() => {
+              if (!stripePromise) {
+                setError("Billing is not configured yet — contact support.");
+                return;
+              }
+              setError(null);
+              setShowCheckout(true);
+            }}
             className="rounded-xl bg-accent px-5 py-3 text-sm font-medium text-accent-on transition-transform active:scale-[0.98]"
           >
-            Subscribe — £49/mo
-          </button>
-        )}
-
-        {isTrial && !trialExpired && stripePromise && (
-          <button
-            onClick={() => { setError(null); setShowCheckout(true); }}
-            className="rounded-xl bg-accent px-5 py-3 text-sm font-medium text-accent-on transition-transform active:scale-[0.98]"
-          >
-            Subscribe now
+            {needsSubscription ? "Subscribe — £29/mo" : "Subscribe now"}
           </button>
         )}
 
