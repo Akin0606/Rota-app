@@ -28,6 +28,7 @@ import {
   formatDeadlineDay,
   formatWeekOf,
   formatWeekRangeCompact,
+  mondayISO,
   parseISODate,
   pinStorageKey,
 } from "@/lib/utils";
@@ -117,13 +118,11 @@ const STATE_GLYPH: Record<SlotState, "check" | "minus" | "x" | null> = {
 
 type Grid = Record<number, Record<string, number>>;
 
-function mondayISO(offsetWeeks: number): string {
-  const d = new Date();
-  const dow = (d.getDay() + 6) % 7;
-  d.setDate(d.getDate() - dow + offsetWeeks * 7);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
+// The weeks this screen can offer. Uses the shared London-anchored mondayISO,
+// not a device-clock one: the backend mints both the periods and the ?week= in
+// a chase link on Europe/London, and A7 now *validates* an incoming week
+// against this list — so a device an hour or a continent off would reject a
+// perfectly good link and quietly show a different week instead.
 const WEEK_OPTIONS = [0, 1, 2, 3].map((offset) => ({
   weekStart: mondayISO(offset),
   // formatWeekOf, not a split of the compact range — "24–30 Aug" would slice
@@ -163,11 +162,26 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   const [toast, setToast] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [guardOpen, setGuardOpen] = useState(false);
+  // A7 — set when a link named a week we can no longer offer, so the
+  // fallback is stated rather than silently swapped underneath them.
+  const [staleWeekLink, setStaleWeekLink] = useState(false);
 
   useEffect(() => {
+    // A7 — the week the link asked for wins over whatever the server currently
+    // calls current. Validated against the same options the pills offer: a
+    // chase email opened a fortnight late must not hand over a blank, editable
+    // grid for a week the backend will refuse on submit.
+    const requestedWeek = new URLSearchParams(window.location.search).get("week");
+    const wantedWeek = WEEK_OPTIONS.some((w) => w.weekStart === requestedWeek) ? requestedWeek : null;
+    if (requestedWeek && !wantedWeek) setStaleWeekLink(true);
+    if (wantedWeek) setSelectedWeek(wantedWeek);
+
     const storedPin = sessionStorage.getItem(pinStorageKey(venue_token));
     if (!storedPin) {
-      router.replace(`/v/${venue_token}`);
+      // An emailed link lands here without a session, so the destination has to
+      // survive the PIN gate — otherwise the week we just took care to carry is
+      // dropped on the one journey that most needs it.
+      router.replace(`/v/${venue_token}?next=${encodeURIComponent(`/v/${venue_token}/availability${window.location.search}`)}`);
       return;
     }
     setPin(storedPin);
@@ -180,14 +194,18 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
       .then((res) => {
         setData(res);
         setAutoSubmitState(res.staff.auto_submit_availability);
-        if (res.period && WEEK_OPTIONS.some((w) => w.weekStart === res.period!.week_start)) {
+        // Only fall back to the server's current period when the link didn't
+        // name a week itself.
+        if (!wantedWeek && res.period && WEEK_OPTIONS.some((w) => w.weekStart === res.period!.week_start)) {
           setSelectedWeek(res.period.week_start);
         }
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 401) {
           sessionStorage.removeItem(pinStorageKey(venue_token));
-          router.replace(`/v/${venue_token}?expired=1`);
+          router.replace(
+            `/v/${venue_token}?expired=1&next=${encodeURIComponent(`/v/${venue_token}/availability${window.location.search}`)}`,
+          );
           return;
         }
         setError(err instanceof ApiError ? err.message : "Something went wrong");
@@ -395,7 +413,9 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
     setSubmitting(true);
     try {
       await submitAvailability(venue_token, pin, submissions, selectedWeek);
-      router.push(`/v/${venue_token}/submitted`);
+      // A6 — confirm the week they actually submitted, not whatever the server
+      // currently calls current.
+      router.push(`/v/${venue_token}/submitted?week=${selectedWeek}`);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not submit, please try again");
     } finally {
@@ -466,6 +486,20 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
         <LegendItem swatch="bg-cp-red" label="Can't work" />
         <LegendItem swatch="border-[0.5px] border-dashed border-[var(--c-hairline)]" label="No answer yet" />
       </div>
+
+      {/* A7 — the link pointed at a week that's no longer on offer. Say so:
+          silently landing them on a different week is how the wrong week gets
+          filled in with both sides believing it's done. */}
+      {staleWeekLink && (
+        <div className="mb-3.5 flex items-start gap-2 rounded-cp-control bg-cp-amber-soft px-3.5 py-2.5 text-[12px] text-cp-amber">
+          <Icon name="info-circle" size={14} />
+          <span className="text-left leading-[1.45]">
+            That link was for a week that&apos;s no longer open. Showing{" "}
+            {WEEK_OPTIONS.find((w) => w.weekStart === selectedWeek)?.label ?? "the current week"} instead — pick
+            another above if you need it.
+          </span>
+        </div>
+      )}
 
       {prefilled && editable && !committed && (
         <div className="mb-3.5 rounded-cp-control bg-accent-light px-3.5 py-2.5 text-center text-[12px] text-accent">

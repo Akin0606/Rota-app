@@ -3,20 +3,19 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { PinAuthData, authenticatePin } from "@/lib/api";
-import { formatWeekRange, pinStorageKey } from "@/lib/utils";
+import { formatWeekRange } from "@/lib/utils";
 
 export default function SubmittedPage({ params }: { params: { venue_token: string } }) {
   const { venue_token } = params;
-  const [data, setData] = useState<PinAuthData | null>(null);
+  // A6 — the week comes from the submit that got us here. This used to re-fetch
+  // /auth purely to name it, which named the server's *current* period instead:
+  // submit the "Next week" tab and the confirmation congratulated you on this
+  // week. The page has no other use for that payload, so the call is gone.
+  const [week, setWeek] = useState<string | null>(null);
 
   useEffect(() => {
-    const pin = sessionStorage.getItem(pinStorageKey(venue_token));
-    if (!pin) return;
-    authenticatePin(venue_token, pin)
-      .then(setData)
-      .catch(() => {});
-  }, [venue_token]);
+    setWeek(new URLSearchParams(window.location.search).get("week"));
+  }, []);
 
   return (
     <div className="cp-staff min-h-screen bg-surface-page text-ink">
@@ -40,12 +39,12 @@ export default function SubmittedPage({ params }: { params: { venue_token: strin
         </div>
         <div className="mb-2 text-2xl font-medium text-ink">Submitted</div>
         <div className="mb-8 max-w-[300px] text-sm leading-relaxed text-ink-muted">
-          {data?.period
-            ? `Your availability for ${formatWeekRange(data.period.week_start)} has been sent. You'll get a notification when the rota is published.`
+          {week
+            ? `Your availability for ${formatWeekRange(week)} has been sent. You'll get a notification when the rota is published.`
             : "Your availability has been sent. You'll get a notification when the rota is published."}
         </div>
         <Link
-          href={`/v/${venue_token}/availability`}
+          href={`/v/${venue_token}/availability${week ? `?week=${week}` : ""}`}
           className="cp-hairline block w-full max-w-[300px] rounded-cp-control py-3.5 text-center text-sm font-medium text-accent transition-transform duration-150 active:scale-[0.99]"
         >
           Edit availability

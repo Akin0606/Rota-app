@@ -217,6 +217,22 @@ def send_pin_reminder_email(to_email: str, name: str, venue_name: str, pin: str,
 
 # 4. Availability reminder ---------------------------------------------------
 
+def availability_url(frontend_url: str, link_token: str, week_start=None) -> str:
+    """Deep link to the availability screen, carrying the week it is about.
+
+    The week has to travel with the link. A chase for w/c 8 Sep that lands on
+    whatever the app currently calls "this week" is how a staffer fills in the
+    wrong week and both sides then believe they are done. Every email that
+    names a week in its subject must link to that same week.
+
+    The staff app validates the parameter against the weeks it can actually
+    offer and falls back visibly if it is stale, so an email opened late
+    degrades to a named fallback rather than a blank editable grid.
+    """
+    base = f"{frontend_url}/v/{link_token}/availability"
+    return f"{base}?week={week_start}" if week_start else base
+
+
 def send_availability_reminder_email(
     to_email: str,
     name: str,

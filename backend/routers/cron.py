@@ -107,7 +107,10 @@ def _auto_submit_for_new_period(venue: dict, period: dict) -> None:
         .data
     )
     week_label = f"w/c {week_monday.strftime('%d %b %Y')}"
-    venue_link_url = f"{get_settings().frontend_url}/v/{venue['link_token']}"
+    # A5 — "change it before the deadline" has to open the week we submitted for.
+    venue_link_url = email_service.availability_url(
+        get_settings().frontend_url, venue["link_token"], week_monday
+    )
     for member in opted_in:
         rows = _most_recent_submission_pattern(venue["id"], member["id"], week_monday)
         if not rows:
@@ -159,7 +162,10 @@ def _send_open_emails(venue: dict, week_monday: date) -> None:
         schedule_windows.format_deadline_dt(notice_window.close_for_week(venue["id"], week_monday))
         or "soon"
     )
-    venue_link_url = f"{settings.frontend_url}/v/{venue['link_token']}"
+    # A5 — the week travels with the link, same as the chase email.
+    venue_link_url = email_service.availability_url(
+        settings.frontend_url, venue["link_token"], week_monday
+    )
 
     for member in _active_staff(venue["id"]):
         if not member.get("email"):
@@ -348,8 +354,10 @@ def send_reminders_for_venue(venue: dict) -> Optional[dict]:
     if not targets:
         return {"reminded": 0, "email_sent": 0}
 
-    week_label, deadline_label = _reminder_context(venue, period["id"])
-    venue_link_url = f"{settings.frontend_url}/v/{venue['link_token']}"
+    week_label, deadline_label, week_start = _reminder_context(venue, period["id"])
+    venue_link_url = email_service.availability_url(
+        settings.frontend_url, venue["link_token"], week_start
+    )
 
     sent_count = 0
     for member in targets:

@@ -423,11 +423,12 @@ def reset_pin(staff_id: str, manager: dict = Depends(get_current_manager)):
     return updated
 
 
-def _reminder_context(venue: dict, period_id: Optional[str]) -> tuple[str, str]:
-    """Best-effort week/deadline copy for the reminder email. Falls back to
-    generic wording if no period context is available."""
+def _reminder_context(venue: dict, period_id: Optional[str]) -> tuple[str, str, Optional[date]]:
+    """Best-effort week/deadline copy for the reminder email, plus the week
+    itself so the link can carry it (A5). Falls back to generic wording — and
+    no week — if no period context is available."""
     if not period_id:
-        return "this week", "soon"
+        return "this week", "soon", None
 
     supabase = get_supabase()
     # Venue-scoped, like every other lookup here has to be: the backend runs on
@@ -445,7 +446,7 @@ def _reminder_context(venue: dict, period_id: Optional[str]) -> tuple[str, str]:
         .execute()
     )
     if not period_res.data:
-        return "this week", "soon"
+        return "this week", "soon", None
 
     week_start = date.fromisoformat(str(period_res.data[0]["week_start"]))
     week_label = f"w/c {week_start.strftime('%d %b %Y')}"
@@ -456,7 +457,7 @@ def _reminder_context(venue: dict, period_id: Optional[str]) -> tuple[str, str]:
         or "soon"
     )
 
-    return week_label, deadline_label
+    return week_label, deadline_label, week_start
 
 
 @router.post("/remind", response_model=RemindResponse)
@@ -523,8 +524,10 @@ def remind(payload: RemindRequest, manager: dict = Depends(get_current_manager))
             }
         ).execute()
 
-    week_label, deadline_label = _reminder_context(venue, payload.period_id)
-    venue_link_url = f"{get_settings().frontend_url}/v/{venue['link_token']}"
+    week_label, deadline_label, week_start = _reminder_context(venue, payload.period_id)
+    venue_link_url = email_service.availability_url(
+        get_settings().frontend_url, venue["link_token"], week_start
+    )
 
     sent_count = 0
     for member in targets:

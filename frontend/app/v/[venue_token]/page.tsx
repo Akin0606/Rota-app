@@ -59,7 +59,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
     const remembered = localStorage.getItem(deviceKey(venue_token));
     if (remembered) {
       sessionStorage.setItem(pinStorageKey(venue_token), remembered);
-      router.replace(`/v/${venue_token}/hub`);
+      router.replace(safeNext(searchParams.get("next"), venue_token) ?? `/v/${venue_token}/hub`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -98,7 +98,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
       await authenticatePin(venue_token, pin);
       // Remember this device so the PIN becomes recovery-only next time.
       rememberDevice(pin);
-      router.push(`/v/${venue_token}/hub`);
+      router.push(safeNext(searchParams.get("next"), venue_token) ?? `/v/${venue_token}/hub`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
         setPinError(err.message);
@@ -374,6 +374,18 @@ function CenteredMessage({ children }: { children: React.ReactNode }) {
       </div>
     </div>
   );
+}
+
+// Where to land after auth. An emailed deep link — a chase naming a specific
+// week — hits this gate first, so the destination has to survive it or the week
+// is dropped on exactly the journey that needed it.
+//
+// Validated to a path inside THIS venue and never treated as a URL: an
+// unchecked `next` on a login screen is an open redirect, and this one is
+// reachable by anyone holding a venue link.
+function safeNext(raw: string | null, venue_token: string): string | null {
+  if (!raw) return null;
+  return raw.startsWith(`/v/${venue_token}/`) ? raw : null;
 }
 
 export default function PinEntryPage({ params }: { params: { venue_token: string } }) {
