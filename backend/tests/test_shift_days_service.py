@@ -8,7 +8,9 @@ representative-derivation that must reject bad input BEFORE any write.
 import pytest
 
 from services import shift_days_service as svc
+from services import shift_days_service
 from services.shift_days_service import ScheduleError
+from tests.fake_supabase import FakeSupabase
 
 
 def test_validate_time_accepts_clock_and_close():
@@ -96,17 +98,20 @@ def test_propagate_preserves_divergence_in_columns_it_was_not_given():
     assert all(r["max_staff"] == 4 for r in fake.rows("shift_days"))
 
 
-def test_propagate_flattens_a_column_it_IS_given():
-    """The mechanism F1 has to stop feeding. Not a bug here — this is
-    propagate_fields doing exactly its job. The bug is the Scheduler sending
-    min_staff at all when only max changed."""
+def test_propagate_refuses_a_column_it_IS_given_when_it_diverges():
+    """This test used to assert the opposite, and it was right to: it pinned the
+    flattening as it stood, so batch 7 could prove it changed. The Scheduler is
+    no longer allowed to send min_staff at all (F4), and if anything ever does
+    again it now gets a 409 instead of Sunday's cover."""
     from tests.fake_supabase import FakeSupabase
 
     fake = FakeSupabase({"shift_days": _diverged_rows()})
-    svc.propagate_fields(fake, "s1", {"min_staff": 1, "max_staff": 4})
+    with pytest.raises(svc.DivergenceError):
+        svc.propagate_fields(fake, "s1", {"min_staff": 1, "max_staff": 4})
 
     by_day = {r["day_index"]: r for r in fake.rows("shift_days")}
-    assert by_day[6]["min_staff"] == 1, "Sunday's 3 is gone — this is what the Scheduler does today"
+    assert by_day[6]["min_staff"] == 3, "Sunday's cover survives"
+    assert by_day[0]["max_staff"] == 2, "and nothing else was half-written either"
 
 
 def test_propagate_ignores_non_per_day_fields():
@@ -115,3 +120,54 @@ def test_propagate_ignores_non_per_day_fields():
     fake = FakeSupabase({"shift_days": _diverged_rows()})
     svc.propagate_fields(fake, "s1", {"name": "Evening"})
     assert fake.wrote() == [], "a name edit must not touch shift_days at all"
+
+
+# --------------------------------------------------------------------------- #
+# F2 — a single-value edit must not flatten what the per-day editor created    #
+# --------------------------------------------------------------------------- #
+
+
+def _gatehouse_rows():
+    """The Gatehouse's evening: Sunday is quieter and needs one fewer body."""
+    return [
+        {"shift_id": "sh1", "day_index": d, "start_time": "6:00pm",
+         "end_time": "11:00pm", "min_staff": 2 if d == 6 else 3, "max_staff": 4}
+        for d in range(7)
+    ]
+
+
+def test_editing_a_diverged_column_is_refused():
+    fake = FakeSupabase({"shift_days": _gatehouse_rows()})
+    try:
+        shift_days_service.propagate_fields(fake, "sh1", {"min_staff": 3})
+    except shift_days_service.DivergenceError as e:
+        assert e.field == "min_staff"
+        assert e.values == [2, 3]
+    else:
+        raise AssertionError("expected a refusal")
+    # The exit test: Sunday still needs 2.
+    assert {r["min_staff"] for r in fake.rows("shift_days")} == {2, 3}
+
+
+def test_editing_a_uniform_column_still_works():
+    """Every shift onboarding has ever created. The guard must not turn the
+    normal single-value edit into an error."""
+    fake = FakeSupabase({"shift_days": _gatehouse_rows()})
+    shift_days_service.propagate_fields(fake, "sh1", {"max_staff": 5})
+    assert {r["max_staff"] for r in fake.rows("shift_days")} == {5}
+    # And the diverged column it wasn't handed is untouched.
+    assert {r["min_staff"] for r in fake.rows("shift_days")} == {2, 3}
+
+
+def test_divergence_in_a_column_you_are_not_editing_is_irrelevant():
+    fake = FakeSupabase({"shift_days": _gatehouse_rows()})
+    shift_days_service.propagate_fields(fake, "sh1", {"start_time": "5:00pm"})
+    assert {r["start_time"] for r in fake.rows("shift_days")} == {"5:00pm"}
+
+
+def test_a_shift_with_no_rows_is_still_left_alone():
+    """Unmigrated: it runs every day off the shift-level fallback, and there is
+    nothing to diverge from."""
+    fake = FakeSupabase({"shift_days": []})
+    shift_days_service.propagate_fields(fake, "sh1", {"min_staff": 4})
+    assert fake.rows("shift_days") == []

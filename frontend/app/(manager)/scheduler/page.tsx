@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import GenerateOverlay from "@/components/manager/generate-overlay";
@@ -24,8 +25,8 @@ import {
   setScheduleOverride,
   updateRules,
   updateScheduler,
-  updateShift,
 } from "@/lib/api";
+import { summariseCoverage, summariseShift } from "@/lib/shift-summary";
 import { dayDef, indexShiftDays, runsOnDay } from "@/lib/utils";
 import Waiting from "@/components/waiting";
 
@@ -85,8 +86,6 @@ export default function SchedulerPage() {
 
   // Shift staffing form state, keyed by shift id.
   const [shifts, setShifts] = useState<ShiftWithDays[]>([]);
-  const [staffingForm, setStaffingForm] = useState<Record<string, { min_staff: number; max_staff: number }>>({});
-  const [savingStaffing, setSavingStaffing] = useState(false);
 
   // Generate flow (shared animated overlay).
   const [genWeek, setGenWeek] = useState<string>("");
@@ -139,7 +138,6 @@ export default function SchedulerPage() {
 
   function applyShifts(res: ShiftWithDays[]) {
     setShifts(res);
-    setStaffingForm(Object.fromEntries(res.map((sh) => [sh.id, { min_staff: sh.min_staff, max_staff: sh.max_staff }])));
   }
 
   function showToast(msg: string) {
@@ -173,21 +171,16 @@ export default function SchedulerPage() {
   // rosters 35 shifts a week when it runs 29: it counts a closed Tuesday, and it
   // ignores a Sunday the manager has set to need two rather than one.
   //
-  // An unsaved edit in the panel above is applied to every open day, because
-  // that is exactly what saving it does (propagate_fields flattens the column it
-  // is handed), so the number the manager watches move matches what they are
-  // about to commit.
+  // Every open day's own minimum, summed. The panel below is read-only now, so
+  // this is simply what the venue is set to roster — there is no unsaved edit
+  // that could make the figure and the schedule disagree.
   const shiftsPerWeek = useMemo(() => {
     const idx = indexShiftDays(shifts);
     return shifts.reduce((sum, sh) => {
-      const edited = staffingForm[sh.id]?.min_staff;
       const openDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => runsOnDay(sh, d, idx));
-      return (
-        sum +
-        openDays.reduce((n, d) => n + (edited ?? dayDef(sh, d, idx).min), 0)
-      );
+      return sum + openDays.reduce((n, d) => n + dayDef(sh, d, idx).min, 0);
     }, 0);
-  }, [shifts, staffingForm]);
+  }, [shifts]);
 
   async function handleSaveOffsets() {
     setSavingOffsets(true);
@@ -219,43 +212,6 @@ export default function SchedulerPage() {
       showToast(err instanceof ApiError ? err.message : "Could not save rules");
     } finally {
       setSavingRules(false);
-    }
-  }
-
-  function patchStaffingLocal(shiftId: string, patch: Partial<{ min_staff: number; max_staff: number }>) {
-    setStaffingForm((prev) => ({ ...prev, [shiftId]: { ...prev[shiftId], ...patch } }));
-  }
-
-  async function handleSaveStaffing() {
-    const changed = shifts.filter((sh) => {
-      const f = staffingForm[sh.id];
-      return f && (f.min_staff !== sh.min_staff || f.max_staff !== sh.max_staff);
-    });
-    if (!changed.length) {
-      showToast("No staffing changes to save");
-      return;
-    }
-    for (const sh of changed) {
-      const f = staffingForm[sh.id];
-      if (f.max_staff < f.min_staff) {
-        showToast(`${sh.name}: max staff can't be below min staff`);
-        return;
-      }
-    }
-    setSavingStaffing(true);
-    try {
-      await Promise.all(changed.map((sh) => updateShift(sh.id, staffingForm[sh.id])));
-      // Re-read rather than patching locally: the save propagates the edited
-      // column onto every `shift_days` row, so the per-day schedule this page
-      // counts from has changed server-side. Merging the shift-level response
-      // would leave `days` stale and the "N shifts / week" figure wrong until
-      // the next reload.
-      applyShifts(await listShiftDays());
-      showToast("Coverage saved");
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Could not save coverage");
-    } finally {
-      setSavingStaffing(false);
     }
   }
 
@@ -354,42 +310,57 @@ export default function SchedulerPage() {
         </div>
       )}
 
-      {/* ---------- Coverage ---------- */}
-      <SectionLabel title="Coverage — how many you need" hint="Min aimed for · max never exceeded" />
+      {/* ---------- Coverage (read-only) ----------
+          This was a pair of steppers per shift, and it was the only editor in
+          the app that could silently destroy what another editor created: one
+          number cannot say "two on weekdays, three on Saturday", so saving it
+          wrote the same figure onto every day the shift runs. It presented
+          itself as a peer of the per-day editor while being strictly lossier.
+          It now states what each shift actually needs, per day, and sends the
+          manager to the one place that can change it. */}
+      <SectionLabel title="Coverage — how many you need" hint="Set per day in Settings" />
       {shifts.length === 0 ? (
         <EmptyNote>No shifts yet. Add shifts in Settings to set coverage.</EmptyNote>
       ) : (
         shifts.map((sh) => {
-          const f = staffingForm[sh.id] ?? { min_staff: sh.min_staff, max_staff: sh.max_staff };
+          const hours = summariseShift(sh.days);
+          const cover = summariseCoverage(sh.days);
           return (
-            <div key={sh.id} className="mb-2.5 rounded-cp-card border-[0.5px] border-hairline bg-surface-card px-4 py-3.5">
-              <div className="mb-3 flex items-center gap-2.5">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: sh.color }} />
-                <span className="text-sm font-medium text-ink">{sh.name}</span>
-                <span className="ml-auto text-[11px] text-ink-muted">
-                  {sh.start_time} – {sh.end_time}
+            <Link
+              key={sh.id}
+              href="/settings"
+              className="mb-2.5 flex items-center gap-3 rounded-cp-card border-[0.5px] border-hairline bg-surface-card px-4 py-3.5 transition-[transform] active:scale-[0.99]"
+            >
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: sh.color }} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-ink">{sh.name}</span>
+                <span className="mt-0.5 block truncate text-[11.5px] text-ink-muted">
+                  {cover.closed ? (
+                    "Not running any day"
+                  ) : (
+                    <>
+                      {cover.base}
+                      {cover.exception && (
+                        <span className="text-cp-amber"> · {cover.exception}</span>
+                      )}
+                    </>
+                  )}
                 </span>
-              </div>
-              <CoverageRow
-                label="Minimum"
-                sub="target per day"
-                value={f.min_staff}
-                min={0}
-                onChange={(n) => patchStaffingLocal(sh.id, { min_staff: n })}
-              />
-              <CoverageRow
-                label="Maximum"
-                sub="cap per day"
-                value={f.max_staff}
-                min={1}
-                onChange={(n) => patchStaffingLocal(sh.id, { max_staff: n })}
-              />
-            </div>
+                <span className="mt-px block truncate text-[11px] text-ink-faint">
+                  {hours.closed ? hours.baseDays : `${hours.baseDays} ${hours.baseHours}`}
+                  {hours.exception ? ` · ${hours.exception}` : ""}
+                </span>
+              </span>
+              <ManagerIcon name="chevron-right" size={15} className="shrink-0 text-ink-muted" />
+            </Link>
           );
         })
       )}
       {shifts.length > 0 && (
-        <SaveButton onClick={handleSaveStaffing} busy={savingStaffing} label="Save coverage" />
+        <div className="mb-1 px-0.5 text-[11px] leading-[1.5] text-ink-muted">
+          Numbers are per day. Change them — or which days a shift runs — in
+          Settings, where each day can differ.
+        </div>
       )}
 
       {/* ---------- Shift rules ---------- */}
@@ -688,30 +659,6 @@ function Stepper({
         {suffix && <span className="ml-0.5 text-[11px] font-normal text-ink-faint">{suffix}</span>}
       </span>
       <MiniBtn icon="plus" onClick={() => set(value + 1)} />
-    </div>
-  );
-}
-
-function CoverageRow({
-  label,
-  sub,
-  value,
-  min,
-  onChange,
-}: {
-  label: string;
-  sub: string;
-  value: number;
-  min: number;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between border-t border-hairline py-2.5 first:border-t-0 first:pt-0">
-      <div>
-        <div className="text-[13px] font-medium text-ink">{label}</div>
-        <div className="text-[11px] text-ink-faint">{sub}</div>
-      </div>
-      <Stepper value={value} min={min} onChange={onChange} />
     </div>
   );
 }

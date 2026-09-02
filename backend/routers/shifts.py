@@ -167,6 +167,16 @@ def update_shift(
             status_code=400, detail="Max staff can't be lower than min staff."
         )
 
+    # Per-day rows FIRST, so a refusal leaves nothing half-written. A
+    # single-value edit pushes only the changed time/staff columns onto every
+    # day (preserving per-day divergence in the columns it didn't touch), and
+    # refuses outright when the column it was handed already differs across
+    # days — the per-day editor (PUT /days) is the path for that.
+    try:
+        shift_days_service.propagate_fields(supabase, shift_id, updates)
+    except shift_days_service.DivergenceError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
     updated = (
         supabase.table("shifts")
         .update(updates)
@@ -174,11 +184,6 @@ def update_shift(
         .execute()
         .data[0]
     )
-    # Keep the per-day rows coherent: the simple editor edits one field at a time,
-    # so push only the changed time/staff columns onto every day (preserving
-    # per-day divergence in the columns it didn't touch). The per-day editor
-    # (PUT /days) is the path for divergent schedules and closed days.
-    shift_days_service.propagate_fields(supabase, shift_id, updates)
     # The notice window is derived from the venue's earliest shift start, so a
     # shift change moves every open/remind/close job. Nothing here used to
     # refresh them: it limped because create_venue seeded a period and a read

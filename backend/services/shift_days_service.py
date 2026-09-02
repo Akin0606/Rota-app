@@ -35,6 +35,24 @@ class ScheduleError(ValueError):
     The router turns this into a 400."""
 
 
+class DivergenceError(ValueError):
+    """Raised when a single-value edit would flatten a column the manager has
+    deliberately set differently on different days. The router turns this into a
+    409 so the client can say which day loses what, and send them to the per-day
+    editor instead of silently overwriting it.
+
+    Carries the field and the current distinct values so the message can name
+    them rather than saying "something diverges"."""
+
+    def __init__(self, field: str, values: list):
+        self.field = field
+        self.values = values
+        super().__init__(
+            f"{field} isn't the same on every day this shift runs "
+            f"({', '.join(str(v) for v in values)}). Edit it per day instead."
+        )
+
+
 def validate_time(label: str, value: str) -> None:
     try:
         shift_bounds.parse_hour(value)
@@ -82,6 +100,28 @@ def propagate_fields(supabase, shift_id: str, fields: dict) -> None:
     per_day = {k: v for k, v in fields.items() if k in PER_DAY_FIELDS}
     if not per_day:
         return
+
+    # Refuse to flatten a column the manager has already diverged.
+    #
+    # This is the whole of F2. A single number on a whole-shift form cannot
+    # express "2 on weekdays, 3 on Saturday", so writing it across every day
+    # destroys the per-day work with no warning and no undo — the Scheduler's
+    # coverage panel did exactly that to the per-day editor's output, while
+    # presenting itself as a peer. Sending back the conflict lets the caller
+    # explain it; a shift whose column is uniform is unaffected, which is every
+    # shift the onboarding wizard has ever touched.
+    existing = (
+        supabase.table("shift_days")
+        .select("day_index, start_time, end_time, min_staff, max_staff")
+        .eq("shift_id", shift_id)
+        .execute()
+        .data
+        or []
+    )
+    for field in per_day:
+        distinct = sorted({r[field] for r in existing if field in r}, key=str)
+        if len(distinct) > 1:
+            raise DivergenceError(field, distinct)
     if "start_time" in per_day or "end_time" in per_day:
         # Validate against whatever the rows will end up with. We can only
         # validate the incoming values here; a row keeping its own end is

@@ -38,7 +38,8 @@ import {
   updateVenueLeaveSettings,
 } from "@/lib/api";
 import { SHIFT_COLORS } from "@/lib/constants";
-import { compactTimeRange, DAY_NAMES, formatWeekRange } from "@/lib/utils";
+import { DAY_INITIAL, summariseShift } from "@/lib/shift-summary";
+import { DAY_NAMES, formatWeekRange } from "@/lib/utils";
 import Waiting from "@/components/waiting";
 
 const MONTH_NAMES = [
@@ -50,76 +51,6 @@ const MONTH_NAMES = [
 // it renders in the ALL_TIMES dropdown (which no longer offers 'close').
 function normTime(t: string): string {
   return t.trim().toLowerCase() === "close" ? "11:00pm" : t;
-}
-
-const DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const DAY_INITIAL = ["M", "T", "W", "T", "F", "S", "S"];
-
-// Compress a set of day indices into a readable range: all 7 -> "Every day";
-// contiguous runs joined ("Mon–Fri", "Mon–Thu, Sun"); singletons ("Sun").
-function dayRangeLabel(indices: number[]): string {
-  const s = [...indices].sort((a, b) => a - b);
-  if (s.length === 7) return "Every day";
-  if (s.length === 0) return "No days";
-  const runs: [number, number][] = [];
-  for (const d of s) {
-    const last = runs[runs.length - 1];
-    if (last && d === last[1] + 1) last[1] = d;
-    else runs.push([d, d]);
-  }
-  return runs.map(([a, b]) => (a === b ? DAY_ABBR[a] : `${DAY_ABBR[a]}–${DAY_ABBR[b]}`)).join(", ");
-}
-
-// "1:00am" -> "1am", "5:30pm" -> "5:30pm" (for the "till {end}" exception form).
-function shortTime(t: string | null): string {
-  const m = (t ?? "").trim().toLowerCase().match(/^(\d{1,2}):(\d{2})(am|pm)$/);
-  if (!m) return t ?? "";
-  return m[2] === "00" ? `${m[1]}${m[3]}` : `${m[1]}:${m[2]}${m[3]}`;
-}
-
-type ShiftSummary = {
-  strip: { open: boolean; late: boolean }[];
-  baseDays: string; // "Every day" / "Mon–Fri" / "Mon–Thu, Sun"
-  baseHours: string; // "11am–5pm"
-  exception?: string; // "Fri–Sat till 1am" / "Sat 5pm–2am"
-  closed: boolean; // no open days at all
-};
-
-// Reduce a shift's 7-day schedule to the row's trust signals: which days it runs
-// (the strip), the common hours, and — never hidden — the divergent hours inline.
-// Open days are grouped by (start,end); the largest group is the base, the rest
-// are exceptions shown after it.
-function summariseShift(days: ShiftDay[]): ShiftSummary {
-  const open = days.filter((d) => d.open);
-  const strip = Array.from({ length: 7 }, (_, i) => ({
-    open: !!days.find((x) => x.day_index === i)?.open,
-    late: false,
-  }));
-  if (open.length === 0) return { strip, baseDays: "No days set", baseHours: "", closed: true };
-
-  const groups = new Map<string, { start: string | null; end: string | null; days: number[] }>();
-  for (const d of [...open].sort((a, b) => a.day_index - b.day_index)) {
-    const key = `${d.start_time}|${d.end_time}`;
-    const g = groups.get(key) ?? { start: d.start_time, end: d.end_time, days: [] };
-    g.days.push(d.day_index);
-    groups.set(key, g);
-  }
-  const arr = Array.from(groups.values()).sort((a, b) => b.days.length - a.days.length || a.days[0] - b.days[0]);
-  const [base, ...exceptions] = arr;
-  for (const g of exceptions) for (const di of g.days) strip[di].late = true;
-
-  let exception: string | undefined;
-  if (exceptions.length === 1) {
-    const e = exceptions[0];
-    const range = dayRangeLabel(e.days);
-    exception =
-      e.start === base.start
-        ? `${range} till ${shortTime(e.end)}`
-        : `${range} ${compactTimeRange(e.start ?? "", e.end ?? "")}`;
-  } else if (exceptions.length > 1) {
-    exception = `${exceptions.reduce((n, g) => n + g.days.length, 0)} days differ`;
-  }
-  return { strip, baseDays: dayRangeLabel(base.days), baseHours: compactTimeRange(base.start ?? "", base.end ?? ""), exception, closed: false };
 }
 
 export default function SettingsPage() {
