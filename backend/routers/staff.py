@@ -509,29 +509,23 @@ def remind(payload: RemindRequest, manager: dict = Depends(get_current_manager))
     else:
         targets = active
 
-    if targets:
-        detail = (
-            f"Reminded {targets[0]['name']}"
-            if len(targets) == 1
-            else f"Reminded {len(targets)} staff who haven't submitted"
-        )
-        supabase.table("activity_log").insert(
-            {
-                "venue_id": venue["id"],
-                "staff_id": targets[0]["id"] if len(targets) == 1 else None,
-                "action": "reminder_sent",
-                "detail": detail,
-            }
-        ).execute()
-
     week_label, deadline_label, week_start = _reminder_context(venue, payload.period_id)
     venue_link_url = email_service.availability_url(
         get_settings().frontend_url, venue["link_token"], week_start
     )
 
-    sent_count = 0
+    def _who(member: dict) -> dict:
+        return {"id": member["id"], "name": member["name"]}
+
+    emailed: list[dict] = []
+    failed: list[dict] = []
+    skipped_no_email: list[dict] = []
     for member in targets:
         if not member.get("email"):
+            # Not a failure to retry — this person cannot be chased through the
+            # app at all until someone puts an address on their record, which is
+            # why they come back named rather than folded into a count.
+            skipped_no_email.append(_who(member))
             continue
         result = email_service.send_availability_reminder_email(
             to_email=member["email"],
@@ -542,7 +536,37 @@ def remind(payload: RemindRequest, manager: dict = Depends(get_current_manager))
             deadline_label=deadline_label,
             pin=member["pin"],
         )
-        if result.get("status") == "sent":
-            sent_count += 1
+        (emailed if result.get("status") == "sent" else failed).append(_who(member))
 
-    return {"reminded": len(targets), "email_sent": sent_count > 0}
+    # Logged after the send, and with the number that actually went out. The old
+    # row was written before a single email was attempted and claimed the full
+    # target count, so the audit trail recorded a chase that may never have
+    # reached anyone.
+    if targets:
+        if len(targets) == 1:
+            name = targets[0]["name"]
+            if emailed:
+                detail = f"Reminded {name}"
+            elif skipped_no_email:
+                detail = f"Couldn't remind {name} — no email address on file"
+            else:
+                detail = f"Couldn't remind {name} — the email didn't send"
+        else:
+            detail = (
+                f"Reminded {len(emailed)} of {len(targets)} staff who haven't submitted"
+            )
+        supabase.table("activity_log").insert(
+            {
+                "venue_id": venue["id"],
+                "staff_id": targets[0]["id"] if len(targets) == 1 else None,
+                "action": "reminder_sent",
+                "detail": detail,
+            }
+        ).execute()
+
+    return {
+        "reminded": len(targets),
+        "emailed": emailed,
+        "failed": failed,
+        "skipped_no_email": skipped_no_email,
+    }

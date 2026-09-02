@@ -222,6 +222,10 @@ class VenueOut(BaseModel):
     # it per period would mean three extra queries for every period serialized.
     # None when the venue has no shifts yet, so no window can be derived.
     current_week_start: Optional[str] = None
+    # The collection deadline for that week, in the same words the reminder
+    # email uses ("Thu, 4 Sep, 9pm"). Here so a manager's own copied chase
+    # message and an app-sent one agree; None when there's no window yet.
+    current_week_deadline: Optional[str] = None
     # True for venues the per-day migration backfilled from a free-text 'close'
     # (a safe '11:00pm' placeholder). Prompts the manager to enter the real
     # close times via the per-day editor; cleared the moment they save a
@@ -386,9 +390,26 @@ class RemindRequest(BaseModel):
     staff_id: Optional[str] = None
 
 
+class RemindPerson(BaseModel):
+    id: str
+    name: str
+
+
 class RemindResponse(BaseModel):
+    """Who was actually reached, by name.
+
+    This was `{reminded: int, email_sent: bool}`, where `email_sent` meant "at
+    least one email went out". Chasing seven people of whom three have an
+    address reported the same success as chasing seven who all do — and the
+    manager then ticked all seven off a list of four they had actually reached.
+    Someone with no email on file can never be chased through the app at all,
+    which is a fact the chase screen has to state, not swallow.
+    """
+
     reminded: int
-    email_sent: bool
+    emailed: list[RemindPerson] = []
+    failed: list[RemindPerson] = []
+    skipped_no_email: list[RemindPerson] = []
 
 
 class ShiftUpdateRequest(BaseModel):
@@ -543,6 +564,24 @@ class OpenShiftCreateRequest(BaseModel):
     required_role: Optional[str] = None
 
 
+class OpenDropOut(BaseModel):
+    """A shift sitting in the claimable pool right now.
+
+    It is deliberately NOT a coverage gap: somebody is still contractually on
+    it until a claim is approved, so it never appears in `uncovered`. But an
+    unclaimed drop two days out is the single most time-critical thing on a
+    manager's week, and until now it existed only as one line in an activity
+    feed that scrolls.
+    """
+
+    assignment_id: str
+    day_index: int
+    shift_id: Optional[str] = None
+    # None for a manager-posted open shift — nobody was ever on it to drop it.
+    dropped_by_name: Optional[str] = None
+    required_role: Optional[str] = None
+
+
 class UncoveredSlot(BaseModel):
     day_index: int
     shift_id: str
@@ -581,6 +620,8 @@ class RotaSummaryOut(BaseModel):
     uncovered: list[UncoveredSlot]
     # Demanded slots below the shift's min_staff (but not empty).
     under_covered: list[UnderCoveredSlot] = []
+    # Shifts in the claimable pool with nobody claiming them yet.
+    open_drops: list[OpenDropOut] = []
     # Approved leave overlapping this period's week: {staff_id: [day_index, ...]},
     # so the grid can show "On leave" instead of a blank/"+ Add" cell.
     leave: dict[str, list[int]] = {}

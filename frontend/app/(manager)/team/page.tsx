@@ -31,7 +31,7 @@ import {
   rotateJoinCode,
   updateStaff,
 } from "@/lib/api";
-import { formatWeekOf } from "@/lib/utils";
+import { describeRemindOne, formatWeekOf } from "@/lib/utils";
 import type { ManagerIconName } from "@/components/manager/icon";
 import Waiting from "@/components/waiting";
 
@@ -330,13 +330,7 @@ export default function TeamPage() {
   async function handleRemind(member: StaffManager) {
     try {
       const result = await remindStaff({ staffId: member.id, periodId: period?.id });
-      showToast(
-        result.email_sent
-          ? `Reminder emailed to ${member.name.split(" ")[0]}`
-          : member.email
-            ? `Could not email ${member.name.split(" ")[0]} — check their email address`
-            : `${member.name.split(" ")[0]} has no email on file — nothing sent`,
-      );
+      showToast(describeRemindOne(result, member.name));
     } catch {
       showToast("Could not send reminder");
     }

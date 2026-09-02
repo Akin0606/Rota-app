@@ -460,3 +460,53 @@ def send_bulk_reminder_email(
 """
     html = _shell(f"{pending_count} staff haven't submitted availability", "Sent because you manage a venue on Rotally.", body)
     return _send(to_email, subject, html)
+
+
+# 8. Something needs the manager (to manager) ---------------------------------
+
+def send_manager_action_email(
+    to_email: str,
+    manager_name: str,
+    headline: str,
+    detail: str,
+    dashboard_link_url: str,
+    cta: str = "Open Rotally",
+) -> dict:
+    """One shape for every "someone is waiting on you" event — a drop, a claim
+    or give or swap that needs approval, a join request, a leave request.
+
+    Until this, all of those wrote an `activity_log` row and nothing else, so a
+    manager only found out by opening the app and scrolling a feed. A drop
+    posted on Friday for Saturday's shift was invisible until someone looked.
+
+    Deliberately one template rather than six: the events differ only in a
+    sentence, and six near-identical templates drift.
+    """
+    body = f"""
+<p style="margin:0 0 8px;">Hi {manager_name},</p>
+<p style="margin:0 0 16px;">{detail}</p>
+{_button(cta, dashboard_link_url)}
+"""
+    html = _shell(headline, "Sent because you manage a venue on Rotally.", body)
+    return _send(to_email, headline, html)
+
+
+# 9. A request was decided (to the staff member) ------------------------------
+
+def send_request_decision_email(
+    to_email: str,
+    name: str,
+    venue_name: str,
+    headline: str,
+    detail: str,
+    venue_link_url: str,
+) -> dict:
+    """The other half of the same gap: staff who asked for something found out
+    only by reopening the app. Covers claim / give / swap / leave outcomes."""
+    body = f"""
+<p style="margin:0 0 8px;">Hi {name},</p>
+<p style="margin:0 0 16px;">{detail}</p>
+{_button("Open your hub", venue_link_url)}
+"""
+    html = _shell(headline, f"Sent because you're part of the {venue_name} team on Rotally.", body)
+    return _send(to_email, headline, html)

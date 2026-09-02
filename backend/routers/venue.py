@@ -11,7 +11,7 @@ from models.schemas import (
     VenueOut,
     VenueUpdateRequest,
 )
-from services import cron_scheduler, period_resolver, schedule_windows
+from services import cron_scheduler, notice_window, period_resolver, schedule_windows
 from services.auth_service import get_current_manager, get_manager_venue
 from services.pin_service import generate_pin, generate_venue_slug, generate_venue_token
 
@@ -26,7 +26,21 @@ def get_venue(manager: dict = Depends(get_current_manager)):
     # One window computation per venue read, shared by Home, Rota and Team —
     # all three already fetch this, so naming the same week costs no round trip.
     week = period_resolver.collection_week(venue["id"])
-    return {**venue, "current_week_start": week.isoformat() if week else None}
+    # The same deadline string the reminder email carries, so a chase the
+    # manager copies and one the app sends can't tell the same person two
+    # different things. Computed here rather than left to the client, which
+    # would have to re-derive the notice window from scheduler settings it
+    # doesn't otherwise fetch.
+    deadline = (
+        schedule_windows.format_deadline_dt(notice_window.close_for_week(venue["id"], week))
+        if week
+        else None
+    )
+    return {
+        **venue,
+        "current_week_start": week.isoformat() if week else None,
+        "current_week_deadline": deadline,
+    }
 
 
 @router.post("", response_model=VenueOut)

@@ -64,6 +64,8 @@ import WeekScrubber, {
 } from "@/components/manager/week-scrubber";
 import {
   dayDef,
+  describeRemindAll,
+  describeRemindOne,
   formatWeekRange,
   indexShiftDays,
   mondayISO,
@@ -125,6 +127,13 @@ export default function RotaPage() {
   // Only for the scrubber's left edge, and only as the fallback when a venue
   // has no periods at all — created_at is a timestamp, not a Monday.
   const [venueCreatedAt, setVenueCreatedAt] = useState<string | null>(null);
+  // Everything a hand-written chase message needs: the staff link and the
+  // deadline in words. Held here rather than passed as the whole venue so the
+  // chase screen can't quietly grow a dependency on the rest of it.
+  const [venueLinkPath, setVenueLinkPath] = useState<string | null>(null);
+  const [venueDeadline, setVenueDeadline] = useState<string | null>(null);
+  const [collectionWeek, setCollectionWeek] = useState<string | null>(null);
+  const [copiedChaseId, setCopiedChaseId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [pendingAdd, setPendingAdd] = useState<{
@@ -175,6 +184,9 @@ export default function RotaPage() {
         setRoles(rolesRes);
         setVenueName(venueRes.name);
         setVenueCreatedAt(venueRes.created_at ?? null);
+        setVenueLinkPath(`/v/${venueRes.slug ?? venueRes.link_token}`);
+        setVenueDeadline(venueRes.current_week_deadline ?? null);
+        setCollectionWeek(venueRes.current_week_start ?? null);
 
         // Land on the week the manager is actually being asked to build —
         // the same one Home's hero names, so following that button doesn't
@@ -434,14 +446,11 @@ export default function RotaPage() {
     setRemindingAll(true);
     try {
       const result = await remindStaff({ periodId: period.id });
-      setRemindedIds(assignableStaff.filter((m) => !m.submitted).map((m) => m.id));
-      showToast(
-        result.reminded === 0
-          ? "Everyone's already submitted"
-          : result.email_sent
-            ? `Reminded ${result.reminded} by email`
-            : `Reminded ${result.reminded} — but no emails were delivered`,
-      );
+      // Only the people an email actually reached get the green tick. This used
+      // to mark every non-submitter reminded regardless, so the four people
+      // with no address on file looked chased and were quietly dropped.
+      setRemindedIds((prev) => [...prev, ...result.emailed.map((p) => p.id)]);
+      showToast(describeRemindAll(result));
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not send reminders");
     } finally {
@@ -449,18 +458,47 @@ export default function RotaPage() {
     }
   }
 
+  // Copy-to-share, not send. The chase that actually works at this scale is a
+  // landlord's own thumbs in WhatsApp, and building an SMS pipeline to reach
+  // seven people would buy a Twilio bill, an opt-out obligation and a GDPR
+  // conversation. This puts the whole message — week, deadline, link and their
+  // PIN — one tap away, and is the only route at all for someone with no email
+  // on file. `navigator.share` opens the OS sheet on a phone (WhatsApp,
+  // Messages, anything); the clipboard is the desktop fallback.
+  function chaseMessage(m: StaffManager): string {
+    const first = m.name.split(" ")[0];
+    const link = venueLinkPath ? `${window.location.origin}${venueLinkPath}` : "";
+    const by = chaseDeadline ? ` by ${chaseDeadline}` : "";
+    return `Hi ${first}, can you send your availability for ${chaseWeekLabel}${by}? ${link} — your PIN is ${m.pin}`;
+  }
+
+  async function handleCopyChase(member: StaffManager) {
+    const text = chaseMessage(member);
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({ text });
+        return;
+      } catch {
+        // Cancelled, or the sheet isn't available for this content — fall
+        // through to the clipboard rather than leaving the manager with
+        // nothing.
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedChaseId(member.id);
+      setTimeout(() => setCopiedChaseId((id) => (id === member.id ? null : id)), 2000);
+    } catch {
+      showToast("Couldn't copy — long-press the message to select it");
+    }
+  }
+
   async function handleRemindOne(member: StaffManager) {
     setRemindingId(member.id);
     try {
       const result = await remindStaff({ staffId: member.id, periodId: period?.id });
-      if (result.email_sent) setRemindedIds((prev) => [...prev, member.id]);
-      showToast(
-        result.email_sent
-          ? `Reminder emailed to ${member.name.split(" ")[0]}`
-          : member.email
-            ? `Could not email ${member.name.split(" ")[0]} — check their email address`
-            : `${member.name.split(" ")[0]} has no email on file — nothing sent`,
-      );
+      if (result.emailed.length > 0) setRemindedIds((prev) => [...prev, member.id]);
+      showToast(describeRemindOne(result, member.name));
     } catch {
       showToast("Could not send reminder");
     } finally {
@@ -741,6 +779,13 @@ export default function RotaPage() {
   // control that routes through ensurePeriod is hidden rather than left to
   // surface a raw backend error string as UI copy.
   const weekStops = buildWeekStops(periods, venueCreatedAt);
+  // The week and deadline in the same words the reminder email uses, so a
+  // copied message and an emailed one don't tell the same person two things.
+  const chaseWeekLabel = `w/c ${formatWeekRange(selectedWeek).split(" – ")[0]}`;
+  // Only quoted while the scrubber is on the week the backend is actually
+  // collecting for — the deadline belongs to that window, and pasting it into a
+  // message about a different week would be a confident lie.
+  const chaseDeadline = selectedWeek === collectionWeek ? venueDeadline : null;
   const selectedStop = weekStops.find((w) => w.weekStart === selectedWeek) ?? null;
   const isPastWeek = selectedStop?.isPast ?? false;
 
@@ -921,7 +966,7 @@ export default function RotaPage() {
       {/* R2 (i) + R3 — a fresh week opens on the chase, not an empty grid. */}
       {entry === "fresh" && (
         <RotaFrontDoor
-          weekLabel={`w/c ${formatWeekRange(selectedWeek).split(" – ")[0]}`}
+          weekLabel={chaseWeekLabel}
           hasPeriod={Boolean(period)}
           // The backend gates the availability grid on `status == "collecting"`
           // (availability.py), so anything else means the link staff would
@@ -940,6 +985,10 @@ export default function RotaPage() {
           onRemindAll={handleRemindAll}
           remindingAll={remindingAll}
           onRemindOne={handleRemindOne}
+          staffLink={venueLinkPath}
+          deadlineLabel={chaseDeadline}
+          onCopyChase={handleCopyChase}
+          copiedId={copiedChaseId}
           remindingId={remindingId}
           remindedIds={remindedIds}
         />

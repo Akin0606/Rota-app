@@ -22,7 +22,16 @@ from models.schemas import (
     SwapApproveRequest,
     SwapOut,
 )
-from services import email_service, leave, notice_window, rota_export, schedule_windows, shift_bounds, swap_guard
+from services import (
+    email_service,
+    leave,
+    notice_window,
+    notify,
+    rota_export,
+    schedule_windows,
+    shift_bounds,
+    swap_guard,
+)
 from services.auth_service import get_current_manager, get_manager_venue
 from services.solver import (
     AVAILABLE,
@@ -234,6 +243,37 @@ def _build_summary(
 
     leave_blocked = leave.blocked_days_for_week(supabase, venue_id, str(period["week_start"]))
 
+    # Shifts sitting in the claimable pool. These are NOT counted as uncovered
+    # — the original person is still on the rota until a claim is approved —
+    # but an unclaimed drop close to the day is the most time-critical thing in
+    # the week, and it only existed as one scrolling activity-feed row. The
+    # name lookup is skipped entirely when nothing is in the pool, which is the
+    # normal case.
+    pool = [a for a in assignments if a.get("drop_status") == "pending_pickup"]
+    drop_names: dict[str, str] = {}
+    dropper_ids = [a["staff_id"] for a in pool if a.get("staff_id")]
+    if dropper_ids:
+        drop_names = {
+            m["id"]: m["name"]
+            for m in supabase.table("staff_members")
+            .select("id, name")
+            .eq("venue_id", venue_id)
+            .in_("id", list(set(dropper_ids)))
+            .execute()
+            .data
+            or []
+        }
+    open_drops = [
+        {
+            "assignment_id": a["id"],
+            "day_index": a["day_index"],
+            "shift_id": a["shift_id"],
+            "dropped_by_name": drop_names.get(a["staff_id"]) if a.get("staff_id") else None,
+            "required_role": a.get("required_role"),
+        }
+        for a in sorted(pool, key=lambda r: r["day_index"])
+    ]
+
     # Under-18 legal notes on a plain read.
     #
     # These used to arrive ONLY on the generate response, which meant the
@@ -300,6 +340,7 @@ def _build_summary(
         "conflicts": len(uncovered) + len(under_covered),
         "uncovered": uncovered,
         "under_covered": under_covered,
+        "open_drops": open_drops,
         "leave": {sid: sorted(days) for sid, days in leave_blocked.items()},
         "warnings": warnings or [],
         "info": info or [],
@@ -476,7 +517,9 @@ def approve_claim(
 
     claimant_res = (
         supabase.table("staff_members")
-        .select("id, name, is_under_18")
+        # `email` so the approval can reach them — a claim decided in the app
+        # and never sent is a shift someone doesn't know they're working.
+        .select("id, name, email, is_under_18")
         .eq("id", claimant_id)
         .eq("venue_id", venue["id"])
         .limit(1)
@@ -558,6 +601,16 @@ def approve_claim(
         }
     ).execute()
 
+    notify.staff(
+        claimant,
+        venue,
+        headline="Your shift claim was approved",
+        detail=(
+            f"You're on the <strong>{DAY_NAMES[assignment['day_index']]}</strong> shift for "
+            f"week of {period['week_start']}. It's on your rota now."
+        ),
+    )
+
     return ClaimActionOut(
         status="approved",
         summary=_build_summary(venue["id"], period),
@@ -599,6 +652,26 @@ def reject_claim(period_id: str, assignment_id: str, manager: dict = Depends(get
             "detail": "Manager rejected a shift claim — shift returned to the open pool.",
         }
     ).execute()
+
+    rejected_res = (
+        supabase.table("staff_members")
+        .select("id, name, email")
+        .eq("id", assignment["claim_staff_id"])
+        .eq("venue_id", venue["id"])
+        .limit(1)
+        .execute()
+    )
+    if rejected_res.data:
+        notify.staff(
+            rejected_res.data[0],
+            venue,
+            headline="Your shift claim wasn't approved",
+            detail=(
+                f"Your request for the <strong>{DAY_NAMES[assignment['day_index']]}</strong> shift "
+                f"(week of {period['week_start']}) wasn't approved, so it's back in the open pool "
+                "for someone else. You're not scheduled for it."
+            ),
+        )
 
     return ClaimActionOut(
         status="rejected",
@@ -694,7 +767,9 @@ def approve_swap(
 
     initiator_res = (
         supabase.table("staff_members")
-        .select("id, name, is_under_18")
+        # `email` so both sides can be told the outcome — a swap is the one
+        # action where two people's plans change at once.
+        .select("id, name, email, is_under_18")
         .eq("id", swap["initiator_staff_id"])
         .eq("venue_id", venue["id"])
         .limit(1)
@@ -702,7 +777,7 @@ def approve_swap(
     )
     recipient_res = (
         supabase.table("staff_members")
-        .select("id, name, is_under_18")
+        .select("id, name, email, is_under_18")
         .eq("id", swap["recipient_staff_id"])
         .eq("venue_id", venue["id"])
         .limit(1)
@@ -801,6 +876,17 @@ def approve_swap(
         }
     ).execute()
 
+    for person, other in ((initiator, recipient), (recipient, initiator)):
+        notify.staff(
+            person,
+            venue,
+            headline="Your shift swap was approved",
+            detail=(
+                f"Your swap with <strong>{other['name']}</strong> has gone through. "
+                "Your rota is up to date — check it before your next shift."
+            ),
+        )
+
     return SwapActionOut(
         status="approved",
         summary=_build_summary(venue["id"], period),
@@ -843,6 +929,35 @@ def reject_swap(period_id: str, swap_id: str, manager: dict = Depends(get_curren
             "detail": "Manager rejected a shift swap.",
         }
     ).execute()
+
+    # Nothing moved, which is precisely why both sides have to be told: each of
+    # them has been planning around a swap that isn't happening.
+    parties = (
+        supabase.table("staff_members")
+        .select("id, name, email")
+        .in_("id", [swap["initiator_staff_id"], swap["recipient_staff_id"]])
+        .eq("venue_id", venue["id"])
+        .execute()
+        .data
+        or []
+    )
+    by_id = {p["id"]: p for p in parties}
+    for own_id, other_id in (
+        (swap["initiator_staff_id"], swap["recipient_staff_id"]),
+        (swap["recipient_staff_id"], swap["initiator_staff_id"]),
+    ):
+        person, other = by_id.get(own_id), by_id.get(other_id)
+        if not person or not other:
+            continue
+        notify.staff(
+            person,
+            venue,
+            headline="Your shift swap wasn't approved",
+            detail=(
+                f"Your swap with <strong>{other['name']}</strong> wasn't approved, so both of you "
+                "are still on your original shifts."
+            ),
+        )
 
     return SwapActionOut(
         status="rejected",

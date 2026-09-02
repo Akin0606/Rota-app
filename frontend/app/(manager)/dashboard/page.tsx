@@ -34,6 +34,9 @@ import {
   daysUntilClose,
   indexShiftDays,
   describeAction,
+  describeHoursAway,
+  describeRemindAll,
+  describeRemindOne,
   formatRelativeTime,
   formatWeekRange,
   londonToday,
@@ -44,6 +47,7 @@ import {
   shiftDurationHours,
   startsWithName,
   todayIndexInWeek,
+  urgentDrops,
 } from "@/lib/utils";
 
 // Versioned. The stale-while-revalidate blob's shape changed with the Home
@@ -114,13 +118,7 @@ export default function HomePage() {
     setReminding(true);
     try {
       const result = await remindStaff({ periodId: planning.id });
-      showToast(
-        result.reminded === 0
-          ? "Everyone's already submitted"
-          : result.email_sent
-            ? `Reminded ${result.reminded} by email`
-            : `Reminded ${result.reminded} — but no emails were delivered`,
-      );
+      showToast(describeRemindAll(result));
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not send reminders");
     } finally {
@@ -132,13 +130,7 @@ export default function HomePage() {
     setRemindingId(member.id);
     try {
       const result = await remindStaff({ staffId: member.id, periodId: planning?.id });
-      showToast(
-        result.email_sent
-          ? `Reminder emailed to ${member.name.split(" ")[0]}`
-          : member.email
-            ? `Could not email ${member.name.split(" ")[0]} — check their email address`
-            : `${member.name.split(" ")[0]} has no email on file — nothing sent`,
-      );
+      showToast(describeRemindOne(result, member.name));
     } catch {
       showToast("Could not send reminder");
     } finally {
@@ -331,6 +323,17 @@ export default function HomePage() {
     ? { rota: planningRota, weekStart: planning?.week_start ?? null }
     : { rota: todayRota, weekStart: today?.week_start ?? null };
 
+  // An unclaimed drop close to the day. Both weeks are checked because 48
+  // hours from a Sunday reaches into next week's period, which is exactly when
+  // a manager is least likely to be looking.
+  const shiftsById = new Map(shifts.map((sh) => [sh.id, sh]));
+  const chases = [
+    { week: today?.week_start, rota: todayRota },
+    { week: planning?.week_start, rota: planningRota },
+  ]
+    .filter((x) => x.week && x.rota)
+    .flatMap((x) => urgentDrops(x.week as string, x.rota?.open_drops ?? [], shiftsById));
+
   const dateLabel = parseISODate(londonToday()).toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -368,6 +371,32 @@ export default function HomePage() {
           </div>
 
           <div className="min-w-0">
+            {/* Above the conflict line on purpose: a conflict is a week that
+                needs work, an unclaimed drop 30 hours out is a shift with
+                nobody on it tomorrow. */}
+            {chases.map(({ drop, shift, hoursAway }) => (
+              <Link
+                key={drop.assignment_id}
+                href="/rota"
+                className="mb-3.5 flex items-center gap-2.5 rounded-cp-panel border-[0.5px] border-cp-red/40 bg-cp-red-soft px-3.5 py-3 transition-[transform] active:scale-[0.99]"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-cp-slot bg-cp-red/15 text-cp-red">
+                  <ManagerIcon name="alert-triangle" size={15} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-medium text-cp-red">
+                    {drop.dropped_by_name
+                      ? `${drop.dropped_by_name.split(" ")[0]}'s ${DAY_NAMES[drop.day_index]} ${shift.name} is unclaimed`
+                      : `${DAY_NAMES[drop.day_index]} ${shift.name} is still open`}
+                  </span>
+                  <span className="mt-px block truncate text-[11px] text-ink-muted">
+                    {describeHoursAway(hoursAway)} · nobody has picked it up
+                  </span>
+                </span>
+                <ManagerIcon name="chevron-right" size={15} className="text-cp-red" />
+              </Link>
+            ))}
+
             {conflicts > 0 && (
               <Link
                 href="/rota"

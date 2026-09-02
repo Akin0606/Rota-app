@@ -13,7 +13,7 @@ from models.schemas import (
     LeaveRequestsOut,
 )
 from routers.availability import _get_staff_by_pin, _get_venue_or_404
-from services import leave
+from services import leave, notify
 from services.auth_service import get_current_manager, get_manager_venue
 
 router = APIRouter(prefix="/api/leave", tags=["leave"])
@@ -110,6 +110,17 @@ def request_leave(venue_token: str, payload: LeaveRequestCreateRequest):
             "detail": f"{staff['name']} requested leave for {label}",
         }
     ).execute()
+
+    notify.manager(
+        venue,
+        headline=f"{staff['name']} requested time off",
+        detail=(
+            f"<strong>{staff['name']}</strong> has asked for leave on <strong>{label}</strong>. "
+            "The solver keeps scheduling them until it's approved, so the sooner you decide, "
+            "the less there is to unpick."
+        ),
+        cta="Review the request",
+    )
 
     return _to_out(
         row,
@@ -278,7 +289,9 @@ def _decide(request_id: str, manager: dict, payload: LeaveDecisionRequest, new_s
 
     staff_res = (
         supabase.table("staff_members")
-        .select("name, working_days_per_week")
+        # `email` is here so the decision can actually reach them — without it
+        # a rejection is only discoverable by reopening the app.
+        .select("name, email, working_days_per_week")
         .eq("id", row["staff_id"])
         .limit(1)
         .execute()
@@ -299,6 +312,20 @@ def _decide(request_id: str, manager: dict, payload: LeaveDecisionRequest, new_s
             "detail": f"{staff_name}'s leave request for {row['start_date']} to {row['end_date']} was {verb}",
         }
     ).execute()
+
+    # The other half of the same gap: the person who asked used to find out only
+    # by reopening the app, which for a rejection is the worst possible way.
+    if staff_res.data:
+        note = (payload.manager_note or "").strip()
+        notify.staff(
+            staff_res.data[0],
+            venue,
+            headline=f"Your time off was {verb}",
+            detail=(
+                f"Your leave request for <strong>{row['start_date']} to {row['end_date']}</strong> "
+                f"was {verb}." + (f" Your manager said: “{note}”" if note else "")
+            ),
+        )
 
     conflicts = 0
     if new_status == "approved":

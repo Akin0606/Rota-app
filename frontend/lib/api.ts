@@ -584,6 +584,9 @@ export type Venue = {
   // Home, Rota, Team and the admin console can stop each guessing their own.
   // null when the venue has no shifts yet, so no window can be derived.
   current_week_start?: string | null;
+  // That week's availability deadline, in the same words the reminder email
+  // uses. So a chase the manager copies and one the app sends agree.
+  current_week_deadline?: string | null;
   // True for venues backfilled from a free-text 'close' — prompt the manager to
   // enter real per-day close times. Cleared when they save any per-day schedule.
   needs_shift_recapture?: boolean;
@@ -962,10 +965,23 @@ export function disableJoinCode(): Promise<{ join_pin: string | null }> {
   return authedRequest(`/api/venue/join-code`, { method: "DELETE" });
 }
 
+// Who a chase actually reached. `reminded` is how many people were targeted;
+// only `emailed` were reached. `skipped_no_email` is not a retryable failure —
+// those people cannot be chased through the app at all until someone puts an
+// address on their record, which is why they come back by name.
+export type RemindPerson = { id: string; name: string };
+
+export type RemindResult = {
+  reminded: number;
+  emailed: RemindPerson[];
+  failed: RemindPerson[];
+  skipped_no_email: RemindPerson[];
+};
+
 export function remindStaff(params: {
   periodId?: string;
   staffId?: string;
-}): Promise<{ reminded: number; email_sent: boolean }> {
+}): Promise<RemindResult> {
   return authedRequest(`/api/staff/remind`, {
     method: "POST",
     body: JSON.stringify({ period_id: params.periodId, staff_id: params.staffId }),
@@ -992,6 +1008,15 @@ export type EmailDelivery = {
   errors: string[];
 };
 
+export type OpenDrop = {
+  assignment_id: string;
+  day_index: number;
+  shift_id: string | null;
+  // Null for a manager-posted open shift — nobody was ever on it to drop it.
+  dropped_by_name: string | null;
+  required_role: string | null;
+};
+
 export type RotaSummary = {
   period_id: string;
   status: string;
@@ -1000,6 +1025,10 @@ export type RotaSummary = {
   conflicts: number;
   uncovered: { day_index: number; shift_id: string }[];
   under_covered: { day_index: number; shift_id: string; assigned: number; required: number }[];
+  // Shifts sitting in the claimable pool. Not a coverage gap — the original
+  // person is still on it until a claim is approved — but an unclaimed one
+  // close to the day is the most time-critical thing in the week.
+  open_drops: OpenDrop[];
   // Approved leave overlapping this week: { staff_id: [day_index, ...] }.
   leave: Record<string, number[]>;
   warnings: string[];

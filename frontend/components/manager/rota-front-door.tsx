@@ -39,6 +39,16 @@ type FrontDoorProps = {
   remindingId: string | null;
   /** Ids reminded in this session, so the row can confirm it happened. */
   remindedIds: string[];
+  /**
+   * The staff link for this venue, and the availability deadline in words —
+   * everything a hand-written chase message needs. Absent while the venue
+   * hasn't loaded, in which case the copy action doesn't render rather than
+   * putting a half-built message on someone's clipboard.
+   */
+  staffLink: string | null;
+  deadlineLabel: string | null;
+  onCopyChase: (m: StaffManager) => void;
+  copiedId: string | null;
 };
 
 function initials(name: string): string {
@@ -66,6 +76,10 @@ export default function RotaFrontDoor({
   onRemindAll,
   remindingAll,
   onRemindOne,
+  staffLink,
+  deadlineLabel,
+  onCopyChase,
+  copiedId,
   remindingId,
   remindedIds,
 }: FrontDoorProps) {
@@ -103,6 +117,9 @@ export default function RotaFrontDoor({
   }
 
   const missing = staff.filter((m) => !m.submitted);
+  // Known before anyone presses anything: no address on file means the app can
+  // never chase this person, however many times the button is pressed.
+  const unreachable = missing.filter((m) => !m.email);
   const total = staff.length;
   const submitted = total - missing.length;
   const everyoneIn = missing.length === 0 && total > 0;
@@ -140,7 +157,11 @@ export default function RotaFrontDoor({
                   ? `for ${weekLabel} · the window has closed`
                   : everyoneIn
                     ? `All ${total} in for ${weekLabel} — nobody to chase.`
-                    : `for ${weekLabel}`}
+                    : // The deadline belongs beside the count, not buried in
+                      // Settings: it is the only thing that says whether "3 of
+                      // 8" is fine or a problem. Comes from the backend so the
+                      // screen and the reminder email can't name different days.
+                      `for ${weekLabel}${deadlineLabel ? ` · closes ${deadlineLabel}` : ""}`}
             </div>
           </div>
         </div>
@@ -159,6 +180,13 @@ export default function RotaFrontDoor({
           <div className="mb-3 flex flex-col gap-[7px]">
             {missing.map((m) => {
               const done = remindedIds.includes(m.id);
+              // D3 — someone with no address on file cannot be chased by the
+              // app at all. Offering them a Remind button that silently sends
+              // nothing is the failure this whole batch exists to remove, so
+              // the row says so and offers the thing that does work: the
+              // message, on the clipboard, for the manager's own thumbs.
+              const reachable = Boolean(m.email);
+              const copied = copiedId === m.id;
               return (
                 <div
                   key={m.id}
@@ -171,7 +199,31 @@ export default function RotaFrontDoor({
                     {m.name}
                     <span className="ml-1.5 text-[10.5px] font-normal text-ink-faint">{m.role}</span>
                   </span>
-                  {!windowClosed && (
+                  {!windowClosed && !reachable && (
+                    // D6 — `phone` was written on create and read by nothing,
+                    // which is false reassurance: a manager fills it in and the
+                    // app never uses it. This is the one moment it is worth
+                    // something, so it shows here as the route that does exist
+                    // when the one the app owns doesn't.
+                    <span className="shrink-0 text-[10.5px] text-ink-faint">
+                      {m.phone ? m.phone : "No email"}
+                    </span>
+                  )}
+                  {!windowClosed && staffLink && (
+                    <button
+                      onClick={() => onCopyChase(m)}
+                      className={`flex shrink-0 items-center gap-1.5 rounded-cp-slot border-[0.5px] px-3 py-1.5 text-[11.5px] font-medium transition-[transform] active:scale-[0.96] ${
+                        copied
+                          ? "border-avail-border bg-avail-bg text-cp-green"
+                          : "cp-hairline bg-surface-card text-ink-muted"
+                      }`}
+                      title={`Copy a message for ${m.name.split(" ")[0]}`}
+                    >
+                      <ManagerIcon name={copied ? "check" : "share"} size={12} />
+                      {copied ? "Copied" : "Message"}
+                    </button>
+                  )}
+                  {!windowClosed && reachable && (
                   <button
                     onClick={() => onRemindOne(m)}
                     disabled={remindingId === m.id || done}
@@ -297,7 +349,13 @@ export default function RotaFrontDoor({
             {generating ? <Waiting label="Generating…" /> : "Generate with who I've got"}
           </button>
           <div className="mt-2 text-center text-[10.5px] text-ink-faint">
-            Reminders go by email. Nobody has to wait for stragglers.
+            {unreachable.length === 0
+              ? "Reminders go by email. Nobody has to wait for stragglers."
+              : `Reminders go by email — ${unreachable.length} of these ${
+                  unreachable.length === 1 ? "has" : "have"
+                } no address on file. Use Message for ${
+                  unreachable.length === 1 ? "them" : "those"
+                }.`}
           </div>
         </>
       ) : (

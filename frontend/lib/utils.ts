@@ -386,6 +386,53 @@ export function resolveAssignmentShifts<A extends TimedAssignment, S extends Tim
     .sort((a, b) => a.assignment.day_index - b.assignment.day_index);
 }
 
+// --- Saying honestly who a chase reached ---------------------------------
+//
+// Modelled on the publish path, which has always been honest ("1 staff emailed.
+// 2 emails failed. 4 have no email on file."). The chase loop reported "at
+// least one email went out" as unqualified success, so a landlord who chased
+// seven people and reached three was told the job was done.
+//
+// Shaped structurally rather than as free text so all four call sites — the
+// rota chase screen, its per-person button, Home and Team — cannot drift.
+
+type RemindLike = {
+  reminded: number;
+  emailed: { id: string; name: string }[];
+  failed: { id: string; name: string }[];
+  skipped_no_email: { id: string; name: string }[];
+};
+
+function firstNames(people: { name: string }[]): string {
+  const names = people.map((p) => p.name.split(" ")[0]);
+  if (names.length <= 2) return names.join(" and ");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+// One person, chased by name: say what happened to them, not a count.
+export function describeRemindOne(result: RemindLike, name: string): string {
+  const first = name.split(" ")[0];
+  if (result.emailed.length > 0) return `Reminder emailed to ${first}`;
+  if (result.failed.length > 0) return `Couldn't email ${first} — check their address`;
+  return `${first} has no email on file — nothing sent`;
+}
+
+// A whole chase. Never claims more reach than it had.
+export function describeRemindAll(result: RemindLike): string {
+  if (result.reminded === 0) return "Everyone's already submitted";
+  const { emailed, failed, skipped_no_email: skipped } = result;
+  if (emailed.length === result.reminded) return `Reminded ${emailed.length} by email`;
+  if (emailed.length === 0 && failed.length === 0) {
+    return `Nobody was reached — ${firstNames(skipped)} ${
+      skipped.length === 1 ? "has" : "have"
+    } no email on file`;
+  }
+  const parts = [`Emailed ${emailed.length} of ${result.reminded}`];
+  if (failed.length > 0) parts.push(`${failed.length} failed`);
+  if (skipped.length > 0) parts.push(`${skipped.length} have no email on file`);
+  return parts.join(" · ");
+}
+
 // --- Which period is which -----------------------------------------------
 // Home and Rota each used to answer "what period am I looking at?" their own
 // way, and the Today strip needs a third answer. One definition each, here, so
@@ -628,6 +675,72 @@ export function shiftPhase(
   if (nowMinutes < from) return "upcoming";
   if (nowMinutes < to) return "now";
   return "done";
+}
+
+/**
+ * Hours from now until a rostered shift starts, in London wall-clock terms.
+ * Negative once it has begun; null when the start time is unparseable free
+ * text (a legacy "close"), so a caller says nothing rather than guessing.
+ *
+ * Deliberately DST-naive: it measures calendar days plus clock minutes, the
+ * same space the rest of the app reasons in. An hour twice a year does not
+ * change whether a dropped shift two days out needs chasing.
+ */
+export function hoursUntilShift(
+  weekStart: string,
+  dayIndex: number,
+  startTime: string,
+): number | null {
+  const c = parseClock(startTime);
+  if (!c) return null;
+  const daysIn = Math.round(
+    (parseISODate(londonToday()).getTime() - parseISODate(weekStart).getTime()) / 86_400_000,
+  );
+  const shiftMinutes = dayIndex * 1440 + c.h * 60 + c.m;
+  const nowMinutes = daysIn * 1440 + londonMinutesNow();
+  return (shiftMinutes - nowMinutes) / 60;
+}
+
+export type DroppedShift = {
+  assignment_id: string;
+  day_index: number;
+  shift_id: string | null;
+  dropped_by_name: string | null;
+};
+
+/**
+ * The open drops that have become a chase: still in the pool, still in the
+ * future, and starting inside `withinHours`. Soonest first.
+ *
+ * The window is what makes this honest. Every dropped shift is in the pool;
+ * only the near ones are urgent, and a red line that fires for a drop three
+ * weeks out is a red line a manager learns to ignore.
+ */
+export function urgentDrops<S extends { id: string; start_time: string }>(
+  weekStart: string,
+  drops: DroppedShift[],
+  shiftsById: Map<string, S>,
+  withinHours = 48,
+): { drop: DroppedShift; shift: S; hoursAway: number }[] {
+  return drops
+    .map((drop) => {
+      const shift = drop.shift_id ? shiftsById.get(drop.shift_id) : undefined;
+      if (!shift) return null;
+      const hoursAway = hoursUntilShift(weekStart, drop.day_index, shift.start_time);
+      if (hoursAway === null || hoursAway < 0 || hoursAway > withinHours) return null;
+      return { drop, shift, hoursAway };
+    })
+    .filter((x): x is { drop: DroppedShift; shift: S; hoursAway: number } => x !== null)
+    .sort((a, b) => a.hoursAway - b.hoursAway);
+}
+
+/** "in 3 hours" / "in 31 hours" / "tomorrow" — rounded down, never flattering. */
+export function describeHoursAway(hoursAway: number): string {
+  const h = Math.floor(hoursAway);
+  if (h < 1) return "starts within the hour";
+  if (h === 1) return "starts in an hour";
+  if (h < 24) return `starts in ${h} hours`;
+  return `starts in ${Math.floor(h / 24)} day${h < 48 ? "" : "s"}`;
 }
 
 // "2:00pm"/"6:00pm" -> "2–6pm"; "9am"/"5pm" -> "9am–5pm". Falls back to the raw

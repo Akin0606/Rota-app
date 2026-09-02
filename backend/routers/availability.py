@@ -27,7 +27,15 @@ from models.schemas import (
     WeekAvailabilityOut,
     WeekAvailabilityRequest,
 )
-from services import email_service, notice_window, period_resolver, rate_limit, shift_bounds, swap_guard
+from services import (
+    email_service,
+    notice_window,
+    notify,
+    period_resolver,
+    rate_limit,
+    shift_bounds,
+    swap_guard,
+)
 from services.auth_service import INACTIVE_VENUE_MESSAGE
 from services.pin_service import generate_unique_pin
 from services.solver import UNAVAILABLE, check_manual_assignment
@@ -433,6 +441,17 @@ def join_team(venue_token: str, payload: StaffJoinRequest, request: Request):
             "detail": f"{staff['name']} joined via the team link and is awaiting approval",
         }
     ).execute()
+
+    notify.manager(
+        venue,
+        headline=f"{staff['name']} asked to join the team",
+        detail=(
+            f"<strong>{staff['name']}</strong> used your team link to join. They can send "
+            "availability straight away, but nothing schedules them until you approve them "
+            "and set their role — so an unapproved joiner is a person you'll never see on a rota."
+        ),
+        cta="Approve them",
+    )
 
     return {
         "staff_id": staff["id"],
@@ -945,6 +964,23 @@ def drop_shift(venue_token: str, payload: AvailabilityDropRequest):
         }
     ).execute()
 
+    # D5 — until now a drop wrote that row and stopped. A shift dropped on a
+    # Friday night for Saturday could sit in the pool unseen until someone
+    # happened to open the app, which is the one case where finding out late
+    # actually costs a shift.
+    days_away = (shift_date - date.today()).days
+    urgency = " — that's soon" if days_away <= 2 else ""
+    notify.manager(
+        venue,
+        headline=f"{staff['name']} dropped a shift",
+        detail=(
+            f"<strong>{staff['name']}</strong> has dropped their "
+            f"{DAY_NAMES[assignment['day_index']]} shift (week of {period['week_start']}){urgency}. "
+            "It's in the open pool for the team to claim — you'll be asked to approve "
+            "anything that isn't a like-for-like swap."
+        ),
+    )
+
     return _build_staff_rota(venue, staff["id"])
 
 
@@ -1162,6 +1198,18 @@ def claim_shift(venue_token: str, payload: AvailabilityClaimRequest):
             ),
         }
     ).execute()
+
+    notify.manager(
+        venue,
+        headline=f"{staff['name']} needs approval for a shift",
+        detail=(
+            f"<strong>{staff['name']}</strong> wants {original_name}'s "
+            f"{DAY_NAMES[assignment['day_index']]} shift, but it isn't like-for-like: "
+            f"{reason_text} Approve or turn it down when you get a minute — until then "
+            "the shift stays uncovered."
+        ),
+        cta="Review the request",
+    )
 
     return ClaimSubmitResponse(status="pending", reason=reason_text, rota=_build_staff_rota(venue, staff["id"]))
 
@@ -1409,6 +1457,17 @@ def accept_give(venue_token: str, payload: AvailabilityGiveActionRequest):
             ),
         }
     ).execute()
+
+    notify.manager(
+        venue,
+        headline=f"{staff['name']} needs approval to take a shift",
+        detail=(
+            f"<strong>{staff['name']}</strong> accepted {original_name}'s "
+            f"{DAY_NAMES[assignment['day_index']]} shift, but it isn't like-for-like: "
+            f"{reason_text} Until you approve it, that shift has nobody on it."
+        ),
+        cta="Review the request",
+    )
 
     return ClaimSubmitResponse(status="pending", reason=reason_text, rota=_build_staff_rota(venue, staff["id"]))
 
@@ -1710,6 +1769,17 @@ def accept_swap(venue_token: str, payload: AvailabilitySwapActionRequest):
                 ),
             }
         ).execute()
+
+        notify.manager(
+            venue,
+            headline=f"{recipient['name']} and {initiator['name']} need a swap approved",
+            detail=(
+                f"<strong>{recipient['name']}</strong> accepted "
+                f"<strong>{initiator['name']}</strong>'s swap offer, but it breaks a rule: "
+                f"{reason_text} Nothing has moved until you approve it."
+            ),
+            cta="Review the swap",
+        )
 
         return ClaimSubmitResponse(status="pending", reason=reason_text, rota=_build_staff_rota(venue, staff["id"]))
 
