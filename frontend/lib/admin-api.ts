@@ -193,6 +193,12 @@ export type AdminRotaAssignment = {
   staff_id: string;
   day_index: number;
   shift_id: string | null;
+  // The shift's real hours for this assignment's day (the admin rota comes from
+  // the same `_build_summary` the manager app reads, which resolves these
+  // through `shift_days`). The type was narrower than the response, which is
+  // how the support view ended up quoting the shift-level representative time.
+  start_time: string | null;
+  end_time: string | null;
 };
 
 export type AdminVenueRota = {

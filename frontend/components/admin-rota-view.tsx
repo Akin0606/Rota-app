@@ -1,7 +1,7 @@
 "use client";
 
 import type { AdminVenueRota } from "@/lib/admin-api";
-import { DAY_LABELS, compactTimeRange } from "@/lib/utils";
+import { DAY_LABELS, compactTimeRange, resolveShiftTimes } from "@/lib/utils";
 
 // Read-only rota grid for the admin console: staff (rows) × days (columns),
 // each cell showing the assigned shift name + time range. No editing controls.
@@ -10,10 +10,12 @@ export default function AdminRotaView({ rota }: { rota: AdminVenueRota }) {
   const shiftById = new Map(shifts.map((s) => [s.id, s]));
   const assignments = summary?.assignments ?? [];
 
-  // Map "staffId:dayIndex" -> shiftId for quick lookup.
-  const cell = new Map<string, string>();
+  // Map "staffId:dayIndex" -> the assignment. Keyed by the assignment rather
+  // than its shift id because the assignment carries the hours the shift
+  // actually ran that day; the shift row is only a representative fallback.
+  const cell = new Map<string, (typeof assignments)[number]>();
   for (const a of assignments) {
-    if (a.shift_id) cell.set(`${a.staff_id}:${a.day_index}`, a.shift_id);
+    if (a.shift_id) cell.set(`${a.staff_id}:${a.day_index}`, a);
   }
 
   if (staff.length === 0) {
@@ -42,14 +44,19 @@ export default function AdminRotaView({ rota }: { rota: AdminVenueRota }) {
                 {member.name}
               </td>
               {DAY_LABELS.map((_, dayIndex) => {
-                const shiftId = cell.get(`${member.id}:${dayIndex}`);
-                const shift = shiftId ? shiftById.get(shiftId) : undefined;
+                const a = cell.get(`${member.id}:${dayIndex}`);
+                const base = a?.shift_id ? shiftById.get(a.shift_id) : undefined;
+                const shift = base ? resolveShiftTimes(base, a) : undefined;
                 return (
                   <td key={dayIndex} className="px-1.5 py-1.5 text-center">
                     {shift ? (
+                      // The soft tint the rest of the app uses for a shift chip.
+                      // White on the raw colour is the contrast failure swept
+                      // out everywhere else: shift colours are venue-chosen and
+                      // several of the defaults are light.
                       <span
-                        className="inline-block rounded-md px-2 py-1 text-[11px] font-semibold text-white"
-                        style={{ background: shift.color }}
+                        className="inline-block rounded-md px-2 py-1 text-[11px] font-medium"
+                        style={{ background: `${shift.color}22`, color: shift.color }}
                       >
                         {shift.name} {compactTimeRange(shift.start_time, shift.end_time)}
                       </span>

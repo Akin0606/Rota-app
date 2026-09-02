@@ -16,7 +16,7 @@ import RotaMoreSheet from "@/components/manager/rota-more-sheet";
 import RotaRiskModal from "@/components/manager/rota-risk-modal";
 import U18LegalBlock from "@/components/manager/u18-legal-block";
 import PublishPanel from "@/components/publish-panel";
-import { RotaOrientation } from "@/components/rota-grid";
+import { RotaOrientation } from "@/lib/rota-types";
 import RotaImageView from "@/components/rota-image-view";
 import StatusBanner, { STATUS_CONFIG } from "@/components/status-banner";
 import Toast from "@/components/toast";
@@ -987,7 +987,9 @@ export default function RotaPage() {
       )}
 
       {/* One honest coverage line (B1) — replaces the three stacked cards */}
-      {showsRota && summary && <CoverageSummary slots={coverageSlots} />}
+      {showsRota && summary && (
+        <CoverageSummary slots={coverageSlots} totalHours={summary.total_hours} />
+      )}
 
       {/* Under-18 legal block, its own distinct treatment (B4) */}
       {showsRota && summary && <U18LegalBlock warnings={legalWarnings} />}

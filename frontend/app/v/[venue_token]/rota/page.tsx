@@ -20,6 +20,7 @@ import {
   formatWeekRangeCompact,
   parseISODate,
   pinStorageKey,
+  resolveAssignmentShifts,
   shiftDurationHours,
   sumShiftHours,
 } from "@/lib/utils";
@@ -67,20 +68,15 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
     const weekStart = parseISODate(data.period.week_start);
     const shiftsById = new Map(data.shifts.map((s) => [s.id, s]));
 
-    const myShifts = data.assignments
-      .filter((a) => a.staff_id === data.staff_id && a.shift_id)
-      .map((a) => {
-        const shift = shiftsById.get(a.shift_id!);
-        if (!shift) return null;
-        return {
-          date: addDays(weekStart, a.day_index),
-          name: shift.name,
-          startTime: a.start_time ?? shift.start_time,
-          endTime: a.end_time ?? shift.end_time,
-        };
-      })
-      .filter((s): s is NonNullable<typeof s> => s !== null)
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
+    const myShifts = resolveAssignmentShifts(
+      data.assignments.filter((a) => a.staff_id === data.staff_id),
+      shiftsById,
+    ).map(({ assignment, shift }) => ({
+      date: addDays(weekStart, assignment.day_index),
+      name: shift.name,
+      startTime: shift.start_time,
+      endTime: shift.end_time,
+    }));
 
     if (myShifts.length === 0) return;
 
@@ -133,18 +129,10 @@ export default function StaffRotaViewPage({ params }: { params: { venue_token: s
   const myAssignments = data.assignments.filter((a) => a.staff_id === data.staff_id && a.shift_id);
   const myAssignmentsByDay = new Map(myAssignments.map((a) => [a.day_index, a]));
 
-  const myShifts = myAssignments
-    // Resolve each shift's real per-day hours before totalling. Without this
-    // the header reports the shift-level representative time while the rows
-    // below it show the real one, so a venue whose Fri/Sat run later than its
-    // weekdays sees a total that contradicts its own list.
-    .map((a) => {
-      const base = shiftsById.get(a.shift_id!);
-      return base
-        ? { ...base, start_time: a.start_time ?? base.start_time, end_time: a.end_time ?? base.end_time }
-        : undefined;
-    })
-    .filter((s): s is NonNullable<typeof s> => Boolean(s));
+  // Resolved before totalling: without it the header reports the shift-level
+  // representative time while the rows below show the real one, so a venue
+  // whose Fri/Sat run later than its weekdays contradicts its own list.
+  const myShifts = resolveAssignmentShifts(myAssignments, shiftsById).map((x) => x.shift);
   const { hours, unmeasured } = sumShiftHours(myShifts);
 
   const now = new Date();

@@ -3,7 +3,7 @@
 import { Fragment, useState } from "react";
 
 import type { AssignmentOut, Shift, StaffManager } from "@/lib/api";
-import type { RotaOrientation } from "@/components/rota-grid";
+import type { RotaOrientation } from "@/lib/rota-types";
 import {
   DAY_LABELS,
   type ShiftDayIndex,

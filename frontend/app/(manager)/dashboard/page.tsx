@@ -40,6 +40,7 @@ import {
   parseISODate,
   periodForToday,
   planningPeriod,
+  resolveAssignmentShifts,
   shiftDurationHours,
   startsWithName,
   todayIndexInWeek,
@@ -539,21 +540,11 @@ function StaffModal({
   if (!member) return null;
 
   const shiftsById = new Map(shifts.map((s) => [s.id, s]));
-  const mine = assignments
-    .filter((a) => a.staff_id === member.id && a.shift_id)
-    // Resolve each assignment's real per-day hours so the times + total are
-    // right for a per-day shift.
-    .map((a) => {
-      const base = shiftsById.get(a.shift_id as string);
-      return {
-        day: a.day_index,
-        shift: base
-          ? { ...base, start_time: a.start_time ?? base.start_time, end_time: a.end_time ?? base.end_time }
-          : undefined,
-      };
-    })
-    .filter((x): x is { day: number; shift: ShiftWithDays } => Boolean(x.shift))
-    .sort((a, b) => a.day - b.day);
+  // The times and the total both come from the hours the shift actually ran.
+  const mine = resolveAssignmentShifts(
+    assignments.filter((a) => a.staff_id === member.id),
+    shiftsById,
+  );
 
   const totalHours = mine.reduce(
     (sum, x) => sum + (shiftDurationHours(x.shift.start_time, x.shift.end_time) ?? 0),
@@ -574,7 +565,7 @@ function StaffModal({
           {mine.map((x, i) => (
             <div key={i} className="flex items-center gap-2 text-[13px] text-ink-label">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: x.shift.color }} />
-              <span className="font-medium text-ink">{DAY_NAMES[x.day]}</span>
+              <span className="font-medium text-ink">{DAY_NAMES[x.assignment.day_index]}</span>
               <span className="text-ink-muted">
                 {x.shift.name} · {x.shift.start_time}–{x.shift.end_time}
               </span>

@@ -19,8 +19,21 @@ export type CoverageSlot = {
   severity: "uncovered" | "short";
 };
 
-export default function CoverageSummary({ slots }: { slots: CoverageSlot[] }) {
+export default function CoverageSummary({
+  slots,
+  totalHours,
+}: {
+  slots: CoverageSlot[];
+  // The week's rostered hours, straight from the backend's own per-day sum
+  // (`_build_summary` totals `duration_for` at each assignment's real day). It
+  // sits here rather than on its own row because "is this week covered" and
+  // "what is it costing me" are the same glance for a landlord — and it was
+  // being computed correctly and thrown away on every read.
+  totalHours?: number;
+}) {
   const [open, setOpen] = useState(false);
+  const hoursLabel =
+    totalHours === undefined ? null : `${Math.round(totalHours * 10) / 10}h rostered`;
 
   if (slots.length === 0) {
     return (
@@ -29,10 +42,13 @@ export default function CoverageSummary({ slots }: { slots: CoverageSlot[] }) {
           <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-avail-bg text-cp-green">
             <ManagerIcon name="circle-check" size={16} />
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="text-[13.5px] font-medium text-cp-green">All covered</div>
             <div className="mt-px text-[11.5px] text-ink-muted">Every shift this week is fully staffed</div>
           </div>
+          {hoursLabel && (
+            <span className="shrink-0 text-[11.5px] text-ink-muted">{hoursLabel}</span>
+          )}
         </div>
       </div>
     );
@@ -60,6 +76,9 @@ export default function CoverageSummary({ slots }: { slots: CoverageSlot[] }) {
           </div>
           <div className="mt-px truncate text-[11.5px] text-ink-muted">{subtitle}</div>
         </div>
+        {hoursLabel && (
+          <span className="shrink-0 text-[11.5px] text-ink-muted">{hoursLabel}</span>
+        )}
         <button
           onClick={() => setOpen((v) => !v)}
           className="flex shrink-0 items-center gap-1 text-[11px] text-ink-muted transition-[transform] active:scale-[0.97]"

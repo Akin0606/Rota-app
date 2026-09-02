@@ -30,6 +30,7 @@ import {
   formatWeekOf,
   parseISODate,
   pinStorageKey,
+  resolveAssignmentShifts,
   sumShiftHours,
   weeksFromThisWeek,
 } from "@/lib/utils";
@@ -201,16 +202,9 @@ export default function StaffHubPage({ params }: { params: { venue_token: string
     : [];
 
   const shiftsById = new Map((rota?.shifts ?? []).map((s) => [s.id, s]));
-  const myShifts = myAssignments
-    // Resolve each shift's real per-day hours so the hours badge is correct for
-    // a per-day shift, not the shift-level representative.
-    .map((a) => {
-      const base = a.shift_id ? shiftsById.get(a.shift_id) : undefined;
-      return base
-        ? { ...base, start_time: a.start_time ?? base.start_time, end_time: a.end_time ?? base.end_time }
-        : undefined;
-    })
-    .filter((s): s is NonNullable<typeof s> => Boolean(s));
+  // Each shift at the hours it actually ran, so the badge is right for a
+  // per-day shift rather than the shift-level representative.
+  const myShifts = resolveAssignmentShifts(myAssignments, shiftsById).map((x) => x.shift);
   const { hours, unmeasured } = sumShiftHours(myShifts);
   const hoursBadge = `${formatHoursTotal(hours, unmeasured, "")} hrs`;
 

@@ -337,6 +337,55 @@ export function venueClosedOn<S extends { id: string; start_time: string; end_ti
   return shifts.length > 0 && shiftsOnDay(shifts, dayIndex, idx).length === 0;
 }
 
+// --- The real hours a shift ran on the day it was assigned ----------------
+//
+// The backend resolves each assignment's per-day time onto the assignment row
+// itself (`_build_summary` and `_build_staff_rota` both call `bounds_for`), so
+// `assignment.start_time` is authoritative and the shift row is only the
+// representative fallback — for an assignment written before that, or a surface
+// holding a shift with no assignment.
+//
+// Five screens hand-wrote this merge and two skipped it entirely, so a venue
+// whose Friday runs to 1am had its printable staff-room sheet and the admin
+// console quoting hours that contradicted its own rota.
+
+export type TimedShift = { start_time: string; end_time: string };
+
+type AssignmentTimes = { start_time?: string | null; end_time?: string | null };
+
+export type TimedAssignment = AssignmentTimes & {
+  shift_id?: string | null;
+  day_index: number;
+};
+
+export function resolveShiftTimes<S extends TimedShift>(
+  shift: S,
+  assignment: AssignmentTimes | null | undefined,
+): S {
+  if (!assignment?.start_time && !assignment?.end_time) return shift;
+  return {
+    ...shift,
+    start_time: assignment.start_time ?? shift.start_time,
+    end_time: assignment.end_time ?? shift.end_time,
+  };
+}
+
+// Assignments paired with their shift at the hours it actually ran, ordered by
+// day. An assignment whose shift no longer exists is dropped rather than shown
+// with a guessed time.
+export function resolveAssignmentShifts<A extends TimedAssignment, S extends TimedShift>(
+  assignments: A[],
+  shiftsById: Map<string, S>,
+): { assignment: A; shift: S }[] {
+  return assignments
+    .map((a) => {
+      const base = a.shift_id ? shiftsById.get(a.shift_id) : undefined;
+      return base ? { assignment: a, shift: resolveShiftTimes(base, a) } : null;
+    })
+    .filter((x): x is { assignment: A; shift: S } => x !== null)
+    .sort((a, b) => a.assignment.day_index - b.assignment.day_index);
+}
+
 // --- Which period is which -----------------------------------------------
 // Home and Rota each used to answer "what period am I looking at?" their own
 // way, and the Today strip needs a third answer. One definition each, here, so

@@ -1,9 +1,9 @@
 "use client";
 
 import type { AssignmentOut, Shift, StaffManager } from "@/lib/api";
-import type { RotaOrientation } from "@/components/rota-grid";
+import type { RotaOrientation } from "@/lib/rota-types";
 import { STATUS_CONFIG } from "@/components/status-banner";
-import { DAY_LABELS, compactTimeRange, formatWeekRange } from "@/lib/utils";
+import { DAY_LABELS, compactTimeRange, formatWeekRange, resolveShiftTimes } from "@/lib/utils";
 
 type RotaImageViewProps = {
   open: boolean;
@@ -77,15 +77,20 @@ export default function RotaImageView({
 
   function CellContent({ staffId, dayIndex }: { staffId: string; dayIndex: number }) {
     const a = assignmentFor(staffId, dayIndex);
-    const shift = a?.shift_id ? shiftsById.get(a.shift_id) : undefined;
+    const base = a?.shift_id ? shiftsById.get(a.shift_id) : undefined;
+    // The hours this shift actually ran on this day, not the shift-level
+    // representative — this sheet goes on the staff-room wall, so a Friday
+    // that runs to 1am must not print the Monday close.
+    const shift = base ? resolveShiftTimes(base, a) : undefined;
     if (shift) {
+      const time = compactTimeRange(shift.start_time, shift.end_time);
       return (
         <div
           className="truncate rounded-md px-1 py-1 text-center text-[10px] font-medium leading-tight"
           style={{ background: `${shift.color}22`, color: shift.color }}
-          title={`${shift.name} ${compactTimeRange(shift.start_time, shift.end_time)}`}
+          title={`${shift.name} ${time}`}
         >
-          {shift.name} {compactTimeRange(shift.start_time, shift.end_time)}
+          {shift.name} {time}
         </div>
       );
     }

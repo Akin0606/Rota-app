@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import type { RotaOrientation } from "@/components/rota-grid";
+import type { RotaOrientation } from "@/lib/rota-types";
 import { ApiError, EmailDelivery, emailRota, fetchRotaExport } from "@/lib/api";
 
 type PublishPanelProps = {
