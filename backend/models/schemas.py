@@ -433,6 +433,24 @@ class ShiftScheduleOut(BaseModel):
     days: list[ShiftDayOut]
 
 
+class ShiftWithDaysOut(ShiftOut):
+    """A shift plus its full 7-day schedule — the manager app's single read for
+    "which shifts run when".
+
+    Before this, the manager surfaces had no per-day data at all: `_build_summary`
+    loaded a shift_days index and returned only assignments, and `listShifts()`
+    was a bare `shifts.*` select. So Rota, Scheduler and Today all reasoned about
+    a venue's week from one representative time and one min_staff, which is why a
+    closed Tuesday rendered as a red uncovered day at hours the venue isn't open.
+
+    Deliberately a superset of ShiftOut and ShiftScheduleOut rather than a third
+    shape: the shift-level fields stay for anything reading a representative
+    time, and `days` is byte-identical to what GET /shifts/{id}/days returns for
+    that shift, so one client-side resolver serves both.
+    """
+    days: list[ShiftDayOut]
+
+
 class SchedulingRulesUpdateRequest(BaseModel):
     max_hours_per_week: Optional[int] = Field(default=None, ge=1)
     min_rest_hours: Optional[int] = Field(default=None, ge=0)

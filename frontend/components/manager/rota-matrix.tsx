@@ -4,7 +4,14 @@ import { Fragment, useState } from "react";
 
 import type { AssignmentOut, Shift, StaffManager } from "@/lib/api";
 import type { RotaOrientation } from "@/components/rota-grid";
-import { DAY_LABELS, compactTimeRange } from "@/lib/utils";
+import {
+  DAY_LABELS,
+  type ShiftDayIndex,
+  compactTimeRange,
+  dayDef,
+  shiftsOnDay,
+  venueClosedOn,
+} from "@/lib/utils";
 
 // The reference matrix: staff × 7 days, grouped by role, sticky name column so
 // days scroll horizontally while names stay pinned, weekend headers accented,
@@ -14,6 +21,10 @@ import { DAY_LABELS, compactTimeRange } from "@/lib/utils";
 type ManagerRotaMatrixProps = {
   weekStart: string;
   shifts: Shift[];
+  // Per-day schedule — the whole-week grid has to agree with the day view about
+  // which days exist, or "Tuesday is closed" is true on one tab and false on
+  // the next.
+  shiftDayIdx: ShiftDayIndex;
   staff: StaffManager[];
   assignments: AssignmentOut[];
   leave: Record<string, number[]>;
@@ -41,6 +52,7 @@ const WEEKEND = new Set([4, 5, 6]);
 export default function ManagerRotaMatrix({
   weekStart,
   shifts,
+  shiftDayIdx,
   staff,
   assignments,
   leave,
@@ -51,6 +63,7 @@ export default function ManagerRotaMatrix({
   const [adding, setAdding] = useState<{ staff: string; day: number } | null>(null);
   const shiftsById = new Map(shifts.map((s) => [s.id, s]));
   const activeStaff = staff.filter((s) => s.is_active);
+  const closedOn = (dayIndex: number) => venueClosedOn(shifts, dayIndex, shiftDayIdx);
 
   function assignmentFor(staffId: string, dayIndex: number): AssignmentOut | undefined {
     return assignments.find((a) => a.staff_id === staffId && a.day_index === dayIndex);
@@ -62,10 +75,8 @@ export default function ManagerRotaMatrix({
     const isAdding = adding?.staff === staffId && adding?.day === dayIndex;
 
     if (shift && a) {
-      const label = compactTimeRange(
-        a.start_time ?? shift.start_time,
-        a.end_time ?? shift.end_time,
-      );
+      const def = dayDef(shift, dayIndex, shiftDayIdx);
+      const label = compactTimeRange(a.start_time ?? def.start, a.end_time ?? def.end);
       if (!onRemove) {
         return (
           <div
@@ -101,12 +112,23 @@ export default function ManagerRotaMatrix({
           <option value="" disabled>
             Shift…
           </option>
-          {shifts.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name} {compactTimeRange(s.start_time, s.end_time)}
-            </option>
-          ))}
+          {shiftsOnDay(shifts, dayIndex, shiftDayIdx).map((s) => {
+            const d = dayDef(s, dayIndex, shiftDayIdx);
+            return (
+              <option key={s.id} value={s.id}>
+                {s.name} {compactTimeRange(d.start, d.end)}
+              </option>
+            );
+          })}
         </select>
+      );
+    }
+    // The venue is shut: there is nothing to assign, so no "·" invitation and
+    // no add control. Checked before leave — being off on a day nobody works is
+    // not information.
+    if (closedOn(dayIndex)) {
+      return (
+        <div className="w-full py-1.5 text-center text-[10px] text-ink-faint">Closed</div>
       );
     }
     if (leave[staffId]?.includes(dayIndex)) {
@@ -154,16 +176,27 @@ export default function ManagerRotaMatrix({
     </div>
   );
 
-  const DayHeader = ({ i }: { i: number }) => (
-    <div className={WEEKEND.has(i) ? "text-accent" : ""}>
-      <div className={`text-[11px] uppercase ${WEEKEND.has(i) ? "text-accent" : "text-ink-muted"}`}>
-        {DAY_LABELS[i]}
+  const DayHeader = ({ i }: { i: number }) => {
+    const closed = closedOn(i);
+    return (
+      <div className={closed ? "opacity-50" : WEEKEND.has(i) ? "text-accent" : ""}>
+        <div
+          className={`text-[11px] uppercase ${
+            closed ? "text-ink-faint" : WEEKEND.has(i) ? "text-accent" : "text-ink-muted"
+          }`}
+        >
+          {DAY_LABELS[i]}
+        </div>
+        <div
+          className={`text-sm font-medium ${
+            closed ? "text-ink-faint" : WEEKEND.has(i) ? "text-accent" : "text-ink"
+          }`}
+        >
+          {dateForDay(weekStart, i)}
+        </div>
       </div>
-      <div className={`text-sm font-medium ${WEEKEND.has(i) ? "text-accent" : "text-ink"}`}>
-        {dateForDay(weekStart, i)}
-      </div>
-    </div>
-  );
+    );
+  };
 
   // Sticky first column: names pinned while days scroll horizontally.
   const stickyCol = "sticky left-0 z-[2] bg-surface-page";

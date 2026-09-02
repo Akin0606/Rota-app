@@ -133,11 +133,7 @@ def replace_schedule(supabase, shift_id: str, days: list[dict]) -> dict:
 
 
 def get_schedule(supabase, shift: dict) -> list[dict]:
-    """The shift's 7-day schedule as a list of ShiftDayOut-shaped dicts.
-
-    Mirrors `shift_bounds.exists_on_day`: a day with a row is open (its values);
-    a day without a row is closed IF the shift has any rows at all, else it falls
-    back to open-every-day at the shift-level time (an unmigrated shift)."""
+    """The shift's 7-day schedule as a list of ShiftDayOut-shaped dicts."""
     rows = (
         supabase.table("shift_days")
         .select("day_index, start_time, end_time, min_staff, max_staff")
@@ -145,6 +141,18 @@ def get_schedule(supabase, shift: dict) -> list[dict]:
         .execute()
         .data
     )
+    return schedule_from_rows(shift, rows or [])
+
+
+def schedule_from_rows(shift: dict, rows: list[dict]) -> list[dict]:
+    """Resolve one shift's already-fetched `shift_days` rows into 7 ShiftDayOut
+    entries. Split out from `get_schedule` so the bulk manager read can fetch
+    every shift's rows in one query and still resolve each shift identically —
+    the alternative was N+1 selects on a screen that loads three at a time.
+
+    Mirrors `shift_bounds.exists_on_day`: a day with a row is open (its values);
+    a day without a row is closed IF the shift has any rows at all, else it falls
+    back to open-every-day at the shift-level time (an unmigrated shift)."""
     by_day = {r["day_index"]: r for r in rows}
     has_any = bool(rows)
     out = []

@@ -299,6 +299,9 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   // Days the venue actually opens this week — the denominator for progress and
   // the submit guard, so a Monday-closed venue isn't stuck at "6 of 7" forever.
   const openDayCount = DAY_LABELS.filter((_, d) => shiftsByDay[d].length > 0).length;
+  // B8 — a note is about a day you might work. Offering a day the venue shuts
+  // invites a note nobody will ever read against a shift that doesn't exist.
+  const openDayIndexes = DAY_LABELS.map((_, d) => d).filter((d) => shiftsByDay[d].length > 0);
 
   async function handleToggleAutoSubmit() {
     if (!pin) return;
@@ -633,7 +636,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
           (noteDay === null ? (
             <button
               onClick={() => {
-                setNoteDay(0);
+                setNoteDay(openDayIndexes[0] ?? 0);
                 setNoteText("");
               }}
               className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-cp-slot border-[0.5px] border-dashed border-[var(--c-hairline)] py-2.5 text-[12px] font-medium text-accent"
@@ -644,7 +647,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
           ) : (
             <div className="cp-hairline mt-1 rounded-cp-slot bg-surface-subtle p-3">
               <div className="mb-2 flex flex-wrap gap-1.5">
-                {DAY_LABELS.map((day, di) => (
+                {openDayIndexes.map((di) => (
                   <button
                     key={di}
                     onClick={() => setNoteDay(di)}
@@ -652,7 +655,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                       noteDay === di ? "bg-accent text-accent-on" : "bg-cp-icon text-ink-muted"
                     }`}
                   >
-                    {day}
+                    {DAY_LABELS[di]}
                   </button>
                 ))}
               </div>

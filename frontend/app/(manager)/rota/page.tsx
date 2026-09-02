@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import AvailabilityPanel from "@/components/availability-panel";
@@ -28,7 +28,7 @@ import {
   Period,
   Role,
   RotaSummary,
-  Shift,
+  ShiftWithDays,
   StaffManager,
   SubmissionEntry,
   Swap,
@@ -48,7 +48,7 @@ import {
   getVenue,
   listPeriods,
   listRoles,
-  listShifts,
+  listShiftDays,
   listStaff,
   postOpenShift,
   publishRota,
@@ -63,7 +63,9 @@ import WeekScrubber, {
   buildWeekStops,
 } from "@/components/manager/week-scrubber";
 import {
+  dayDef,
   formatWeekRange,
+  indexShiftDays,
   mondayISO,
   planningPeriod,
   todayIndexInWeek,
@@ -77,7 +79,9 @@ import Waiting from "@/components/waiting";
 
 export default function RotaPage() {
   const [periods, setPeriods] = useState<Period[]>([]);
-  const [shifts, setShifts] = useState<Shift[]>([]);
+  // ShiftWithDays, not Shift: the per-day schedule travels with the shift so
+  // every surface below resolves "does this run on Tuesday" from one read.
+  const [shifts, setShifts] = useState<ShiftWithDays[]>([]);
   const [staff, setStaff] = useState<StaffManager[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [summary, setSummary] = useState<RotaSummary | null>(null);
@@ -139,6 +143,9 @@ export default function RotaPage() {
   const [rebuilding, setRebuilding] = useState(false);
   const [reopening, setReopening] = useState(false);
 
+  // One per-day lookup, built once and threaded into every surface below.
+  const shiftDayIdx = useMemo(() => indexShiftDays(shifts), [shifts]);
+
   const period = periods.find((p) => p.week_start === selectedWeek) ?? null;
 
   function showToast(msg: string) {
@@ -156,7 +163,7 @@ export default function RotaPage() {
       try {
         const [periodsRes, shiftsRes, staffRes, venueRes, rolesRes] = await Promise.all([
           listPeriods(),
-          listShifts(),
+          listShiftDays(),
           listStaff(),
           getVenue(),
           listRoles(),
@@ -689,7 +696,9 @@ export default function RotaPage() {
       shiftName: shift?.name ?? "Shift",
       dayIndex: u.day_index,
       assigned: 0,
-      required: shift?.min_staff ?? 1,
+      // That day's own minimum, not the shift-level representative — a Sunday
+      // set to need three must not read "needs 1".
+      required: shift ? dayDef(shift, u.day_index, shiftDayIdx).min : 1,
       severity: "uncovered",
     });
   }
@@ -1010,6 +1019,7 @@ export default function RotaPage() {
             <ManagerRotaReview
               weekStart={selectedWeek}
               shifts={shifts}
+              shiftDayIdx={shiftDayIdx}
               staff={staff}
               assignments={summary?.assignments ?? []}
               leave={summary?.leave ?? {}}
@@ -1023,6 +1033,7 @@ export default function RotaPage() {
             <ManagerRotaMatrix
               weekStart={selectedWeek}
               shifts={shifts}
+              shiftDayIdx={shiftDayIdx}
               staff={staff}
               assignments={summary?.assignments ?? []}
               leave={summary?.leave ?? {}}
@@ -1059,6 +1070,7 @@ export default function RotaPage() {
         <div className="mt-4">
           <AvailabilityPanel
             shifts={shifts}
+            shiftDayIdx={shiftDayIdx}
             submissions={submissions}
             clearingId={clearingId}
             onRequestClear={requestClearSubmission}

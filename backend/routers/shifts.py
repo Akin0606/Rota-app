@@ -7,6 +7,7 @@ from models.schemas import (
     ShiftScheduleOut,
     ShiftScheduleUpdateRequest,
     ShiftUpdateRequest,
+    ShiftWithDaysOut,
 )
 from services import cron_scheduler, shift_days_service
 from services.auth_service import get_current_manager, get_manager_venue
@@ -41,6 +42,52 @@ def list_shifts(manager: dict = Depends(get_current_manager)):
         .execute()
         .data
     )
+
+
+@router.get("/days", response_model=list[ShiftWithDaysOut])
+def list_shifts_with_days(manager: dict = Depends(get_current_manager)):
+    """Every shift with its full per-day schedule, in one read.
+
+    The manager app needs this on three screens at once (Rota, Scheduler,
+    Today), and per-shift GETs would be N+1 on every load. Declared before
+    `/{shift_id}/days` is irrelevant to routing (different segment counts) but
+    kept adjacent to `list_shifts` because it is the same question with the
+    per-day answer.
+
+    An unmigrated shift (no `shift_days` rows) comes back as 7 open days at the
+    shift-level time, exactly as `shift_bounds` resolves it — so a client can
+    trust `days` unconditionally and never needs the fallback logic itself.
+    """
+    venue = get_manager_venue(manager["id"])
+    supabase = get_supabase()
+    shifts = (
+        supabase.table("shifts")
+        .select("*")
+        .eq("venue_id", venue["id"])
+        .order("sort_order")
+        .execute()
+        .data
+        or []
+    )
+    if not shifts:
+        return []
+
+    rows = (
+        supabase.table("shift_days")
+        .select("shift_id, day_index, start_time, end_time, min_staff, max_staff")
+        .in_("shift_id", [s["id"] for s in shifts])
+        .execute()
+        .data
+        or []
+    )
+    by_shift: dict[str, list[dict]] = {}
+    for row in rows:
+        by_shift.setdefault(row["shift_id"], []).append(row)
+
+    return [
+        {**shift, "days": shift_days_service.schedule_from_rows(shift, by_shift.get(shift["id"], []))}
+        for shift in shifts
+    ]
 
 
 @router.post("", response_model=ShiftOut)

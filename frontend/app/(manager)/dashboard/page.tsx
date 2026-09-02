@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import LoadingScreen from "@/components/loading-screen";
@@ -16,7 +16,7 @@ import {
   Period,
   RotaSummary,
   SchedulerConfig,
-  Shift,
+  ShiftWithDays,
   StaffManager,
   Venue,
   getRota,
@@ -24,7 +24,7 @@ import {
   getVenue,
   listActivity,
   listPeriods,
-  listShifts,
+  listShiftDays,
   listStaff,
   remindStaff,
   resetStaffPin,
@@ -32,6 +32,7 @@ import {
 import {
   DAY_NAMES,
   daysUntilClose,
+  indexShiftDays,
   describeAction,
   formatRelativeTime,
   formatWeekRange,
@@ -88,7 +89,8 @@ export default function HomePage() {
   // shift, and the hero states a deadline out loud, so it has to be the real one.
   const [scheduler, setScheduler] = useState<SchedulerConfig | null>(null);
   const [staff, setStaff] = useState<StaffManager[]>([]);
-  const [shifts, setShifts] = useState<Shift[]>([]);
+  // ShiftWithDays — Today has to know which days the venue actually opens.
+  const [shifts, setShifts] = useState<ShiftWithDays[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [planningRota, setPlanningRota] = useState<RotaSummary | null>(null);
   const [todayRota, setTodayRota] = useState<RotaSummary | null>(null);
@@ -204,7 +206,7 @@ export default function HomePage() {
         if (now && now.status !== "collecting" && now.id !== plan?.id) wanted.push(now.id);
         const [staffRes, shiftsRes, rotaEntries] = await Promise.all([
           listStaff(plan?.id),
-          listShifts(),
+          listShiftDays(),
           Promise.all(wanted.map((id) => getRota(id).then((r) => [id, r] as const))),
         ]);
         if (cancelled) return;
@@ -252,6 +254,10 @@ export default function HomePage() {
       cancelled = true;
     };
   }, [reloadToken]);
+
+  // Built here, above the first early return — a hook after a conditional
+  // return is a hooks-order violation.
+  const shiftDayIdx = useMemo(() => indexShiftDays(shifts), [shifts]);
 
   if (loading) {
     return <LoadingScreen base="Loading your week…" />;
@@ -353,6 +359,7 @@ export default function HomePage() {
               period={today}
               rota={todayRota}
               shifts={shifts}
+              shiftDayIdx={shiftDayIdx}
               staff={staff}
             />
 
@@ -521,7 +528,7 @@ function StaffModal({
   onResetPin,
 }: {
   member: StaffManager | null;
-  shifts: Shift[];
+  shifts: ShiftWithDays[];
   assignments: RotaSummary["assignments"];
   weekStart: string | null;
   busy: boolean;
@@ -545,7 +552,7 @@ function StaffModal({
           : undefined,
       };
     })
-    .filter((x): x is { day: number; shift: Shift } => Boolean(x.shift))
+    .filter((x): x is { day: number; shift: ShiftWithDays } => Boolean(x.shift))
     .sort((a, b) => a.day - b.day);
 
   const totalHours = mine.reduce(

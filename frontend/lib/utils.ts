@@ -230,6 +230,113 @@ export function weekOffsetFromNow(weekStart: string): number {
   );
 }
 
+// --- Which days a shift actually runs ------------------------------------
+//
+// The venue's week is per-day (`shift_days`): a shift can run different hours
+// on different days, or not at all. Until this, every manager surface reasoned
+// about the week from one representative `shifts.start_time` and one
+// `min_staff`, which is why a closed Tuesday rendered as a red uncovered day at
+// hours the venue isn't open.
+//
+// `GET /api/shifts/days` returns all 7 days per shift with an `open` flag, and
+// the backend has already resolved the unmigrated fallback, so a client never
+// re-implements `shift_bounds`. What it does need is a fast lookup, and one
+// answer to "does this run" that every screen shares.
+
+export type PerDayShift = {
+  id: string;
+  min_staff: number;
+  max_staff: number;
+  start_time: string;
+  end_time: string;
+  days: {
+    day_index: number;
+    open: boolean;
+    start_time: string | null;
+    end_time: string | null;
+    min_staff: number;
+    max_staff: number;
+  }[];
+};
+
+export type DayDef = {
+  open: boolean;
+  start: string;
+  end: string;
+  min: number;
+  max: number;
+};
+
+export type ShiftDayIndex = Map<string, Map<number, DayDef>>;
+
+export function indexShiftDays(defs: PerDayShift[] | null | undefined): ShiftDayIndex {
+  const idx: ShiftDayIndex = new Map();
+  for (const def of defs ?? []) {
+    const byDay = new Map<number, DayDef>();
+    for (const d of def.days ?? []) {
+      byDay.set(d.day_index, {
+        open: d.open,
+        start: d.start_time ?? def.start_time,
+        end: d.end_time ?? def.end_time,
+        min: d.min_staff,
+        max: d.max_staff,
+      });
+    }
+    idx.set(def.id, byDay);
+  }
+  return idx;
+}
+
+// The shift's definition on one day, falling back to its shift-level values.
+//
+// The fallback is load-bearing and deliberately OPEN: an empty index means the
+// per-day read hasn't landed (or failed), not that the venue is shut. Treating
+// "don't know yet" as closed would blank a manager's whole rota on a flaky
+// request — the same "a failed refresh keeps the last good data" rule the staff
+// cache follows.
+export function dayDef<S extends { id: string; start_time: string; end_time: string; min_staff: number; max_staff: number }>(
+  shift: S,
+  dayIndex: number,
+  idx: ShiftDayIndex | null | undefined,
+): DayDef {
+  const found = idx?.get(shift.id)?.get(dayIndex);
+  if (found) return found;
+  return {
+    open: true,
+    start: shift.start_time,
+    end: shift.end_time,
+    min: shift.min_staff,
+    max: shift.max_staff,
+  };
+}
+
+export function runsOnDay<S extends { id: string; start_time: string; end_time: string; min_staff: number; max_staff: number }>(
+  shift: S,
+  dayIndex: number,
+  idx: ShiftDayIndex | null | undefined,
+): boolean {
+  return dayDef(shift, dayIndex, idx).open;
+}
+
+// Every shift that runs on a given day, in sort order.
+export function shiftsOnDay<S extends { id: string; start_time: string; end_time: string; min_staff: number; max_staff: number }>(
+  shifts: S[],
+  dayIndex: number,
+  idx: ShiftDayIndex | null | undefined,
+): S[] {
+  return shifts.filter((s) => runsOnDay(s, dayIndex, idx));
+}
+
+// A venue is closed on a day when NO shift runs. Distinct from "open but nobody
+// rostered", which is a gap the manager has to fix — the whole point of B4/B5.
+export function venueClosedOn<S extends { id: string; start_time: string; end_time: string; min_staff: number; max_staff: number }>(
+  shifts: S[],
+  dayIndex: number,
+  idx: ShiftDayIndex | null | undefined,
+): boolean {
+  return shifts.length > 0 && shiftsOnDay(shifts, dayIndex, idx).length === 0;
+}
+
 // --- Which period is which -----------------------------------------------
 // Home and Rota each used to answer "what period am I looking at?" their own
 // way, and the Today strip needs a third answer. One definition each, here, so

@@ -876,6 +876,16 @@ export function getShiftSchedule(id: string): Promise<ShiftSchedule> {
   return authedRequest(`/api/shifts/${id}/days`);
 }
 
+// A shift plus its full 7-day schedule. The manager app's single read for
+// "which shifts run when" — Rota, Scheduler and Today all need it at once, and
+// per-shift GETs would be N+1 on every load. `days` is the same shape
+// getShiftSchedule returns, so lib/utils' resolver serves both.
+export type ShiftWithDays = Shift & { days: ShiftDay[] };
+
+export function listShiftDays(): Promise<ShiftWithDays[]> {
+  return authedRequest(`/api/shifts/days`);
+}
+
 // Only OPEN days are sent; any day 0-6 omitted is a closed day for the shift.
 export function setShiftSchedule(
   id: string,

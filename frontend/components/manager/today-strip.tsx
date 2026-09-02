@@ -4,11 +4,14 @@ import Link from "next/link";
 
 import type { AssignmentOut, RotaSummary, Shift, StaffManager } from "@/lib/api";
 import {
+  type ShiftDayIndex,
   compactTimeRange,
+  dayDef,
   londonMinutesNow,
   shiftPhase,
   shortClock,
   todayIndexInWeek,
+  venueClosedOn,
 } from "@/lib/utils";
 
 import ManagerIcon from "./icon";
@@ -79,6 +82,7 @@ export default function TodayStrip({
   period,
   rota,
   shifts,
+  shiftDayIdx,
   staff,
 }: {
   /** The period whose week contains today — null when there isn't one. */
@@ -86,6 +90,8 @@ export default function TodayStrip({
   /** That period's rota. Null when it hasn't been built. */
   rota: RotaSummary | null;
   shifts: Shift[];
+  /** Per-day schedule, so a day the venue shuts reads "Closed", not "nobody on". */
+  shiftDayIdx: ShiftDayIndex;
   staff: StaffManager[];
 }) {
   const isLive = period?.status === "published" || period?.status === "confirmed";
@@ -129,8 +135,9 @@ export default function TodayStrip({
       if (!shift) continue;
       // Per-day times resolved by the backend onto each assignment; the
       // shift-level value is only the fallback for an unmigrated shift.
-      const start = list[0].start_time ?? shift.start_time;
-      const end = list[0].end_time ?? shift.end_time;
+      const def = dayDef(shift, dayIndex, shiftDayIdx);
+      const start = list[0].start_time ?? def.start;
+      const end = list[0].end_time ?? def.end;
       rows.push({
         key: `${fromYesterday ? "y" : "t"}-${shiftId}`,
         shift,
@@ -167,6 +174,10 @@ export default function TodayStrip({
     todayIndex > 0 ? rowsFor(todayIndex - 1, true).filter((r) => r.phase === "now") : [];
 
   const rows = [...carriedOver, ...todayRows];
+  // B6 — the venue is shut today. "Nobody's on today" reads as a problem on a
+  // day where an empty rota is the correct answer, and it was the line a
+  // manager saw every single Tuesday.
+  const closedToday = venueClosedOn(shifts, todayIndex, shiftDayIdx);
 
   // Today's genuine holes, from the same uncovered/under_covered the rota page
   // treats as the single source of truth for a gap.
@@ -212,7 +223,11 @@ export default function TodayStrip({
 
       {rows.length === 0 ? (
         <div className="text-[12.5px] text-ink-muted">
-          {hasGap ? "Nobody is rostered today." : "Nobody's on today."}
+          {closedToday
+            ? "Closed today."
+            : hasGap
+              ? "Nobody is rostered today."
+              : "Nobody's on today."}
         </div>
       ) : (
         <div className="flex flex-col gap-2.5">

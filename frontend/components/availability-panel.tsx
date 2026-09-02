@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import type { Shift, SubmissionEntry } from "@/lib/api";
-import { DAY_LABELS } from "@/lib/utils";
+import { DAY_LABELS, type ShiftDayIndex, shiftsOnDay, venueClosedOn } from "@/lib/utils";
 
 // These must stay in lockstep with the staff availability screen's three
 // states, which is what the numbers actually mean to the person who submitted
@@ -34,6 +34,8 @@ function abbreviate(name: string): string {
 
 type AvailabilityPanelProps = {
   shifts: Shift[];
+  /** Per-day schedule, so a closed day reads "Closed" rather than "no answer". */
+  shiftDayIdx: ShiftDayIndex;
   submissions: SubmissionEntry[];
   clearingId: string | null;
   onRequestClear: (staffId: string, staffName: string) => void;
@@ -41,6 +43,7 @@ type AvailabilityPanelProps = {
 
 export default function AvailabilityPanel({
   shifts,
+  shiftDayIdx,
   submissions,
   clearingId,
   onRequestClear,
@@ -96,6 +99,10 @@ export default function AvailabilityPanel({
                   <span className="inline-block h-3 w-3 rounded-[4px] border border-dashed border-hairline" />
                   No answer
                 </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-[4px] bg-cp-icon" />
+                  Closed
+                </span>
                 <span className="text-ink-faint/70">
                   One badge per shift ({shifts.map((s) => s.name).join(", ")})
                 </span>
@@ -129,6 +136,17 @@ export default function AvailabilityPanel({
                         {DAY_LABELS.map((_, dayIndex) => {
                           const dayEntries = byDay.get(dayIndex) ?? [];
                           const note = dayEntries.find((e) => e.note)?.note;
+                          // B9 — the venue is shut. "No answer" here read as
+                          // seven people ignoring a question nobody was asked.
+                          if (venueClosedOn(shifts, dayIndex, shiftDayIdx)) {
+                            return (
+                              <td key={dayIndex} className="px-2 py-2 text-center align-top">
+                                <span className="inline-flex h-6 items-center justify-center rounded-[6px] bg-cp-icon px-1.5 text-[10px] font-medium text-ink-faint">
+                                  Closed
+                                </span>
+                              </td>
+                            );
+                          }
                           return (
                             <td key={dayIndex} className="px-2 py-2 text-center align-top">
                               {/* A deterministic column, not a wrap: shift one
@@ -143,7 +161,7 @@ export default function AvailabilityPanel({
                                     the staff member never answered somewhere to
                                     show as a dash — which is a different thing
                                     from an explicit "can't work". */}
-                                {shifts.map((shift) => {
+                                {shiftsOnDay(shifts, dayIndex, shiftDayIdx).map((shift) => {
                                   const entry = dayEntries.find(
                                     (e) => e.shift_id === shift.id && e.status > 0,
                                   );

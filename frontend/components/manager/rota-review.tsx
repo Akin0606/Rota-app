@@ -5,9 +5,13 @@ import { useState, type ReactNode } from "react";
 import type { AssignmentOut, Shift, StaffManager } from "@/lib/api";
 import {
   DAY_LABELS,
+  type ShiftDayIndex,
   compactTimeRange,
+  dayDef,
   formatHoursTotal,
+  shiftsOnDay,
   sumShiftHours,
+  venueClosedOn,
 } from "@/lib/utils";
 
 import BottomSheet from "./bottom-sheet";
@@ -27,6 +31,11 @@ import ManagerIcon from "./icon";
 type ManagerRotaReviewProps = {
   weekStart: string;
   shifts: Shift[];
+  // Per-day schedule for every shift. Without it this screen reasoned about the
+  // whole week from one representative time and one min_staff, so a venue's
+  // closed day rendered as a red uncovered slot at hours it isn't open — the
+  // single loudest wrong thing on the manager's main screen.
+  shiftDayIdx: ShiftDayIndex;
   staff: StaffManager[];
   assignments: AssignmentOut[];
   leave: Record<string, number[]>;
@@ -61,6 +70,7 @@ function dateForDay(weekStart: string, dayIndex: number): Date {
 export default function ManagerRotaReview({
   weekStart,
   shifts,
+  shiftDayIdx,
   staff,
   assignments,
   leave,
@@ -81,17 +91,28 @@ export default function ManagerRotaReview({
     );
   }
 
-  // Real per-day times for an assignment, falling back to the shift-level time.
+  // Real per-day times for an assignment. The backend resolves these onto each
+  // assignment, so the fallback only fires on an older payload — and it falls
+  // back to that assignment's OWN day, not the shift-level representative, so a
+  // Friday 1am close never displays as the Monday 11pm one.
   function timesFor(a: AssignmentOut, shift: Shift): { start: string; end: string } {
-    return { start: a.start_time ?? shift.start_time, end: a.end_time ?? shift.end_time };
+    const def = dayDef(shift, a.day_index, shiftDayIdx);
+    return { start: a.start_time ?? def.start, end: a.end_time ?? def.end };
   }
 
-  // A day has a gap if any shift is below its min_staff that day.
+  // A day has a gap if any shift RUNNING that day is below that day's own
+  // min_staff. Both halves matter: counting a closed day's shifts invented gaps
+  // on a day the venue is shut, and using the shift-level minimum ignored a
+  // Sunday the manager has set to need three.
   function gapCount(dayIndex: number): number {
-    return shifts.reduce(
-      (sum, sh) => sum + Math.max(0, sh.min_staff - assignedOn(dayIndex, sh.id).length),
+    return shiftsOnDay(shifts, dayIndex, shiftDayIdx).reduce(
+      (sum, sh) => sum + Math.max(0, dayDef(sh, dayIndex, shiftDayIdx).min - assignedOn(dayIndex, sh.id).length),
       0,
     );
+  }
+
+  function closedOn(dayIndex: number): boolean {
+    return venueClosedOn(shifts, dayIndex, shiftDayIdx);
   }
 
   const onLeaveToday = staff.filter((s) => leave[s.id]?.includes(selectedDay));
@@ -99,6 +120,8 @@ export default function ManagerRotaReview({
     (a) => a.day_index === selectedDay && a.staff_id,
   ).length;
   const gapsToday = gapCount(selectedDay);
+  const closedToday = closedOn(selectedDay);
+  const shiftsToday = shiftsOnDay(shifts, selectedDay, shiftDayIdx);
 
   const dayDate = dateForDay(weekStart, selectedDay);
   const dayTitle = dayDate.toLocaleDateString("en-GB", {
@@ -152,9 +175,21 @@ export default function ManagerRotaReview({
         {DAY_LABELS.map((d, i) => {
           const active = i === selectedDay;
           const dayAssigned = assignments.filter((a) => a.day_index === i && a.staff_id).length;
-          const uncoveredDot = shifts.some((sh) => assignedOn(i, sh.id).length === 0 && sh.min_staff > 0);
+          const closed = closedOn(i);
+          const uncoveredDot = shiftsOnDay(shifts, i, shiftDayIdx).some(
+            (sh) => assignedOn(i, sh.id).length === 0 && dayDef(sh, i, shiftDayIdx).min > 0,
+          );
           const gap = gapCount(i) > 0;
-          const dot = uncoveredDot ? "bg-cp-red" : gap ? "bg-cp-amber" : "bg-cp-green";
+          // B5 — a closed day is not a coverage state at all, so it gets no
+          // traffic light. A red dot on a day the venue shuts is the same lie
+          // as "nobody's on today" when nobody is meant to be.
+          const dot = closed
+            ? "bg-transparent border-[0.5px] border-hairline"
+            : uncoveredDot
+              ? "bg-cp-red"
+              : gap
+                ? "bg-cp-amber"
+                : "bg-cp-green";
           return (
             <button
               key={d}
@@ -166,7 +201,7 @@ export default function ManagerRotaReview({
               <div className={`text-[11px] uppercase ${active ? "text-accent" : "text-ink-muted"}`}>{d}</div>
               <div className="my-0.5 text-[15px] font-medium text-ink">{dateForDay(weekStart, i).getUTCDate()}</div>
               <div className={`mx-auto h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
-              <span className="sr-only">{dayAssigned} assigned</span>
+              <span className="sr-only">{closed ? "Closed" : `${dayAssigned} assigned`}</span>
             </button>
           );
         })}
@@ -175,13 +210,27 @@ export default function ManagerRotaReview({
       {/* Selected-day header */}
       <div className="mb-0.5 text-[15px] font-medium text-ink">{dayTitle}</div>
       <div className="mb-4 text-xs text-ink-muted">
-        {assignedToday} assigned · {gapsToday} gap{gapsToday === 1 ? "" : "s"} · {onLeaveToday.length} on leave
+        {closedToday
+          ? `Closed${onLeaveToday.length > 0 ? ` · ${onLeaveToday.length} on leave` : ""}`
+          : `${assignedToday} assigned · ${gapsToday} gap${gapsToday === 1 ? "" : "s"} · ${onLeaveToday.length} on leave`}
       </div>
 
-      {/* One card per shift (daypart) */}
-      {shifts.map((shift) => {
+      {/* B5 — the venue is shut. Not an empty rota: no cards, no gaps, and
+          nothing to add to, because there is no shift to add anyone to. */}
+      {closedToday && (
+        <div className="cp-hairline rounded-[11px] border-dashed bg-surface-card px-3.5 py-6 text-center">
+          <div className="text-[13px] font-medium text-ink-muted">Closed</div>
+          <div className="mt-1 text-[12px] text-ink-faint">
+            No shifts run on {DAY_LABELS[selectedDay]}. Change this in Settings → Hours.
+          </div>
+        </div>
+      )}
+
+      {/* One card per shift that RUNS on this day (B2) */}
+      {shiftsToday.map((shift) => {
         const assigned = assignedOn(selectedDay, shift.id);
-        const gap = Math.max(0, shift.min_staff - assigned.length);
+        const def = dayDef(shift, selectedDay, shiftDayIdx);
+        const gap = Math.max(0, def.min - assigned.length);
         const uncovered = gap > 0 && assigned.length === 0;
         const isAdding = addingShift === shift.id;
         return (
@@ -189,10 +238,14 @@ export default function ManagerRotaReview({
             <div className="mb-2.5 flex items-center gap-2">
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: shift.color }} />
               <span className="text-[13px] font-medium text-ink-muted">{shift.name}</span>
+              {/* C1 — the header's time is the real time for THIS day. It used
+                  to show the shift-level representative while the chips below
+                  it showed the resolved per-day time, so a Friday card read
+                  "6–11pm" over a chip reading "6pm–1am". */}
               <span className="text-[12px] text-ink-faint">
-                {compactTimeRange(shift.start_time, shift.end_time)}
+                {compactTimeRange(def.start, def.end)}
               </span>
-              <span className="ml-auto text-[11px] text-ink-faint">{shift.min_staff} needed</span>
+              <span className="ml-auto text-[11px] text-ink-faint">{def.min} needed</span>
             </div>
 
             <div className="flex flex-wrap gap-[7px]">
@@ -333,8 +386,8 @@ export default function ManagerRotaReview({
               <span className="text-[14px] font-medium text-ink">{detailShift.name}</span>
               <span className="text-[13px] text-ink-muted">
                 {compactTimeRange(
-                  detailAssignment.start_time ?? detailShift.start_time,
-                  detailAssignment.end_time ?? detailShift.end_time,
+                  timesFor(detailAssignment, detailShift).start,
+                  timesFor(detailAssignment, detailShift).end,
                 )}
               </span>
               {detailMember?.is_under_18 && (

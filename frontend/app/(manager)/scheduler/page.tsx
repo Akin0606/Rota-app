@@ -13,19 +13,20 @@ import {
   SchedulerConfig,
   SchedulerWeek,
   SchedulingRules,
-  Shift,
+  ShiftWithDays,
   clearScheduleOverride,
   createPeriod,
   generateRota,
   getRules,
   getScheduler,
   listPeriods,
-  listShifts,
+  listShiftDays,
   setScheduleOverride,
   updateRules,
   updateScheduler,
   updateShift,
 } from "@/lib/api";
+import { dayDef, indexShiftDays, runsOnDay } from "@/lib/utils";
 import Waiting from "@/components/waiting";
 
 // The API returns naive wall-clock strings ("YYYY-MM-DDTHH:MM:SS"). Format for
@@ -83,7 +84,7 @@ export default function SchedulerPage() {
   const [savingRules, setSavingRules] = useState(false);
 
   // Shift staffing form state, keyed by shift id.
-  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [shifts, setShifts] = useState<ShiftWithDays[]>([]);
   const [staffingForm, setStaffingForm] = useState<Record<string, { min_staff: number; max_staff: number }>>({});
   const [savingStaffing, setSavingStaffing] = useState(false);
 
@@ -99,7 +100,7 @@ export default function SchedulerPage() {
       setLoading(true);
       setError(false);
       try {
-        const [schedulerRes, rulesRes, shiftsRes] = await Promise.all([getScheduler(), getRules(), listShifts()]);
+        const [schedulerRes, rulesRes, shiftsRes] = await Promise.all([getScheduler(), getRules(), listShiftDays()]);
         if (cancelled) return;
         applyConfig(schedulerRes);
         applyRules(rulesRes);
@@ -136,7 +137,7 @@ export default function SchedulerPage() {
     setMinRestHours(res.min_rest_hours);
   }
 
-  function applyShifts(res: Shift[]) {
+  function applyShifts(res: ShiftWithDays[]) {
     setShifts(res);
     setStaffingForm(Object.fromEntries(res.map((sh) => [sh.id, { min_staff: sh.min_staff, max_staff: sh.max_staff }])));
   }
@@ -164,12 +165,29 @@ export default function SchedulerPage() {
 
   const legalMin = config?.legal_notice_hours ?? 72;
 
-  // Reference's live "N shifts / week": coverage is per-shift min_staff, applied
-  // to all 7 days (no per-day override in our model), so it's 7 × Σ min_staff.
-  const shiftsPerWeek = useMemo(
-    () => shifts.reduce((sum, sh) => sum + (staffingForm[sh.id]?.min_staff ?? sh.min_staff), 0) * 7,
-    [shifts, staffingForm],
-  );
+  // The live "N shifts / week".
+  //
+  // This used to be `7 × Σ min_staff` under a comment claiming there was "no
+  // per-day override in our model". There is — `shift_days` has been the
+  // authority since migration 026 — and the flat multiply told The Gatehouse it
+  // rosters 35 shifts a week when it runs 29: it counts a closed Tuesday, and it
+  // ignores a Sunday the manager has set to need two rather than one.
+  //
+  // An unsaved edit in the panel above is applied to every open day, because
+  // that is exactly what saving it does (propagate_fields flattens the column it
+  // is handed), so the number the manager watches move matches what they are
+  // about to commit.
+  const shiftsPerWeek = useMemo(() => {
+    const idx = indexShiftDays(shifts);
+    return shifts.reduce((sum, sh) => {
+      const edited = staffingForm[sh.id]?.min_staff;
+      const openDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => runsOnDay(sh, d, idx));
+      return (
+        sum +
+        openDays.reduce((n, d) => n + (edited ?? dayDef(sh, d, idx).min), 0)
+      );
+    }, 0);
+  }, [shifts, staffingForm]);
 
   async function handleSaveOffsets() {
     setSavingOffsets(true);
@@ -226,8 +244,13 @@ export default function SchedulerPage() {
     }
     setSavingStaffing(true);
     try {
-      const updated = await Promise.all(changed.map((sh) => updateShift(sh.id, staffingForm[sh.id])));
-      setShifts((prev) => prev.map((sh) => updated.find((u) => u.id === sh.id) ?? sh));
+      await Promise.all(changed.map((sh) => updateShift(sh.id, staffingForm[sh.id])));
+      // Re-read rather than patching locally: the save propagates the edited
+      // column onto every `shift_days` row, so the per-day schedule this page
+      // counts from has changed server-side. Merging the shift-level response
+      // would leave `days` stale and the "N shifts / week" figure wrong until
+      // the next reload.
+      applyShifts(await listShiftDays());
       showToast("Coverage saved");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not save coverage");
