@@ -153,6 +153,22 @@ export function formatDeadline(
   return `${dateFmt}, ${timeFmt}`;
 }
 
+// "Fri 12 Sep, 5am" from a naive Europe/London ISO datetime. The backend
+// derives each week's close from that week's own earliest shift start, so the
+// date is the load-bearing part — two consecutive weeks can genuinely shut on
+// different days. Sliced rather than passed to `new Date`, which would read a
+// naive string as UTC and shift the label by an hour every British summer.
+export function formatDeadlineAt(closesAt: string): string {
+  const [datePart, timePart = "00:00"] = closesAt.split("T");
+  const dateFmt = parseISODate(datePart).toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+  return `${dateFmt}, ${formatTime(timePart.slice(0, 5))}`;
+}
+
 // "Thursday, 6pm" — the weekday name on its own, without a date. The staff
 // hub frames the availability deadline as a recurring habit ("closes
 // Thursday") rather than a calendar date, so it deliberately drops the day

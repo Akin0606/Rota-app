@@ -10,6 +10,7 @@ from models.schemas import (
     LeaveRequestOut,
     LeaveRequestPinRequest,
     LeaveAllowanceOut,
+    LeaveOverlapOut,
     LeaveRequestsOut,
 )
 from routers.availability import _get_staff_by_pin, _get_venue_or_404
@@ -24,6 +25,8 @@ def _to_out(
     staff_name: str,
     conflicting_assignments: int = 0,
     working_days_per_week: float = leave.DEFAULT_WORKING_DAYS_PER_WEEK,
+    remaining_days: float | None = None,
+    overlapping: list[LeaveOverlapOut] | None = None,
 ) -> LeaveRequestOut:
     return LeaveRequestOut(
         id=row["id"],
@@ -40,6 +43,8 @@ def _to_out(
         days=leave.leave_days_for_range(
             str(row["start_date"]), str(row["end_date"]), working_days_per_week
         ),
+        remaining_days=remaining_days,
+        overlapping=overlapping or [],
     )
 
 
@@ -215,30 +220,72 @@ def list_leave_requests(
         query = query.eq("status", status)
     rows = query.order("created_at", desc=True).execute().data
 
-    staff_ids = list({r["staff_id"] for r in rows})
+    # Every live request at the venue, not just the ones this query returned —
+    # a `status=pending` filter must not hide the approved leave that already
+    # covers the same week, which is exactly the collision H4 is about.
+    live_rows = (
+        supabase.table("leave_requests")
+        .select("id, staff_id, start_date, end_date, status")
+        .eq("venue_id", venue["id"])
+        .in_("status", ["pending", "approved"])
+        .execute()
+        .data
+    ) or []
+
+    staff_ids = list({r["staff_id"] for r in rows} | {r["staff_id"] for r in live_rows})
     names_by_id: dict[str, str] = {}
     days_by_id: dict[str, float] = {}
+    staff_by_id: dict[str, dict] = {}
     if staff_ids:
         staff_rows = (
             supabase.table("staff_members")
-            .select("id, name, working_days_per_week")
+            .select("*")
             .in_("id", staff_ids)
             .execute()
             .data
         )
+        staff_by_id = {s["id"]: s for s in staff_rows}
         names_by_id = {s["id"]: s["name"] for s in staff_rows}
         days_by_id = {
             s["id"]: float(s.get("working_days_per_week") or leave.DEFAULT_WORKING_DAYS_PER_WEEK)
             for s in staff_rows
         }
 
+    # One allowance computation per person, not per request — a member with
+    # three requests in the queue would otherwise run the same query three
+    # times for the same answer.
+    allowance_cache: dict[str, float] = {}
+
+    def _remaining(staff_id: str) -> float | None:
+        member = staff_by_id.get(staff_id)
+        if member is None:
+            return None
+        if staff_id not in allowance_cache:
+            allowance_cache[staff_id] = leave.allowance_for_staff(supabase, venue, member)[
+                "remaining_days"
+            ]
+        return allowance_cache[staff_id]
+
     out = []
     for r in rows:
         conflicts = 0
+        overlapping: list[LeaveOverlapOut] = []
+        remaining = None
         if r["status"] in ("pending", "approved"):
             conflicts = leave.conflicting_assignment_count(
                 supabase, venue["id"], r["staff_id"], str(r["start_date"]), str(r["end_date"])
             )
+            overlapping = [
+                LeaveOverlapOut(
+                    staff_id=o["staff_id"],
+                    staff_name=names_by_id.get(o["staff_id"], "Staff member"),
+                    start_date=str(o["start_date"]),
+                    end_date=str(o["end_date"]),
+                    status=o["status"],
+                )
+                for o in leave.overlapping_requests(r, live_rows)
+            ]
+            remaining = _remaining(r["staff_id"])
         out.append(
             _to_out(
                 r,
@@ -247,6 +294,8 @@ def list_leave_requests(
                 working_days_per_week=days_by_id.get(
                     r["staff_id"], leave.DEFAULT_WORKING_DAYS_PER_WEEK
                 ),
+                remaining_days=remaining,
+                overlapping=overlapping,
             )
         )
 

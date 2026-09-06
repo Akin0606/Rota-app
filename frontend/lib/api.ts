@@ -290,6 +290,9 @@ export type WeekAvailability = {
   prefilled: boolean;
   // The cron auto-copied this week's pattern (§6b); drives a heads-up banner.
   auto_submitted: boolean;
+  // When THIS week's window shuts (naive Europe/London ISO datetime), so the
+  // label follows the week switcher instead of quoting one recurring day.
+  closes_at?: string | null;
   // Set only for a 16-or-17-year-old: their restricted period, worded for
   // display ("10pm and 6am" / "11pm and 7am"). null for everyone else.
   night_window_label?: string | null;
@@ -1275,6 +1278,19 @@ export type LeaveRequest = {
   // What this range costs the requester in working days, computed server-side
   // so both sides of the app quote the same number.
   days: number;
+  // Manager view only: what the requester has left for the leave year, already
+  // net of this request. null on the staff view.
+  remaining_days?: number | null;
+  // Manager view only: who else is off across the same days, pending included.
+  overlapping?: LeaveOverlap[];
+};
+
+export type LeaveOverlap = {
+  staff_id: string;
+  staff_name: string;
+  start_date: string;
+  end_date: string;
+  status: "pending" | "approved";
 };
 
 export type LeaveAllowance = {

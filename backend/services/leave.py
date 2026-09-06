@@ -171,3 +171,26 @@ def allowance_for_staff(supabase, venue: dict, staff: dict, today: date | None =
         "leave_year_start": year_start.isoformat(),
         "leave_year_end": year_end.isoformat(),
     }
+
+
+def overlapping_requests(row: dict, live_rows: list[dict]) -> list[dict]:
+    """Other people's leave that runs across any of the same days as `row`.
+
+    The first thing a landlord asks about a leave request is not what it costs
+    the requester, it is who else is already off that week — one barman away is
+    a rota problem, three is a shut door. Kept pure and fed the venue's whole
+    live set so the whole queue costs one query rather than one per request.
+
+    Pending counts as an overlap. A manager approving Monday's request has to
+    see Tuesday's request for the same week, or they will approve both and find
+    out afterwards.
+    """
+    start, end = str(row["start_date"]), str(row["end_date"])
+    out = []
+    for other in live_rows:
+        if other["id"] == row["id"] or other["staff_id"] == row["staff_id"]:
+            continue
+        # Half-open comparison on ISO strings is exact — both ends inclusive.
+        if str(other["start_date"]) <= end and str(other["end_date"]) >= start:
+            out.append(other)
+    return sorted(out, key=lambda r: (str(r["start_date"]), str(r["id"])))

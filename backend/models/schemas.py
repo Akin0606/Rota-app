@@ -157,6 +157,13 @@ class WeekAvailabilityOut(BaseModel):
     # True when the saved submission was auto-copied by the cron (§6b) and not
     # yet re-affirmed — drives the "we auto-submitted for you" banner.
     auto_submitted: bool = False
+    # When THIS week's availability window shuts, as a naive Europe/London
+    # datetime. Per-week on purpose: the close is derived from the week's own
+    # earliest shift start, so quoting the currently-collecting week's deadline
+    # on a week the staffer has scrolled ahead to would be a confident lie.
+    # None when the venue has no shifts to derive a window from — in which case
+    # the screen says nothing rather than inventing a day.
+    closes_at: Optional[str] = None
     # Set only for a 16-or-17-year-old: the restricted period that applies to
     # them, worded for display ("10pm and 6am" / "11pm and 7am" per WTR 1998
     # reg 6A). None for everyone else, which is also what hides the whole
@@ -448,19 +455,27 @@ class ShiftUpdateRequest(BaseModel):
 
 
 class ShiftDayIn(BaseModel):
-    """One OPEN day of a shift's per-day schedule. Days not listed in a
-    ShiftScheduleUpdateRequest are closed (no shift_days row)."""
+    """One day of a shift's per-day schedule.
+
+    I2 — `open` and nullable times exist so a `ShiftScheduleOut` body can be
+    sent straight back as a `ShiftScheduleUpdateRequest`. GET returns all seven
+    days, marking the closed ones `open: false` with null times; the PUT used to
+    422 on exactly that shape, so the obvious round-trip — read the schedule,
+    change one day, write it back — was the one thing a caller could not do.
+    Omitting a day still closes it, so every existing caller is unchanged.
+    """
     day_index: int = Field(ge=0, le=6)
-    start_time: str
-    end_time: str
+    open: bool = True
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
     min_staff: int = Field(default=1, ge=0)
     max_staff: int = Field(default=2, ge=1)
 
 
 class ShiftScheduleUpdateRequest(BaseModel):
-    # Only the OPEN days. Any day_index 0-6 absent from this list is a closed
-    # day for the shift. Must contain at least one day — a shift closed every
-    # day would never be schedulable.
+    # Days absent from this list are closed, as is any day sent with
+    # `open: false`. At least one day must be open — a shift closed every day
+    # would never be schedulable (enforced in shift_days_service).
     days: list[ShiftDayIn]
 
 
@@ -962,6 +977,16 @@ class LeaveDecisionRequest(BaseModel):
     manager_note: Optional[str] = None
 
 
+class LeaveOverlapOut(BaseModel):
+    """Someone else off across the same days. Manager view only."""
+
+    staff_id: str
+    staff_name: str
+    start_date: str
+    end_date: str
+    status: Literal["pending", "approved"]
+
+
 class LeaveRequestOut(BaseModel):
     id: str
     staff_id: str
@@ -979,6 +1004,15 @@ class LeaveRequestOut(BaseModel):
     # What this range costs the requester, in working days. Computed server-side
     # so the staff screen and the manager's queue can never disagree.
     days: float = 0
+    # Manager view only (H4). What the requester has left for the leave year —
+    # already net of THIS request, since a pending request counts against the
+    # allowance, so it reads as "approving leaves them with N". None on the
+    # staff view, which carries the full allowance breakdown separately.
+    remaining_days: Optional[float] = None
+    # Manager view only (H4): who else is off across the same days, pending
+    # included. Empty on the staff view — one person's leave is not another's
+    # business.
+    overlapping: list[LeaveOverlapOut] = []
 
 
 class LeaveAllowanceOut(BaseModel):

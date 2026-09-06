@@ -564,6 +564,10 @@ def get_week_availability(venue_token: str, payload: WeekAvailabilityRequest):
 
     period = _period_for_week(venue["id"], monday)
     editable = period is None or period["status"] == "collecting"
+    # This week's own close, not the currently-collecting week's. Both are
+    # derived from the week's earliest shift start, so they genuinely differ
+    # week to week once a venue's opening hours differ day to day.
+    closes = notice_window.close_for_week(venue["id"], monday)
 
     submissions = []
     auto_submitted = False
@@ -599,6 +603,7 @@ def get_week_availability(venue_token: str, payload: WeekAvailabilityRequest):
             else None
         ),
         "editable": editable,
+        "closes_at": closes.isoformat() if closes else None,
         "submissions": submissions,
         "shifts": _week_shifts(venue["id"], staff),
         "night_window_label": (

@@ -134,9 +134,33 @@ export default function LeavePage() {
                     (working days, not calendar days) so both sides of the app
                     quote the same number; approving without it shown is the
                     manager agreeing to a figure only the staff member can see. */}
+                {/* H4 — the cost, and what it leaves them with. `remaining_days`
+                    is already net of this request (a pending request counts
+                    against the allowance), so it reads as the state of play
+                    after approving rather than before. */}
                 <div className="mb-2 text-[12px] text-ink-muted">
                   {r.days} day{r.days === 1 ? "" : "s"} off their allowance
+                  {typeof r.remaining_days === "number" && (
+                    <> · {r.remaining_days} left after this</>
+                  )}
                 </div>
+                {/* Who else is off that week — the first thing a landlord asks,
+                    and the one thing the queue could not answer. Pending
+                    counts: approving Monday's request without seeing Tuesday's
+                    for the same week is how a venue ends up short. */}
+                {(r.overlapping?.length ?? 0) > 0 && (
+                  <div className="mb-2.5 rounded-lg bg-surface-subtle px-3 py-2 text-[12px] text-ink-muted">
+                    <div className="mb-1 font-medium text-ink-label">
+                      Also off that week
+                    </div>
+                    {r.overlapping!.map((o) => (
+                      <div key={`${o.staff_id}-${o.start_date}`} className="truncate">
+                        {o.staff_name} · {formatDateRange(o.start_date, o.end_date)}
+                        {o.status === "pending" && " · also waiting on you"}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {r.reason && <div className="mb-2 text-[13px] text-ink-muted">{r.reason}</div>}
                 {r.conflicting_assignments > 0 && (
                   <div className="mb-2.5 rounded-lg bg-unavail-bg px-3 py-2 text-[12px] font-medium text-unavail-text">

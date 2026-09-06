@@ -25,7 +25,7 @@ import {
   DAY_NAMES,
   addDays,
   compactTimeRange,
-  formatDeadlineDay,
+  formatDeadlineAt,
   formatWeekOf,
   formatWeekRangeCompact,
   mondayISO,
@@ -152,6 +152,11 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   // that applies to them, worded by the backend ("10pm and 6am" / "11pm and
   // 7am"). null for everyone else, which hides the whole explanation.
   const [nightWindowLabel, setNightWindowLabel] = useState<string | null>(null);
+  // I3 — when the SELECTED week's window shuts. Each week's close is derived
+  // from that week's own earliest shift start, so a single recurring "closes
+  // Friday" label was the same sentence on every week whether or not it was
+  // true of that one.
+  const [weekClosesAt, setWeekClosesAt] = useState<string | null>(null);
   // Prefilled cells render as a lighter echo until the first touch commits the
   // whole grid to solid (§6a). A non-prefilled week is committed from the start.
   const [committed, setCommitted] = useState(true);
@@ -238,6 +243,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
         setNotes(n);
         setWeekShifts(res.shifts ?? []);
         setNightWindowLabel(res.night_window_label ?? null);
+        setWeekClosesAt(res.closes_at ?? null);
         setEditable(res.editable);
         setPrefilled(res.prefilled);
         // A prefilled week starts uncommitted (echo cells); a real saved week
@@ -251,6 +257,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
           setNotes({});
           setWeekShifts([]);
           setNightWindowLabel(null);
+          setWeekClosesAt(null);
           setEditable(true);
           setPrefilled(false);
           setCommitted(true);
@@ -475,16 +482,22 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
           title="Your availability"
           sub={
             <>
-              Week of {formatWeekRangeCompact(selectedWeek)} ·{" "}
+              Week of {formatWeekRangeCompact(selectedWeek)}
               {editable ? (
-                <>
-                  closes{" "}
-                  <strong className="font-medium text-accent">
-                    {formatDeadlineDay(data.rules.avail_closes_day, data.rules.avail_closes_time)}
-                  </strong>
-                </>
+                // The deadline belongs to the week on screen, so it only shows
+                // once /week has answered for THAT week — and says nothing at
+                // all for a venue with no shifts to derive a window from,
+                // rather than falling back to a day nobody chose.
+                weekClosesAt ? (
+                  <>
+                    {" · closes "}
+                    <strong className="font-medium text-accent">
+                      {formatDeadlineAt(weekClosesAt)}
+                    </strong>
+                  </>
+                ) : null
               ) : (
-                <strong className="font-medium text-ink-muted">closed</strong>
+                <> · <strong className="font-medium text-ink-muted">closed</strong></>
               )}
             </>
           }

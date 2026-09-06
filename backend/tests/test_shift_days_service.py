@@ -171,3 +171,89 @@ def test_a_shift_with_no_rows_is_still_left_alone():
     fake = FakeSupabase({"shift_days": []})
     shift_days_service.propagate_fields(fake, "sh1", {"min_staff": 4})
     assert fake.rows("shift_days") == []
+
+
+# --------------------------------------------------------------------------- #
+# I2 — a GET response must be a valid PUT body                                 #
+# --------------------------------------------------------------------------- #
+#
+# get_schedule returns all seven days, marking the closed ones `open: false`
+# with null times. The PUT used to 422 on exactly that, so "read the schedule,
+# change one day, write it back" — the obvious way to use the pair — was the one
+# thing a caller could not do.
+
+
+def _round_trip_body(fake, shift):
+    """What GET hands back, fed straight into what PUT accepts."""
+    from models.schemas import ShiftScheduleUpdateRequest
+
+    days = shift_days_service.get_schedule(fake, shift)
+    return ShiftScheduleUpdateRequest(days=days)
+
+
+def test_a_get_response_parses_as_a_put_body():
+    fake = FakeSupabase({"shift_days": [
+        {"shift_id": "sh1", "day_index": d, "start_time": "6:00pm", "end_time": "11:00pm",
+         "min_staff": 2, "max_staff": 4}
+        for d in (0, 2, 3)
+    ]})
+    shift = {"id": "sh1", "start_time": "6:00pm", "end_time": "11:00pm"}
+    body = _round_trip_body(fake, shift)
+
+    assert len(body.days) == 7, "every day comes back, open or not"
+    assert [d.day_index for d in body.days if d.open] == [0, 2, 3]
+    # The closed ones are what used to 422.
+    assert all(d.start_time is None for d in body.days if not d.open)
+
+
+def test_writing_a_get_response_straight_back_changes_nothing():
+    """The round trip has to be a no-op, or 'change one day' silently changes
+    the others too."""
+    before = [
+        {"shift_id": "sh1", "day_index": d, "start_time": "6:00pm", "end_time": "11:00pm",
+         "min_staff": 2, "max_staff": 4}
+        for d in (0, 2, 3)
+    ]
+    fake = FakeSupabase({"shift_days": list(before)})
+    shift = {"id": "sh1", "start_time": "6:00pm", "end_time": "11:00pm"}
+    body = _round_trip_body(fake, shift)
+
+    days = [
+        {k: v for k, v in d.model_dump().items() if k != "open"}
+        for d in body.days
+        if d.open
+    ]
+    shift_days_service.replace_schedule(fake, "sh1", days)
+
+    got = sorted(
+        ({k: r[k] for k in ("day_index", "start_time", "end_time", "min_staff", "max_staff")}
+         for r in fake.rows("shift_days")),
+        key=lambda r: r["day_index"],
+    )
+    want = sorted(
+        ({k: r[k] for k in ("day_index", "start_time", "end_time", "min_staff", "max_staff")}
+         for r in before),
+        key=lambda r: r["day_index"],
+    )
+    assert got == want
+
+
+def test_an_open_day_with_no_times_is_an_error_not_a_closed_day():
+    """The one thing `open` must not do is turn a mistake into a silent
+    deletion: a day left open with nothing in it is a 400, not a shut Tuesday."""
+    with pytest.raises(ScheduleError):
+        shift_days_service.replace_schedule(
+            None, "sh1",
+            [{"day_index": 0, "start_time": None, "end_time": None, "min_staff": 1, "max_staff": 2}],
+        )
+
+
+def test_closing_every_day_is_still_refused():
+    from models.schemas import ShiftScheduleUpdateRequest
+
+    body = ShiftScheduleUpdateRequest(
+        days=[{"day_index": d, "open": False} for d in range(7)]
+    )
+    days = [d.model_dump() for d in body.days if d.open]
+    with pytest.raises(ScheduleError):
+        shift_days_service.replace_schedule(None, "sh1", days)

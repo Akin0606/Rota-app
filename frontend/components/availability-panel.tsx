@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import ManagerIcon from "@/components/manager/icon";
 import type { Shift, SubmissionEntry } from "@/lib/api";
 import { DAY_LABELS, type ShiftDayIndex, shiftsOnDay, venueClosedOn } from "@/lib/utils";
 
@@ -57,6 +58,18 @@ export default function AvailabilityPanel({
     byStaff.set(sub.staff_id, entry);
   }
   const staffRows = Array.from(byStaff.entries()).sort((a, b) => a[1].name.localeCompare(b[1].name));
+
+  // Every note anyone left this week, flattened in reading order (person, then
+  // day) so the list below the grid follows the same order as the rows above it.
+  const noteRows = staffRows.flatMap(([staffId, { name, entries }]) =>
+    entries
+      .filter((e) => e.note)
+      .sort((a, b) => a.day_index - b.day_index)
+      // One note per day — the staff screen stores a day note on a single row,
+      // but a duplicate would print the same sentence twice.
+      .filter((e, i, list) => i === 0 || list[i - 1].day_index !== e.day_index)
+      .map((e) => ({ staffId, name, dayIndex: e.day_index, note: e.note as string })),
+  );
 
   return (
     <div className="mb-5 rounded-panel border border-hairline bg-surface-card">
@@ -187,12 +200,18 @@ export default function AvailabilityPanel({
                                     </span>
                                   );
                                 })}
+                                {/* I5 — a marker, not the note itself. The
+                                    text is listed under the table, because a
+                                    `title` tooltip needs a hover the manager's
+                                    phone does not have, and this is the only
+                                    way a staff member can say "mornings only"
+                                    at all. */}
                                 {note && (
                                   <span
-                                    title={note}
-                                    className="inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] border border-hairline bg-surface-subtle px-1 text-[11px] text-ink-faint"
+                                    aria-label={`Note from ${name} for ${DAY_LABELS[dayIndex]}`}
+                                    className="inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] border border-hairline bg-surface-subtle px-1 text-ink-faint"
                                   >
-                                    📝
+                                    <ManagerIcon name="file-text" size={12} />
                                   </span>
                                 )}
                               </div>
@@ -214,6 +233,25 @@ export default function AvailabilityPanel({
                 </tbody>
               </table>
               </div>
+              {/* Outside the scroller on purpose — the table needs 640px and
+                  scrolls sideways; the notes are the part that has to be
+                  readable on a phone held one-handed behind the bar. */}
+              {noteRows.length > 0 && (
+                <div className="mt-3 border-t border-hairline pt-3">
+                  <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-ink-faint">
+                    Notes from staff
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {noteRows.map((n) => (
+                      <div key={`${n.staffId}-${n.dayIndex}`} className="text-[12px] text-ink-muted">
+                        <span className="font-medium text-ink-label">{n.name}</span>
+                        {" · "}
+                        {DAY_LABELS[n.dayIndex]} — {n.note}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

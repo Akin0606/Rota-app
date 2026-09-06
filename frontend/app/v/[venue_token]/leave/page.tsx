@@ -241,8 +241,12 @@ export default function StaffLeavePage({ params }: { params: { venue_token: stri
       <FootNote>Requests need manager approval before they&apos;re confirmed</FootNote>
       {allowance && (
         <FootNote>
+          {/* H4 — states the rule, and stops there. "Ask your manager if
+              that's wrong" invited an argument the manager cannot win: the
+              figure is their contracted days a week, which they change on the
+              Team screen, not something they can settle in a conversation. */}
           {formatLeaveYear(allowance.leave_year_start, allowance.leave_year_end)} · a week off costs{" "}
-          {formatDays(allowance.working_days_per_week)} days. Ask your manager if that&apos;s wrong
+          {formatDays(allowance.working_days_per_week)} days, because that&apos;s how many you work
         </FootNote>
       )}
 

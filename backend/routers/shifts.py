@@ -212,7 +212,15 @@ def set_shift_schedule(
     shift = _get_shift_or_404(venue["id"], shift_id)
     supabase = get_supabase()
 
-    days = [d.model_dump() for d in payload.days]
+    # I2 — a GET body is a valid PUT body: drop the days it marks closed, and
+    # `open` itself is not a shift_days column. A day left open with no times is
+    # a real mistake, not a closed day, so it goes to replace_schedule and comes
+    # back as a 400 naming the field rather than being silently dropped.
+    days = [
+        {k: v for k, v in d.model_dump().items() if k != "open"}
+        for d in payload.days
+        if d.open
+    ]
     try:
         representative = shift_days_service.replace_schedule(supabase, shift_id, days)
     except shift_days_service.ScheduleError as e:

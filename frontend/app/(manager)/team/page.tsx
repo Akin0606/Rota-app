@@ -295,7 +295,16 @@ export default function TeamPage() {
           works_past_10pm: form.isUnder18 && form.worksPast10pm,
           role_ids: form.roleIds,
         });
-        setStaff((prev) => [...prev, created]);
+        // H6 — `create_staff` has no period to answer against, so it returns
+        // submitted: null, and a brand-new row was the only active member on
+        // the list with no status badge at all until a reload. Read next to
+        // "Submitted" / "Not sent" on every other row, a blank reads as
+        // something wrong with the record. Someone created a second ago
+        // provably has no submission for a period that already existed, so this
+        // is the true value rather than an optimistic guess — and with no
+        // period being tracked it stays null, which is what every other row
+        // shows too.
+        setStaff((prev) => [...prev, period ? { ...created, submitted: false } : created]);
         showToast(`${created.name.split(" ")[0]} added — PIN ${created.pin}`);
       } else if (sheetMode === "edit" && editingId) {
         const workingDays = Number(form.workingDays);

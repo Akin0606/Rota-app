@@ -145,10 +145,13 @@ function ResultState({
   onReviewRota: () => void;
 }) {
   const filled = result.assignments.filter((a) => a.staff_id).length;
-  const gaps =
-    result.uncovered.length +
-    result.under_covered.reduce((sum, u) => sum + Math.max(0, u.required - u.assigned), 0);
-  const totalRequired = filled + gaps;
+  // H2 — this used to be `uncovered.length + Σ(required - assigned)`, which is
+  // neither slots nor bodies: it counts one body for an uncovered slot that may
+  // need three, and real bodies for a short one. Read beside the rota page's
+  // "11 gaps to fill · 6 uncovered, 5 short" it looked like the same figure
+  // disagreeing with itself. It is now the same count the rota page uses — a
+  // slot with a problem — so there is one definition of a gap in the product.
+  const gapSlots = result.uncovered.length + result.under_covered.length;
   const compliant = result.conflicts === 0;
 
   // Name the specific unfilled slots so a gap is never a silent number.
@@ -171,39 +174,43 @@ function ResultState({
         <ManagerIcon name="check" size={30} strokeWidth={2.25} />
       </div>
       <div className="mb-1.5 text-[21px] font-medium tracking-[-0.4px] text-ink">Rota generated</div>
+      {/* Two different nouns on purpose. "N of M filled" put an assignment
+          count over a slot count and invited the reader to subtract them. */}
       <div className="mb-6 text-[13px] text-ink-muted">
-        {filled} of {totalRequired} shift{totalRequired === 1 ? "" : "s"} filled ·{" "}
-        {compliant
-          ? "all compliance rules met"
-          : `${result.conflicts} to review`}
+        {filled} shift{filled === 1 ? "" : "s"} assigned ·{" "}
+        {compliant ? "all compliance rules met" : `${result.conflicts} to review`}
       </div>
 
       <div className="mb-3.5 flex w-full gap-2.5">
         <div className="flex-1 rounded-cp-panel border-[0.5px] border-hairline bg-surface-card p-3.5">
           <div className="text-[22px] font-medium text-cp-green">{filled}</div>
-          <div className="mt-0.5 text-[11px] text-ink-muted">shifts filled</div>
+          <div className="mt-0.5 text-[11px] text-ink-muted">shifts assigned</div>
         </div>
         <div className="flex-1 rounded-cp-panel border-[0.5px] border-hairline bg-surface-card p-3.5">
-          <div className={`text-[22px] font-medium ${gaps > 0 ? "text-cp-amber" : "text-ink"}`}>{gaps}</div>
-          <div className="mt-0.5 text-[11px] text-ink-muted">gap{gaps === 1 ? "" : "s"}</div>
+          <div className={`text-[22px] font-medium ${gapSlots > 0 ? "text-cp-amber" : "text-ink"}`}>
+            {gapSlots}
+          </div>
+          <div className="mt-0.5 text-[11px] text-ink-muted">
+            slot{gapSlots === 1 ? "" : "s"} short
+          </div>
         </div>
       </div>
 
-      {gaps > 0 && (
+      {gapSlots > 0 && (
         <div className="mb-[22px] flex w-full items-start gap-2.5 rounded-cp-control border-[0.5px] border-cp-amber/30 bg-cp-amber-soft px-3.5 py-3 text-left">
           <span className="mt-0.5 text-cp-amber">
             <ManagerIcon name="alert-triangle" size={16} />
           </span>
           <div className="text-[12px] leading-[1.45] text-ink">
             <strong className="font-medium">
-              {gaps} shift{gaps === 1 ? "" : "s"} couldn&apos;t be filled
+              {gapSlots} slot{gapSlots === 1 ? "" : "s"} couldn&apos;t be filled
             </strong>{" "}
             — {shownGaps.join(", ")}
             {moreGaps > 0 ? `, +${moreGaps} more` : ""}. No eligible staff free; review on the rota.
           </div>
         </div>
       )}
-      {gaps === 0 && <div className="mb-[22px]" />}
+      {gapSlots === 0 && <div className="mb-[22px]" />}
 
       <div className="flex w-full gap-2.5">
         <button
