@@ -98,16 +98,17 @@ actively misleading; trust the tokens, not memory):
 is **fully built — batches 0 through 10** (`ee18af0`, `57fc701`, `a396ee5`,
 `55ec56e`, then `389216a` … `c1e8ab9`). Batches 4–10 were run in one pass on the
 user's "batch 4-10 nonstop" instruction and pushed at the end of it. Nothing is
-merged to `main`, so prod is untouched and migration `028` still has not run
-there.
+merged to `main`, so prod is untouched **by this work** and migration `028`
+still has not run there. (Prod is not untouched in general — the billing session
+applied `029` to it directly; see Migration state below.)
 
-**One migration in the whole plan, and it is NOT applied anywhere yet:**
-`030_works_past_10pm.sql` (batch 8) adds `staff_members.works_past_10pm`.
-`029` was taken by the concurrent billing session. Until 030 runs, every
-under-18 reads as `works_past_10pm = false`, i.e. the 22:00–06:00 restricted
-period — which is the *stricter* of the two windows, so an unmigrated database
-is conservative rather than unsafe. It applies to staging on the next Render
-deploy of `staging`.
+**One migration in the whole plan: `030_works_past_10pm.sql`** (batch 8) adds
+`staff_members.works_past_10pm`. `029` was taken by the concurrent billing
+session. **It is applied to STAGING** (2026-09-06 22:18 UTC, on the deploy of
+`2d8414e`) and **not to prod** — it runs there the moment `staging` merges to
+`main`. Until it runs, every under-18 reads as `works_past_10pm = false`, i.e.
+the 22:00–06:00 restricted period — the *stricter* of the two windows, so an
+unmigrated database is conservative rather than unsafe.
 
 **Uncommitted and NOT from this work — leave alone:** a Stripe billing feature
 (`routers/billing.py`, `scripts/setup_stripe.py`, `(manager)/billing/page.tsx`,
@@ -134,11 +135,18 @@ wizard → live venue), the six-batch staff UI rebuild, the staff-UX overhaul
 redesign, the availability per-day sync, and marketing site v1→v3.
 `staff-ui-rebuild` is a **stale branch**; `main` is ahead of it.
 
-**Migration state:** prod DB is at 27 migrations (`main`). `028_suggestions.sql`
-is on `staging` and applied to the staging DB. It applies to prod the moment
-`staging` merges to `main` — and per the 027 incident a migrate failure takes the
-**whole prod API** down, not just the feature. Move migrations to a Render
-pre-deploy step before that merge.
+**Migration state (re-read from both databases 2026-09-07, this section had it
+wrong): prod is at 28 rows, with a hole.** Prod has `…026, 027, 029` — the
+billing session applied `029_subscriptions.sql` straight to prod on 2026-09-01,
+skipping `028_suggestions.sql`, which is on `staging` only. Staging has all of
+`027, 028, 029, 030`. **The out-of-order gap is safe**: `scripts/migrate.py`
+computes `pending` as a *filename-set difference* and applies in `sorted()`
+order, so the `staging` → `main` merge applies `028` then `030` and skips the
+already-present `029`; the two pending files are independent (a new
+`suggestions` table, a new `staff_members` column). What is NOT safe is the
+blast radius — per the 027 incident a migrate failure takes the **whole prod
+API** down, not just the feature. Move migrations to a Render pre-deploy step
+before that merge.
 
 **Uncommitted now:** only the concurrent session's Stripe billing work
 (`routers/billing.py`, `(manager)/billing/page.tsx`) and assorted untracked
@@ -256,12 +264,12 @@ Running list. Grouped by what it blocks. Resolved items move to Learnings.
   overlap + remaining-allowance block on the leave queue are typechecked,
   lint-clean and unit-tested at the router, but never clicked, because OTP login
   is off-limits. First real manager session should exercise them.
-- **Migration `030_works_past_10pm.sql` has not been applied to any database.**
+- **Migration `030_works_past_10pm.sql` is applied to staging, not to prod.**
   Batch 8 built the whole WTR reg 6A second-window path on top of it — solver,
   manual-add gate, availability notes, the staff grid's locked slots and the
-  Team toggle. Until it runs, `works_past_10pm` is absent, every under-18 falls
-  to the stricter 22:00–06:00 window, and the Team switch will 400 on save. It
-  goes in on the next Render deploy of `staging`.
+  Team toggle. On prod, until it runs, `works_past_10pm` is absent, every
+  under-18 falls to the stricter 22:00–06:00 window, and the Team switch will
+  400 on save. It goes in with the `staging` → `main` merge.
 
 (Three items once flagged here — staff-nav full-loads, the availability-grid
 colour/vocabulary swap, and calendar-day leave allowance — are **resolved**;
@@ -416,10 +424,65 @@ Sound where it counts, with two known-weak areas flagged in-code:
 - **Never touch the OTP / PIN auth flow without flagging first** (working rule).
 
 ## Learnings (append after each session — most recent first)
+- **Render reported a deploy "Live" while still serving the previous image, and
+  the only thing that caught it was diffing the deployed OpenAPI against a
+  locally generated one.** After pushing batches 4–10, staging's `/health` was
+  200 and the dashboard showed `2d8414e` deployed successfully in 1m19s. The 027
+  entry below warns about this shape, but its rule is scoped to "after a
+  failed→recovered deploy" — **this deploy never reported a failure at all**, so
+  that rule as written would never have fired. Widen it: the trigger is *any*
+  deploy, green ones included. **The decisive probe: `curl /openapi.json` and
+  set-diff `paths` and `components.schemas` against
+  `main.app.openapi()` generated from the local tree.** It named the gap
+  precisely — one missing path (`/api/shifts/days`) and four missing schemas —
+  where "does the site load" would have said everything was fine. **Two
+  measurement traps on the way:** `grep -c` counts *lines*, and a minified
+  `openapi.json` is one line, so every marker read as 1 or 0 and looked like a
+  count; use `grep -o | wc -l`. And `GET /api/shifts/days` returned **405, not
+  404**, because `/api/shifts/{shift_id}` matches it with `shift_id="days"` — a
+  405 there is not evidence the new route exists. **The deploy log held the
+  actual tell:** the new instance booted, applied migration 030, answered one
+  `/health` 200, then logged `Shutting down` eleven seconds later — and Render
+  printed "Your service is live 🎉" thirty seconds after that. **Fix: Manual
+  Deploy → "Clear build cache & deploy" on the same commit**, which forced a
+  full rebuild (fresh `pip install`, `COPY backend/` re-run) and came up correct
+  — 91 → 92 paths, every marker matching local. The cached `COPY backend/
+  backend/` layer completing in 0.0s on the failed build is the suspect.
+  **Standing rule, now with a cheap tool: never treat a green Render deploy as
+  proof. Diff the deployed OpenAPI against the local one.**
+- **Batch 8's young-worker window and batch 10's per-week deadline are both
+  verified live on real staging data — the first time this per-day work has been
+  proven outside a mock.** The Gatehouse Tavern is the venue that makes it
+  provable: Tuesday shut, Fri/Sat closing at 1am, Sunday at 10:30pm, two
+  under-18s. Straight `POST /api/availability/the-gatehouse-tavern/week` with a
+  real PIN, three weeks × two staff: the adult gets `night_window_label: null`
+  and no `restricted` flags; the under-18 gets `'10pm and 6am'` and `restricted`
+  on **every** Evening shift-day including Sunday's 10:30pm close (it runs 30
+  minutes past the window) and none on any Day shift — and `day_index 1` is
+  absent from both, so the closed-day gate holds. **The deadline was the one
+  worth seeing in the browser, and checking it corrected this file twice.** The
+  old label was NOT hardcoded — `availability._get_rules` derives
+  `avail_closes_day`/`_time` from `compute_for_venue`, i.e. the week *currently
+  collecting*, and pastes that one answer onto every week in the switcher. So it
+  read a genuinely correct "closes Friday, 5am" for one week and the same
+  sentence for all the others, which is exactly why it survived so long.
+  (`"Wednesday"`/`"23:00"` is only the literal fallback for a venue with no
+  computable window — and note the venue's own `scheduling_rules` row still
+  *stores* Wednesday 23:00, which nothing reads; the columns are legacy and the
+  API overwrites them on the way out.) It now reads "closes **Fri 11 Sept,
+  5am**" on w/c 14 Sept and "**Fri 18 Sept**, 5am" on w/c 21 Sept — each the
+  Friday of the *previous* week, which is what the notice formula actually
+  produces — while the current week and the one after it, whose windows have
+  already shut, both say plainly "closed". The same screen shows `6 of 6 days`,
+  Tuesday as "Closed", and Fri/Sat evenings as `6pm–1am`. **Verification note: the Browser pane's `computer` click no-opped
+  again** (documented); driving `element.click()` through `javascript_tool`
+  worked, and React's controlled input needs the native value setter
+  (`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set`)
+  plus a bubbling `input` event — `i.value = x` alone is discarded on re-render.
 - **`FIX_PLAN.md` batches 4–10 built in one pass ("batch 4-10 nonstop"),
   committed and pushed (`389216a`…`c1e8ab9`). The plan is now fully built.** One
-  migration in the whole run — `030_works_past_10pm.sql`, **not yet applied
-  anywhere.** The single most useful pattern, again: the batch that changed the
+  migration in the whole run — `030_works_past_10pm.sql`, now applied to
+  staging. The single most useful pattern, again: the batch that changed the
   most behaviour changed the least code, because the work was deciding *where*
   the rule belongs.
 - **The recurring shape across all seven batches: two surfaces each holding their
