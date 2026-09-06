@@ -262,6 +262,10 @@ export type WeekShiftDay = {
   day_index: number;
   start_time: string;
   end_time: string;
+  // This exact shift-day falls inside the viewer's young-worker restricted
+  // period, so the solver can never assign it to them. Computed on the backend
+  // against the same times the solver gates on. Always false for an adult.
+  restricted?: boolean;
 };
 
 // A shift as the availability grid needs it: which days it runs and the real
@@ -286,6 +290,9 @@ export type WeekAvailability = {
   prefilled: boolean;
   // The cron auto-copied this week's pattern (§6b); drives a heads-up banner.
   auto_submitted: boolean;
+  // Set only for a 16-or-17-year-old: their restricted period, worded for
+  // display ("10pm and 6am" / "11pm and 7am"). null for everyone else.
+  night_window_label?: string | null;
 };
 
 export function getWeekAvailability(
@@ -620,6 +627,10 @@ export type StaffManager = {
   pin: string;
   is_active: boolean;
   is_under_18: boolean;
+  // WTR 1998 reg 6A: their contract provides for work after 10pm, so their
+  // restricted period is 11pm–7am rather than 10pm–6am. Only meaningful
+  // alongside is_under_18.
+  works_past_10pm: boolean;
   // Self-registered, awaiting approval (§3). Orthogonal to is_active.
   pending: boolean;
   submitted: boolean | null;
@@ -713,6 +724,7 @@ export function createStaff(staff: {
   phone?: string | null;
   role: string;
   is_under_18?: boolean;
+  works_past_10pm?: boolean;
   role_ids?: string[];
 }): Promise<StaffManager> {
   return authedRequest(`/api/staff`, {
@@ -915,6 +927,7 @@ export function updateStaff(
     role: string;
     is_active: boolean;
     is_under_18: boolean;
+    works_past_10pm: boolean;
     working_days_per_week: number;
     annual_leave_days: number | null;
     role_ids: string[];
@@ -943,7 +956,7 @@ export function resetStaffPin(id: string): Promise<StaffManager> {
 // Approve a pending self-registration — sets role + U18 and activates (§3).
 export function approveStaff(
   id: string,
-  body: { role: string; is_under_18: boolean; role_ids: string[] },
+  body: { role: string; is_under_18: boolean; works_past_10pm?: boolean; role_ids: string[] },
 ): Promise<StaffManager> {
   return authedRequest(`/api/staff/${id}/approve`, {
     method: "POST",

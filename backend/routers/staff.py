@@ -200,6 +200,7 @@ def create_staff(payload: StaffCreateRequest, manager: dict = Depends(get_curren
                 "role": payload.role,
                 "pin": pin,
                 "is_under_18": payload.is_under_18,
+                "works_past_10pm": payload.works_past_10pm,
             }
         )
         .execute()
@@ -252,6 +253,7 @@ def approve_staff(
             {
                 "role": payload.role,
                 "is_under_18": payload.is_under_18,
+                "works_past_10pm": payload.works_past_10pm,
                 "pending": False,
                 "is_active": True,
             }

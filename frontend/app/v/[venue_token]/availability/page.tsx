@@ -148,6 +148,10 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   // the render falls back to the shift-level list from /auth (see effectiveShifts).
   const [weekShifts, setWeekShifts] = useState<WeekShift[]>([]);
   const [prefilled, setPrefilled] = useState(false);
+  // G3 — set only for a 16-or-17-year-old: the young-worker restricted period
+  // that applies to them, worded by the backend ("10pm and 6am" / "11pm and
+  // 7am"). null for everyone else, which hides the whole explanation.
+  const [nightWindowLabel, setNightWindowLabel] = useState<string | null>(null);
   // Prefilled cells render as a lighter echo until the first touch commits the
   // whole grid to solid (§6a). A non-prefilled week is committed from the start.
   const [committed, setCommitted] = useState(true);
@@ -233,6 +237,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
         setGrid(g);
         setNotes(n);
         setWeekShifts(res.shifts ?? []);
+        setNightWindowLabel(res.night_window_label ?? null);
         setEditable(res.editable);
         setPrefilled(res.prefilled);
         // A prefilled week starts uncommitted (echo cells); a real saved week
@@ -245,6 +250,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
           setGrid({});
           setNotes({});
           setWeekShifts([]);
+          setNightWindowLabel(null);
           setEditable(true);
           setPrefilled(false);
           setCommitted(true);
@@ -270,7 +276,10 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   // shift-level list from /auth treated as running every day, so the grid never
   // flashes empty and pre-per-day venues render exactly as before.
   const shiftsByDay = useMemo(() => {
-    const map: Record<number, { id: string; name: string; start_time: string; end_time: string }[]> = {
+    const map: Record<
+      number,
+      { id: string; name: string; start_time: string; end_time: string; restricted: boolean }[]
+    > = {
       0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [],
     };
     if (weekShifts.length > 0) {
@@ -282,6 +291,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
               name: s.name,
               start_time: d.start_time,
               end_time: d.end_time,
+              restricted: d.restricted ?? false,
             });
           }
         }
@@ -289,7 +299,15 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
     } else if (data) {
       for (const s of data.shifts) {
         for (let d = 0; d < 7; d += 1) {
-          map[d].push({ id: s.id, name: s.name, start_time: s.start_time, end_time: s.end_time });
+          map[d].push({
+            id: s.id,
+            name: s.name,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            // The /auth fallback carries no per-day definitions, so it can't
+            // know either — never claim a slot is legally barred off stale data.
+            restricted: false,
+          });
         }
       }
     }
@@ -302,6 +320,14 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
   // B8 — a note is about a day you might work. Offering a day the venue shuts
   // invites a note nobody will ever read against a shift that doesn't exist.
   const openDayIndexes = DAY_LABELS.map((_, d) => d).filter((d) => shiftsByDay[d].length > 0);
+
+  // G3 — the days carrying at least one slot the young-worker rules bar. Only
+  // ever non-empty for a 16-or-17-year-old (the backend marks nothing for an
+  // adult), and it names the actual days so the notice is checkable against the
+  // grid right below it rather than an abstract statement of law.
+  const restrictedDayLabels = openDayIndexes
+    .filter((d) => shiftsByDay[d].some((sl) => sl.restricted))
+    .map((d) => DAY_LABELS[d]);
 
   async function handleToggleAutoSubmit() {
     if (!pin) return;
@@ -521,6 +547,24 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
         </div>
       )}
 
+      {/* G3 — a 16-or-17-year-old can tick green on an evening the law will
+          never let the solver give them. Say so on their own screen, naming the
+          days, so an empty rota reads as the rule it is and not as the manager
+          freezing them out. */}
+      {nightWindowLabel && restrictedDayLabels.length > 0 && (
+        <div className="mb-3.5 flex items-start gap-2 rounded-cp-control border-[0.5px] border-[var(--c-hairline)] bg-surface-page px-3.5 py-2.5 text-[12px] text-ink-muted">
+          <span className="mt-[1px] shrink-0">
+            <Icon name="lock" size={14} />
+          </span>
+          <span className="text-left leading-[1.45]">
+            You&apos;re set up as a 16 or 17 year-old, so you can&apos;t be given work between{" "}
+            {nightWindowLabel}. The locked slots ({restrictedDayLabels.join(", ")}) run past that,
+            so they won&apos;t come to you — mark them if you like, it just won&apos;t change that.
+            If that looks wrong, ask your manager to check your details.
+          </span>
+        </div>
+      )}
+
       <div className={!editable || weekLoading ? "pointer-events-none opacity-50" : ""}>
         {DAY_LABELS.map((_, dayIndex) => {
           const date = addDays(weekStart, dayIndex);
@@ -570,7 +614,7 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                               : state === "no"
                                 ? "can't work"
                                 : "no answer yet"
-                        }`}
+                        }${shift.restricted ? " — can't be given to you, runs past your legal hours" : ""}`}
                         // ~180ms colour settle (kept from before) + a light press-
                         // scale (apple-design: respond on press). transform/opacity
                         // only; no transition-all. Reduced-motion is handled globally
@@ -582,6 +626,16 @@ export default function StaffAvailabilityPage({ params }: { params: { venue_toke
                             <Icon name={STATE_GLYPH[state]!} size={11} strokeWidth={2.5} />
                           )}
                           <span className="truncate text-[12px] font-medium">{shift.name}</span>
+                          {/* G3 — the slot stays tappable (their answer is still
+                              a true statement, and it becomes usable the moment
+                              a manager records a contract that allows later
+                              work), but it must not look like a shift they
+                              might get. */}
+                          {shift.restricted && (
+                            <span className="shrink-0 text-ink-muted">
+                              <Icon name="lock" size={10} strokeWidth={2} />
+                            </span>
+                          )}
                         </div>
                         <div className="mt-0.5 truncate text-[11px] text-ink-muted transition-colors duration-[350ms]">
                           {compactTimeRange(shift.start_time, shift.end_time)}

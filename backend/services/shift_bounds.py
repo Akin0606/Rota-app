@@ -19,10 +19,15 @@ once per request from the venue's `shift_days` rows (see `index_shift_days`).
 
 from __future__ import annotations
 
-# 6am-10pm is the under-18 night-safe window; kept here so night detection and
-# the solver share one definition.
+# The under-18 night-safe window, kept here so night detection and the solver
+# share one definition. WTR 1998 reg 6A: the restricted period is 22:00-06:00,
+# or 23:00-07:00 where the young worker's contract provides for work after 10pm
+# — hence a second pair rather than a single constant. Which pair applies is a
+# fact about the person (`staff_members.works_past_10pm`), not the shift.
 NIGHT_SAFE_START = 6.0
 NIGHT_SAFE_END = 22.0
+LATE_NIGHT_SAFE_START = 7.0
+LATE_NIGHT_SAFE_END = 23.0
 
 
 # --------------------------------------------------------------------------- #
@@ -89,10 +94,21 @@ def duration_hours(start_str: str, end_str: str) -> float:
     return end - start
 
 
-def touches_night(start_str: str, end_str: str) -> bool:
-    """True if any part of the shift falls between 22:00 and 06:00."""
+def touches_night(
+    start_str: str,
+    end_str: str,
+    safe_start: float = NIGHT_SAFE_START,
+    safe_end: float = NIGHT_SAFE_END,
+) -> bool:
+    """True if any part of the shift falls inside the restricted period.
+
+    The window is a parameter because it is a fact about the *worker*, not the
+    shift: WTR 1998 reg 6A restricts a 16-17 year-old to outside 22:00-06:00,
+    or outside 23:00-07:00 where their contract provides for work after 10pm.
+    Defaults to the stricter pair, so every existing caller is unchanged.
+    """
     start, end = bounds(start_str, end_str)
-    return not (start >= NIGHT_SAFE_START and end <= NIGHT_SAFE_END)
+    return not (start >= safe_start and end <= safe_end)
 
 
 # --------------------------------------------------------------------------- #
@@ -151,10 +167,16 @@ def duration_for(
 
 
 def touches_night_for(
-    shift: dict, day_index: int, shift_days_by_key: dict | None = None
+    shift: dict,
+    day_index: int,
+    shift_days_by_key: dict | None = None,
+    safe_start: float = NIGHT_SAFE_START,
+    safe_end: float = NIGHT_SAFE_END,
 ) -> bool:
-    """Whether (shift, day) touches 22:00-06:00, via the per-day bounds."""
-    return touches_night(*bounds_for(shift, day_index, shift_days_by_key))
+    """Whether (shift, day) falls inside the restricted period, per-day."""
+    return touches_night(
+        *bounds_for(shift, day_index, shift_days_by_key), safe_start, safe_end
+    )
 
 
 def staffing_for(

@@ -79,7 +79,7 @@ def _gather_export_data(
     )
     staff = sorted(
         supabase.table("staff_members")
-        .select("id, name, email, role, is_under_18")
+        .select("id, name, email, role, is_under_18, works_past_10pm")
         .eq("venue_id", venue_id)
         .eq("is_active", True)
         .execute()
@@ -298,7 +298,7 @@ def _build_summary(
     if not solved:
         u18_staff = (
             supabase.table("staff_members")
-            .select("id, name, is_under_18")
+            .select("id, name, is_under_18, works_past_10pm")
             .eq("venue_id", venue_id)
             .eq("is_active", True)
             .eq("pending", False)
@@ -519,7 +519,7 @@ def approve_claim(
         supabase.table("staff_members")
         # `email` so the approval can reach them — a claim decided in the app
         # and never sent is a shift someone doesn't know they're working.
-        .select("id, name, email, is_under_18")
+        .select("id, name, email, is_under_18, works_past_10pm")
         .eq("id", claimant_id)
         .eq("venue_id", venue["id"])
         .limit(1)
@@ -769,7 +769,7 @@ def approve_swap(
         supabase.table("staff_members")
         # `email` so both sides can be told the outcome — a swap is the one
         # action where two people's plans change at once.
-        .select("id, name, email, is_under_18")
+        .select("id, name, email, is_under_18, works_past_10pm")
         .eq("id", swap["initiator_staff_id"])
         .eq("venue_id", venue["id"])
         .limit(1)
@@ -777,7 +777,7 @@ def approve_swap(
     )
     recipient_res = (
         supabase.table("staff_members")
-        .select("id, name, email, is_under_18")
+        .select("id, name, email, is_under_18, works_past_10pm")
         .eq("id", swap["recipient_staff_id"])
         .eq("venue_id", venue["id"])
         .limit(1)
@@ -996,7 +996,7 @@ def run_solver_for_period(venue: dict, period: dict, *, note: str = "") -> dict:
 
     staff = (
         supabase.table("staff_members")
-        .select("id, name, is_under_18")
+        .select("id, name, is_under_18, works_past_10pm")
         .eq("venue_id", venue["id"])
         .eq("is_active", True)
         # Self-registered members awaiting approval are never scheduled — an
@@ -1238,7 +1238,7 @@ def edit_assignment(
     # never be assignable, and must never even reveal whether it exists.
     staff_res = (
         supabase.table("staff_members")
-        .select("id, name, is_under_18, pending")
+        .select("id, name, is_under_18, works_past_10pm, pending")
         .eq("id", payload.staff_id)
         .eq("venue_id", venue["id"])
         .limit(1)

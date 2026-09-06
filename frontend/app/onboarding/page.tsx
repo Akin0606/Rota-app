@@ -851,12 +851,12 @@ function OnboardingWizard() {
             <input className="ob-in" value={mName} onChange={(e) => setMName(e.target.value)} placeholder="Name" style={{ marginBottom: 10 }} />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 2 }}>
               <div>
-                <div className="ob-rn">Under 18?</div>
-                <div className="ob-rt">applies safe-hours rules</div>
+                <div className="ob-rn">16 or 17?</div>
+                <div className="ob-rt">applies young-worker hour limits</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span className={`ob-swlabel ${mU18 ? "on" : ""}`}>{mU18 ? "Yes" : "No"}</span>
-                <button className={`ob-sw ${mU18 ? "on" : ""}`} onClick={() => setMU18((u) => !u)} aria-label="Under 18" />
+                <button className={`ob-sw ${mU18 ? "on" : ""}`} onClick={() => setMU18((u) => !u)} aria-label="16 or 17" />
               </div>
             </div>
             <button className="ob-btn" style={{ marginTop: 12, padding: 12 }} onClick={handleAddMember} disabled={saving}>Add to team</button>
@@ -907,7 +907,7 @@ function OnboardingWizard() {
           {hasU18 && (
             <div className="ob-si u18">
               <span className="ic"><OIcon name="shield-check" size={17} /></span>
-              <div><div className="ob-sit">Under-18 rules — locked on</div><div className="ob-sis">You added under-18 staff, so 5 hard limits always apply</div></div>
+              <div><div className="ob-sit">Young-worker rules — locked on</div><div className="ob-sis">You added 16 or 17 year-olds, so 5 hard limits always apply</div></div>
             </div>
           )}
         </div>

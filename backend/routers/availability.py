@@ -38,6 +38,7 @@ from services import (
 )
 from services.auth_service import INACTIVE_VENUE_MESSAGE
 from services.pin_service import generate_unique_pin
+from services import solver
 from services.solver import UNAVAILABLE, check_manual_assignment
 from routers.rota import _load_shift_days_index
 
@@ -200,15 +201,24 @@ def _get_shifts(venue_id: str) -> list[dict]:
     )
 
 
-def _week_shifts(venue_id: str) -> list[dict]:
+def _week_shifts(venue_id: str, staff: dict | None = None) -> list[dict]:
     """Per-day shift definitions for the availability grid: each shift plus the
     list of days it actually runs and the real per-day start/end times. A closed
     day is omitted. An unmigrated shift (no `shift_days` rows) falls back to
     running all 7 days at the shift-level time via `shift_bounds`, so the payload
     is byte-identical to the old shift-level grid until a manager diverges a
-    shift in the per-day editor."""
+    shift in the per-day editor.
+
+    When `staff` is a 16-or-17-year-old, each day is additionally marked
+    `restricted` if it falls inside the young-worker window that applies to
+    them. That flag is computed here, off the same accessor the solver gates on,
+    so the grid can say which evenings can't be given to them instead of letting
+    them tick green on a shift they will never be offered (G3).
+    """
     shifts = _get_shifts(venue_id)
     idx = _load_shift_days_index([s["id"] for s in shifts])
+    under18 = bool(staff and staff.get("is_under_18"))
+    night = solver.night_window(staff or {}) if under18 else None
     out: list[dict] = []
     for s in shifts:
         days = []
@@ -216,7 +226,22 @@ def _week_shifts(venue_id: str) -> list[dict]:
             if not shift_bounds.exists_on_day(s, d, idx):
                 continue
             start, end = shift_bounds.bounds_for(s, d, idx)
-            days.append({"day_index": d, "start_time": start, "end_time": end})
+            restricted = False
+            if night is not None:
+                try:
+                    restricted = shift_bounds.touches_night(start, end, *night)
+                except ValueError:
+                    # An unparseable stored time is the solver's problem to warn
+                    # about; here it must not take down the whole grid.
+                    restricted = False
+            days.append(
+                {
+                    "day_index": d,
+                    "start_time": start,
+                    "end_time": end,
+                    "restricted": restricted,
+                }
+            )
         out.append(
             {
                 "id": s["id"],
@@ -566,7 +591,10 @@ def get_week_availability(venue_token: str, payload: WeekAvailabilityRequest):
         ),
         "editable": editable,
         "submissions": submissions,
-        "shifts": _week_shifts(venue["id"]),
+        "shifts": _week_shifts(venue["id"], staff),
+        "night_window_label": (
+            solver.night_window_label(staff) if staff.get("is_under_18") else None
+        ),
     }
 
 
@@ -1055,7 +1083,7 @@ def claim_shift(venue_token: str, payload: AvailabilityClaimRequest):
 
     claimant = (
         supabase.table("staff_members")
-        .select("id, name, role, is_under_18")
+        .select("id, name, role, is_under_18, works_past_10pm")
         .eq("id", staff["id"])
         .limit(1)
         .execute()
@@ -1346,7 +1374,7 @@ def accept_give(venue_token: str, payload: AvailabilityGiveActionRequest):
 
     recipient = (
         supabase.table("staff_members")
-        .select("id, name, role, is_under_18")
+        .select("id, name, role, is_under_18, works_past_10pm")
         .eq("id", staff["id"])
         .limit(1)
         .execute()
@@ -1674,7 +1702,7 @@ def accept_swap(venue_token: str, payload: AvailabilitySwapActionRequest):
 
     initiator_res = (
         supabase.table("staff_members")
-        .select("id, name, is_under_18")
+        .select("id, name, is_under_18, works_past_10pm")
         .eq("id", swap["initiator_staff_id"])
         .limit(1)
         .execute()
@@ -1685,7 +1713,7 @@ def accept_swap(venue_token: str, payload: AvailabilitySwapActionRequest):
 
     recipient = (
         supabase.table("staff_members")
-        .select("id, name, is_under_18")
+        .select("id, name, is_under_18, works_past_10pm")
         .eq("id", staff["id"])
         .limit(1)
         .execute()

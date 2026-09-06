@@ -25,6 +25,31 @@ UNDER18_MAX_HOURS_PER_WEEK = 40.0
 UNDER18_MIN_REST_HOURS = 12.0
 UNDER18_NIGHT_SAFE_START = 6.0  # 6am — shifts may not start before this
 UNDER18_NIGHT_SAFE_END = 22.0  # 10pm — shifts may not run past this
+# WTR 1998 reg 6A gives a second, later restricted period: 23:00-07:00, where
+# the young worker's CONTRACT provides for work after 10pm. Which one applies is
+# a fact about the person, not the shift — `staff_members.works_past_10pm`.
+# Without this the solver knew only the stricter pair, so a pub whose evening
+# ends at 11pm could not roster a 16-year-old on any evening at all, on any day.
+UNDER18_LATE_NIGHT_SAFE_START = 7.0  # 7am
+UNDER18_LATE_NIGHT_SAFE_END = 23.0  # 11pm
+
+
+def night_window(member: dict) -> tuple[float, float]:
+    """The (safe_start, safe_end) pair this staff member's contract puts them in.
+
+    Deliberately keyed off the member dict rather than a bare bool, so a caller
+    that forgets to select the column gets the stricter window — never the
+    looser one — and a row that predates the migration behaves exactly as it did
+    before it.
+    """
+    if member.get("works_past_10pm"):
+        return UNDER18_LATE_NIGHT_SAFE_START, UNDER18_LATE_NIGHT_SAFE_END
+    return UNDER18_NIGHT_SAFE_START, UNDER18_NIGHT_SAFE_END
+
+
+def night_window_label(member: dict) -> str:
+    """"10pm and 6am" / "11pm and 7am" — for the sentence a manager reads."""
+    return "11pm and 7am" if member.get("works_past_10pm") else "10pm and 6am"
 
 
 # Time math lives in services.shift_bounds now — the single module allowed to
@@ -154,12 +179,15 @@ def check_manual_assignment(
                     f"{UNDER18_MAX_HOURS_PER_DAY:.0f}h daily limit for under-18s."
                 ),
             }
-        if shift_bounds.touches_night_for(shift, day_index, shift_days_by_key):
+        safe_start, safe_end = night_window(staff)
+        if shift_bounds.touches_night_for(
+            shift, day_index, shift_days_by_key, safe_start, safe_end
+        ):
             return {
                 "severity": "block",
                 "reason": (
-                    f"{name} is under 18: '{shift['name']}' falls between 10pm and 6am — "
-                    f"under-18s can't work night hours."
+                    f"{name} is under 18: '{shift['name']}' falls between "
+                    f"{night_window_label(staff)} — under-18s can't work night hours."
                 ),
             }
 
@@ -311,6 +339,7 @@ def under18_availability_notes(
     # Membership is the existence gate, exactly as in the solve.
     duration = {}
     touches_night = {}
+    touches_late_night = {}
     seen_unreadable = set()
     for shid, sh in shifts_by_id.items():
         for d in DAYS:
@@ -319,6 +348,10 @@ def under18_availability_notes(
             try:
                 duration[(shid, d)] = shift_bounds.duration_for(sh, d, shift_days_by_key)
                 touches_night[(shid, d)] = shift_bounds.touches_night_for(sh, d, shift_days_by_key)
+                touches_late_night[(shid, d)] = shift_bounds.touches_night_for(
+                    sh, d, shift_days_by_key,
+                    UNDER18_LATE_NIGHT_SAFE_START, UNDER18_LATE_NIGHT_SAFE_END,
+                )
             except ValueError:
                 if shid not in seen_unreadable:
                     unreadable.append(
@@ -333,6 +366,8 @@ def under18_availability_notes(
         if not bool(member.get("is_under_18")):
             continue
         blocked_days = leave_days.get(sid, set())
+        night_map = touches_late_night if member.get("works_past_10pm") else touches_night
+        night_label = night_window_label(member)
 
         # The slots this person could legally be given -- the same membership
         # test generate_rota uses to decide whether to create a variable.
@@ -355,10 +390,10 @@ def under18_availability_notes(
                         f"for under-18s, so this slot can't be used for them."
                     )
                     continue
-                if touches_night[(shid, d)]:
+                if night_map[(shid, d)]:
                     warnings.append(
                         f"{names[sid]} (under 18): available for '{shift['name']}' on {DAY_NAMES[d]}, which "
-                        f"falls between 10pm and 6am — under-18s can't work night hours, so this slot can't "
+                        f"falls between {night_label} — under-18s can't work night hours, so this slot can't "
                         f"be used for them."
                     )
                     continue
@@ -467,7 +502,11 @@ def generate_rota(
     # is ever built for it. A shift-day whose stored time won't parse (G5) is
     # dropped with a warning rather than crashing the whole solve.
     duration: dict[tuple, float] = {}
+    # Two night maps, one per restricted period (reg 6A). Which one a member is
+    # measured against is their contract, so the shift is evaluated for both and
+    # the per-person lookup picks.
     touches_night: dict[tuple, bool] = {}
+    touches_late_night: dict[tuple, bool] = {}
     unreadable: set = set()
     for shid, sh in shifts_by_id.items():
         for d in DAYS:
@@ -476,6 +515,10 @@ def generate_rota(
             try:
                 duration[(shid, d)] = shift_bounds.duration_for(sh, d, shift_days_by_key)
                 touches_night[(shid, d)] = shift_bounds.touches_night_for(sh, d, shift_days_by_key)
+                touches_late_night[(shid, d)] = shift_bounds.touches_night_for(
+                    sh, d, shift_days_by_key,
+                    UNDER18_LATE_NIGHT_SAFE_START, UNDER18_LATE_NIGHT_SAFE_END,
+                )
             except ValueError:
                 # The manager-facing message for this comes from
                 # under18_availability_notes() below, so a plain read of the week
@@ -502,6 +545,11 @@ def generate_rota(
         return (24 + start_b) - end_a
 
     is_under18 = {s["id"]: bool(s.get("is_under_18")) for s in staff}
+    # Per member, the night map their contract puts them in.
+    night_map_for = {
+        s["id"]: (touches_late_night if s.get("works_past_10pm") else touches_night)
+        for s in staff
+    }
     names = {s["id"]: s.get("name") or "Staff member" for s in staff}
 
     availability: dict[tuple, int] = {}
@@ -541,7 +589,7 @@ def generate_rota(
                 # the seconds after a solve.
                 if under18 and duration[(shid, d)] > UNDER18_MAX_HOURS_PER_DAY:
                     continue
-                if under18 and touches_night[(shid, d)]:
+                if under18 and night_map_for[sid][(shid, d)]:
                     continue
                 x[(sid, d, shid)] = model.NewBoolVar(f"x_{sid}_{d}_{shid}")
 

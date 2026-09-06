@@ -48,6 +48,7 @@ type FormState = {
   // Holds role ids; the primary is folded in server-side on save.
   roleIds: string[];
   isUnder18: boolean;
+  worksPast10pm: boolean;
   // Leave fields are edit-only: a new starter gets the venue defaults, and
   // asking for a holiday entitlement while adding someone to a rota is noise.
   workingDays: string;
@@ -69,6 +70,7 @@ const EMPTY_FORM: FormState = {
   role: "Server",
   roleIds: [],
   isUnder18: false,
+  worksPast10pm: false,
   workingDays: "5",
   leaveDays: "",
 };
@@ -186,6 +188,7 @@ export default function TeamPage() {
       // "Also works" excludes the primary role — it's shown by the picker above.
       roleIds: member.role_ids.filter((id) => id !== primaryId),
       isUnder18: member.is_under_18,
+      worksPast10pm: member.works_past_10pm ?? false,
       workingDays: String(member.working_days_per_week ?? 5),
       // Blank means "use the pro-rata figure" rather than a stored zero.
       leaveDays: member.annual_leave_days === null ? "" : String(member.annual_leave_days),
@@ -205,6 +208,7 @@ export default function TeamPage() {
       role: roles.some((r) => r.name === member.role) ? member.role : roles[0]?.name ?? member.role,
       roleIds: member.role_ids.filter((id) => id !== primaryId),
       isUnder18: member.is_under_18,
+      worksPast10pm: member.works_past_10pm ?? false,
       workingDays: String(member.working_days_per_week ?? 5),
       leaveDays: member.annual_leave_days === null ? "" : String(member.annual_leave_days),
     });
@@ -223,6 +227,7 @@ export default function TeamPage() {
       const updated = await approveStaff(editingId, {
         role: form.role,
         is_under_18: form.isUnder18,
+        works_past_10pm: form.isUnder18 && form.worksPast10pm,
         role_ids: form.roleIds,
       });
       setStaff((prev) => prev.map((m) => (m.id === editingId ? { ...m, ...updated } : m)));
@@ -287,6 +292,7 @@ export default function TeamPage() {
           phone: form.phone.trim() || null,
           role: form.role,
           is_under_18: form.isUnder18,
+          works_past_10pm: form.isUnder18 && form.worksPast10pm,
           role_ids: form.roleIds,
         });
         setStaff((prev) => [...prev, created]);
@@ -299,6 +305,7 @@ export default function TeamPage() {
           phone: form.phone.trim() || null,
           role: form.role,
           is_under_18: form.isUnder18,
+          works_past_10pm: form.isUnder18 && form.worksPast10pm,
           working_days_per_week:
             Number.isFinite(workingDays) && workingDays > 0 && workingDays <= 7 ? workingDays : 5,
           // Explicitly null when blank, which returns them to the pro-rata
@@ -757,17 +764,56 @@ export default function TeamPage() {
           </div>
         )}
 
-        <div className="mb-5 flex items-center gap-3 rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3.5 py-3.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cp-icon text-accent">
-            <ManagerIcon name="shield" size={15} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-medium text-ink">Under 18</div>
-            <div className="mt-0.5 text-[11px] leading-[1.4] text-ink-muted">
-              Applies the app&apos;s under-18 rules, always enforced
+        {/* G2 — "Under 18" covered a 15-year-old and a 17-year-old with one
+            switch, and the rules the app enforces are the 16-17 ones. A venue
+            that ticks it for a 15-year-old gets a schedule that looks
+            compliant and isn't. Say which ages it means, and say plainly that
+            under 16 is not something this app handles. */}
+        <div className="mb-3 rounded-cp-control border-[0.5px] border-hairline bg-surface-subtle px-3.5 py-3.5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cp-icon text-accent">
+              <ManagerIcon name="shield" size={15} />
             </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium text-ink">16 or 17</div>
+              <div className="mt-0.5 text-[11px] leading-[1.4] text-ink-muted">
+                Young worker rules apply — always enforced, never overridable
+              </div>
+            </div>
+            <Switch checked={form.isUnder18} onChange={(v) => setForm((f) => ({ ...f, isUnder18: v }))} />
           </div>
-          <Switch checked={form.isUnder18} onChange={(v) => setForm((f) => ({ ...f, isUnder18: v }))} />
+
+          {form.isUnder18 && (
+            <>
+              {/* G1 — WTR 1998 reg 6A. Their restricted period is 10pm-6am
+                  unless their contract provides for work after 10pm, in which
+                  case it's 11pm-7am. Without this a pub whose evening ends at
+                  11pm can't roster a 16-year-old on any evening at all — which
+                  is not what the law says, and the venue's answer to it is to
+                  stop ticking the box above. */}
+              <div className="mt-3 flex items-center gap-3 border-t border-hairline pt-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-medium text-ink">
+                    Contract allows work after 10pm
+                  </div>
+                  <div className="mt-0.5 text-[11px] leading-[1.4] text-ink-muted">
+                    Moves their night limit from 10pm–6am to 11pm–7am, so an
+                    evening that ends at 11pm becomes legal. Only tick it if
+                    their written contract actually says so.
+                  </div>
+                </div>
+                <Switch
+                  checked={form.worksPast10pm}
+                  onChange={(v) => setForm((f) => ({ ...f, worksPast10pm: v }))}
+                />
+              </div>
+
+              <div className="mt-3 border-t border-hairline pt-3 text-[11px] leading-[1.4] text-ink-muted">
+                Under 16 has different rules we don&apos;t handle — check with your
+                local council before rostering anyone that age.
+              </div>
+            </>
+          )}
         </div>
 
         {/* Edit only: a new starter takes the venue defaults, and asking about

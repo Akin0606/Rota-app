@@ -119,6 +119,13 @@ class WeekShiftDayOut(BaseModel):
     day_index: int
     start_time: str
     end_time: str
+    # True when this exact shift-day falls inside the viewing staff member's
+    # young-worker restricted period, so the solver can never assign it to them
+    # (G3). Computed server-side against the same `shift_bounds` the solver
+    # reads — a client re-deriving it from the times would eventually disagree
+    # with the gate that actually blocks the assignment. Always False for an
+    # adult.
+    restricted: bool = False
 
 
 class WeekShiftOut(BaseModel):
@@ -150,6 +157,11 @@ class WeekAvailabilityOut(BaseModel):
     # True when the saved submission was auto-copied by the cron (§6b) and not
     # yet re-affirmed — drives the "we auto-submitted for you" banner.
     auto_submitted: bool = False
+    # Set only for a 16-or-17-year-old: the restricted period that applies to
+    # them, worded for display ("10pm and 6am" / "11pm and 7am" per WTR 1998
+    # reg 6A). None for everyone else, which is also what hides the whole
+    # explanation on the staff grid.
+    night_window_label: Optional[str] = None
 
 
 class AutoSubmitToggleRequest(BaseModel):
@@ -279,6 +291,10 @@ class StaffApproveRequest(BaseModel):
     # activates the member.
     role: str = Field(min_length=1)
     is_under_18: bool = False
+    # Their contract provides for work after 10pm, so WTR 1998 reg 6A puts them
+    # in the 11pm-7am restricted period rather than 10pm-6am. Only meaningful
+    # alongside is_under_18; false keeps the stricter window.
+    works_past_10pm: bool = False
     role_ids: list[str] = []
 
 
@@ -312,6 +328,10 @@ class StaffCreateRequest(BaseModel):
     phone: Optional[str] = None
     role: str = Field(min_length=1)
     is_under_18: bool = False
+    # Their contract provides for work after 10pm, so WTR 1998 reg 6A puts them
+    # in the 11pm-7am restricted period rather than 10pm-6am. Only meaningful
+    # alongside is_under_18; false keeps the stricter window.
+    works_past_10pm: bool = False
     # Additional roles this person can work, beyond their primary `role`. The
     # primary role is always folded in server-side, so eligibility ⊇ primary.
     role_ids: list[str] = []
@@ -326,6 +346,10 @@ class StaffManagerOut(BaseModel):
     pin: str
     is_active: bool
     is_under_18: bool = False
+    # Their contract provides for work after 10pm, so WTR 1998 reg 6A puts them
+    # in the 11pm-7am restricted period rather than 10pm-6am. Only meaningful
+    # alongside is_under_18; false keeps the stricter window.
+    works_past_10pm: bool = False
     # Self-registered, awaiting manager approval (§3). Orthogonal to is_active.
     pending: bool = False
     submitted: Optional[bool] = None
@@ -376,6 +400,7 @@ class StaffUpdateRequest(BaseModel):
     role: Optional[str] = Field(default=None, min_length=1)
     is_active: Optional[bool] = None
     is_under_18: Optional[bool] = None
+    works_past_10pm: Optional[bool] = None
     working_days_per_week: Optional[float] = Field(default=None, gt=0, le=7)
     # Explicitly nullable: clearing it returns this person to the pro-rata
     # calculation rather than pinning whatever number was there before.

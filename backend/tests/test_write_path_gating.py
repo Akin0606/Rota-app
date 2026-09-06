@@ -18,7 +18,7 @@ Mon/Wed/Thu 11am-11pm, Tue closed, Fri/Sat 11am-1am, Sun 12pm-10:30pm.
 import pytest
 from fastapi import HTTPException
 
-from services import shift_bounds
+from services import shift_bounds, solver
 from services.solver import check_manual_assignment
 from tests.fake_supabase import FakeSupabase, patch_supabase
 
@@ -127,12 +127,13 @@ def test_post_open_shift_allows_an_open_day():
     assert fake.rows("rota_assignments")[0]["drop_status"] == "pending_pickup"
 
 
-# --- batch 8: the under-18 night boundary, before the flag exists -----------
+# --- batch 8: the under-18 night boundary, with and without the flag --------
 #
-# Today the restricted period is 22:00-06:00 with no exception. WTR 1998 reg 6A
-# allows 23:00-07:00 where the young worker's contract provides for work after
-# 10pm, which is what batch 8 adds. Each case below says what must happen now
-# and what the flag should do to it.
+# The default restricted period is 22:00-06:00. WTR 1998 reg 6A allows
+# 23:00-07:00 where the young worker's contract provides for work after 10pm,
+# which `staff_members.works_past_10pm` now carries. Each case says what must
+# happen under each window; these used to state the target against a local
+# reimplementation, and now assert it against the real one.
 
 
 @pytest.mark.parametrize(
@@ -149,18 +150,42 @@ def test_post_open_shift_allows_an_open_day():
 def test_night_boundary_cases(start, end, restricted_today, should_flip_with_flag, why):
     assert shift_bounds.touches_night(start, end) is restricted_today, why
 
-    # What the batch 8 window would say. Kept as a local reimplementation on
-    # purpose: it states the target behaviour without asserting it yet, so this
-    # file documents the intended change rather than pre-empting it.
-    lo, hi = shift_bounds.bounds(start, end)
-    restricted_with_flag = not (lo >= 7.0 and hi <= 23.0)
+    restricted_with_flag = shift_bounds.touches_night(
+        start, end, solver.UNDER18_LATE_NIGHT_SAFE_START, solver.UNDER18_LATE_NIGHT_SAFE_END
+    )
     assert (restricted_today and not restricted_with_flag) is should_flip_with_flag, why
 
 
-def test_gatehouse_under18s_are_unrosterable_on_every_evening_today():
-    """Why batch 8 is worth doing: at this venue the current window leaves two
+def test_the_window_is_a_fact_about_the_person_not_the_shift():
+    plain = {"id": "s1", "name": "Amy", "is_under_18": True}
+    contracted = {**plain, "works_past_10pm": True}
+    assert solver.night_window(plain) == (6.0, 22.0)
+    assert solver.night_window(contracted) == (7.0, 23.0)
+    # A caller that forgets to select the column gets the STRICTER window.
+    assert solver.night_window({}) == (6.0, 22.0)
+
+
+def test_gatehouse_under18s_are_unrosterable_on_every_evening_without_the_flag():
+    """Why batch 8 exists: on the default window this venue leaves two
     16-year-olds with no legal evening at all, which reads to them as the
     manager freezing them out."""
     idx = _gatehouse_index()
     open_days = [d for d in range(7) if shift_bounds.exists_on_day(EVENING, d, idx)]
     assert all(shift_bounds.touches_night_for(EVENING, d, idx) for d in open_days)
+
+
+def test_gatehouse_with_the_flag_opens_sunday_to_thursday_and_keeps_the_late_close_shut():
+    """The exit test, on the real venue's real week. Mon/Wed/Thu close at 11pm
+    and Sunday at 10:30pm — all legal on the contracted window. Fri and Sat run
+    to 1am and stay blocked, which is the half of reg 6A that still bites."""
+    idx = _gatehouse_index()
+    late = (solver.UNDER18_LATE_NIGHT_SAFE_START, solver.UNDER18_LATE_NIGHT_SAFE_END)
+    allowed = [
+        d
+        for d in range(7)
+        if shift_bounds.exists_on_day(EVENING, d, idx)
+        and not shift_bounds.touches_night_for(EVENING, d, idx, *late)
+    ]
+    assert allowed == [0, 2, 3, 6], "Mon, Wed, Thu, Sun"
+    for d in (4, 5):
+        assert shift_bounds.touches_night_for(EVENING, d, idx, *late), "Fri/Sat 1am stays shut"
