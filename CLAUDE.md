@@ -94,12 +94,20 @@ actively misleading; trust the tokens, not memory):
 - Every design decision should feel intentional, not templated
 
 ## Current state (living — keep accurate)
-**`staging` is the working branch, 38 commits ahead of `main`, and the newest
-commits are NOT pushed.** `FIX_PLAN.md` batches **0, 1, 3 and 2** are built and
-committed locally (`ee18af0`, `57fc701`, `a396ee5`, `55ec56e`) — nothing is on
-`origin/staging` yet, so **staging.rotally.co.uk is still running the pre-fix
-code**. Nothing is merged to `main`, so prod is untouched and migration `028`
-still has not run there. **No migration in any of these four batches.**
+**`staging` is the working branch, 50 commits ahead of `main`.** `FIX_PLAN.md`
+is **fully built — batches 0 through 10** (`ee18af0`, `57fc701`, `a396ee5`,
+`55ec56e`, then `389216a` … `c1e8ab9`). Batches 4–10 were run in one pass on the
+user's "batch 4-10 nonstop" instruction and pushed at the end of it. Nothing is
+merged to `main`, so prod is untouched and migration `028` still has not run
+there.
+
+**One migration in the whole plan, and it is NOT applied anywhere yet:**
+`030_works_past_10pm.sql` (batch 8) adds `staff_members.works_past_10pm`.
+`029` was taken by the concurrent billing session. Until 030 runs, every
+under-18 reads as `works_past_10pm = false`, i.e. the 22:00–06:00 restricted
+period — which is the *stricter* of the two windows, so an unmigrated database
+is conservative rather than unsafe. It applies to staging on the next Render
+deploy of `staging`.
 
 **Uncommitted and NOT from this work — leave alone:** a Stripe billing feature
 (`routers/billing.py`, `scripts/setup_stripe.py`, `(manager)/billing/page.tsx`,
@@ -132,8 +140,12 @@ is on `staging` and applied to the staging DB. It applies to prod the moment
 **whole prod API** down, not just the feature. Move migrations to a Render
 pre-deploy step before that merge.
 
-**Uncommitted now:** nothing of substance. Assorted untracked design artefacts
-(`*_MOCKUPS.html`, build prompts, `logos/`, agent + skill definitions).
+**Uncommitted now:** only the concurrent session's Stripe billing work
+(`routers/billing.py`, `(manager)/billing/page.tsx`) and assorted untracked
+design artefacts (`*_MOCKUPS.html`, build prompts, `logos/`, agent + skill
+definitions). **`(manager)/billing/page.tsx:63` fails `next lint`
+(`Unexpected any`) and therefore blocks `next build`.** It is not ours; every
+lint run through batches 4–10 was clean apart from that one line.
 
 **The Home/Rota refresh is built** (`APP_BUILD_PLAN.md` + `HOME_ROTA_BUILD_PLAN.md`,
 both corrected in place where they were wrong): Phase 0 brand currency, the four
@@ -197,7 +209,23 @@ was also creating a phantom uncovered gap on the manager's rota
 prefill/auto-submit carry-forward + `check_manual_assignment`.
 (b) the full **live onboarding walkthrough** (throwaway auth user) is unverified
 this session — backend write path + row-building logic are verified, the browser
-click-through is pending a clean session.
+click-through is pending a clean session. **Batch 9 changed that wizard
+substantially** (email capture, per-band coverage, the quiet guard), so the
+walkthrough is now more overdue, not less.
+
+**The per-day model reached the manager surfaces in `FIX_PLAN.md` batches 4–7,
+which is where it stopped being "functionally live" and started being visible.**
+Batch 4 gave every manager screen a per-day read (`GET /api/shifts/days`,
+one query, `shift_days` bundled onto each shift) — before it, Settings, the
+Scheduler, the rota grid and the availability panel each reasoned about the
+whole week from one representative time, which is why The Gatehouse's closed
+Tuesday drew a red uncovered day at hours the venue isn't open. Batch 5 put one
+per-day time resolver on the client (`resolveShiftTimes` /
+`resolveAssignmentShifts` in `lib/utils.ts`) so no screen re-derives it, and
+deleted the dead `rota-grid.tsx` four files were still importing as a type
+module. Batch 7 made the Scheduler's coverage panel **read-only** — it was the only
+editor that could silently flatten the per-day schedule Settings had just built
+— and `propagate_fields` now refuses to flatten a diverging column (409).
 
 ## Roadmap
 Done: staff hub restructure · shift drop+claim (auto-approve like-for-like,
@@ -224,9 +252,16 @@ Running list. Grouped by what it blocks. Resolved items move to Learnings.
   itself is the remaining work; the days-based model in migration `021` is the
   honest interim until it's built.
 - **Manager-side leave controls unverified live** — the Team modal holiday
-  fields and Settings holiday panel (migration `021`) are typechecked and
-  lint-clean but never clicked, because OTP login is off-limits. First real
-  manager session should exercise them.
+  fields, the Settings holiday panel (migration `021`) and now batch 10's
+  overlap + remaining-allowance block on the leave queue are typechecked,
+  lint-clean and unit-tested at the router, but never clicked, because OTP login
+  is off-limits. First real manager session should exercise them.
+- **Migration `030_works_past_10pm.sql` has not been applied to any database.**
+  Batch 8 built the whole WTR reg 6A second-window path on top of it — solver,
+  manual-add gate, availability notes, the staff grid's locked slots and the
+  Team toggle. Until it runs, `works_past_10pm` is absent, every under-18 falls
+  to the stricter 22:00–06:00 window, and the Team switch will 400 on save. It
+  goes in on the next Render deploy of `staging`.
 
 (Three items once flagged here — staff-nav full-loads, the availability-grid
 colour/vocabulary swap, and calendar-day leave allowance — are **resolved**;
@@ -270,9 +305,10 @@ details in Learnings.)
 - **`RotaGrid` renders "On leave" *instead of* "+ Add"**, so the manual-add
   confirm-override the backend genuinely supports has no UI path once a day
   shows leave. Manager has to cancel the leave first.
-- **The manual-add risk popup title is generic** ("This assignment breaks a rest
-  rule") but is now reused for three different confirm reasons (rest-gap,
-  day-off-in-7, max-hours). Should say which rule actually fired.
+- ~~**The manual-add risk popup title is generic**~~ — **fixed** by the rota
+  redesign's B7. `rota-risk-modal.tsx` classifies the solver's reason sentence
+  into a tag + title (Max hours / Rest gap / Day off / On leave), so the popup
+  names the rule that fired. This entry was stale for several sessions.
 - ~~**No in-app path from `generated` back to `collecting`**~~ — **fixed.**
   `reopen_availability` (`generated → collecting`) and `unpublish`
   (`published/confirmed → generated`) now exist in `rota.py`; any stuck week
@@ -311,12 +347,17 @@ details in Learnings.)
   verified and `RESEND_FROM_EMAIL` is set on Render. Manager login OTP goes via
   Supabase's built-in email, unreliable until custom SMTP is configured (this
   also gates return-login for onboarding session 2+).
-- **Automated tests exist only for the solver** now — `backend/tests/` has 45
-  pytest cases covering the compliance-bearing helpers (duration / night-hours /
-  rest-gap / midnight-cross / `"close"`), the shared accessor, and the Batch 3
-  per-day re-key (synthetic late-night venue). Everything else (routers, the
-  frontend) still has **zero coverage** and is verified by hand against one live
-  venue. Next-highest-value targets: the availability submit/claim endpoints.
+- **Backend coverage is now real; the frontend still has none.**
+  `backend/tests/` holds **167 pytest cases** across 14 test files — the
+  compliance-bearing solver helpers, the shared accessor, the per-day re-key,
+  and (since `FIX_PLAN.md` batch 0's `tests/fake_supabase.py` made router code
+  testable at all) period resolution, write-path gating, the per-day read, the
+  shift-days service, open drops, remind honesty, the email guard, the WTR reg
+  6A window, onboarding quietness, the leave overlap and the per-week deadline.
+  Run: `cd backend && PYTHONPATH=. .venv/Scripts/python.exe -m pytest tests -q`.
+  **The frontend still has zero automated tests** and is verified by hand
+  against one live venue. Next-highest-value backend targets: the availability
+  submit endpoint and the claim/give/swap mutations.
 - **PIN brute-force protection is best-effort only** — see Security posture.
 
 ## Security posture (audited — mitigations & known weaknesses)
@@ -375,6 +416,91 @@ Sound where it counts, with two known-weak areas flagged in-code:
 - **Never touch the OTP / PIN auth flow without flagging first** (working rule).
 
 ## Learnings (append after each session — most recent first)
+- **`FIX_PLAN.md` batches 4–10 built in one pass ("batch 4-10 nonstop"),
+  committed and pushed (`389216a`…`c1e8ab9`). The plan is now fully built.** One
+  migration in the whole run — `030_works_past_10pm.sql`, **not yet applied
+  anywhere.** The single most useful pattern, again: the batch that changed the
+  most behaviour changed the least code, because the work was deciding *where*
+  the rule belongs.
+- **The recurring shape across all seven batches: two surfaces each holding their
+  own copy of a rule, agreeing right up until the data got interesting.** The
+  manager screens each derived a week from one representative shift time (batch
+  4). Five screens hand-wrote the same per-day time merge and two skipped it, so
+  the printable staff-room sheet quoted Monday's close on a Friday that runs to
+  1am (batch 5). The Scheduler's coverage steppers and Settings' per-day editor
+  both claimed to own coverage, and the Scheduler silently won by flattening
+  (batch 7). The generate overlay counted gaps as bodies while the rota page
+  counted slots, both on screen at once (batch 10, H2). **In every case the fix
+  was to delete one of the two definitions, not to reconcile them.**
+- **A read-only editor is a real fix, not a cop-out (batch 7).** The Scheduler's
+  coverage panel could not express "two on weekdays, three on Saturday" — one
+  number per shift — so saving it wrote that number onto every day, destroying a
+  per-day schedule with no warning and no undo while presenting itself as a peer
+  editor. It now *states* the real per-day coverage and links to the one editor
+  that can change it. `propagate_fields` additionally refuses to flatten a column
+  whose values currently differ (`DivergenceError` → 409 naming the field and its
+  distinct values), and the router does the per-day write **first** so a refusal
+  leaves nothing half-written. The batch-0 characterization test that pinned the
+  flattening now pins the refusal — which is exactly what it was written for.
+- **WTR 1998 reg 6A has a second restricted period, and we only knew about the
+  first (batch 8).** A young worker's restricted period is 22:00–06:00, **or
+  23:00–07:00 where the contract provides for work after 10pm**. At The Gatehouse
+  that is the difference between two 16-year-olds having no legal evening at all
+  and them working Sunday through Thursday. New column
+  `staff_members.works_past_10pm`; `solver.night_window(member)` is keyed off the
+  member dict **so a caller that forgets the column gets the stricter window**,
+  which is why an unmigrated database is conservative rather than unsafe.
+- **The interesting half of batch 8 was the screen, not the solver.** `/week`
+  now marks each shift-day `restricted` for the viewing staff member, computed
+  **server-side off the same accessor the solve gates on** — a client
+  re-deriving it from the times would eventually disagree with the gate that
+  actually blocks the assignment. Two deliberate calls: a **closed day is absent,
+  not locked** (blaming the law for a shut Tuesday blames the wrong thing), and
+  locked slots stay **tappable**, because "I could work this" is still a true
+  statement and becomes usable the moment a manager records the contract.
+- **Batch 9's silent-email bug was live, not theoretical, and the reason it had
+  never fired is the reason it was about to.** `cron_scheduler.refresh_jobs()` is
+  called by nine endpoints and, inside a notice window, synchronously re-enters
+  `open_availability_for_venue` — so creating a shift mid-wizard could open
+  availability and email a half-built roster. It was quiet only because
+  onboarding could not capture staff emails, which **E1 in the same batch fixes**.
+  The guard went inside `open_availability_for_venue`, next to the send, not on
+  any of the nine callers; and `update_setup_state` gained a `refresh_jobs()` so
+  finishing the wizard puts the capability back the guard removed.
+- **`not state` is not `state is None`, and a database answered it faster than
+  reasoning could.** `setup_is_complete` first read an empty `setup_state` blob
+  as "finished", because `not {}` is `True`. Rather than guess whether `{}` ever
+  occurs, one read-only prod query (`select setup_state, count(*) from venues
+  group by 1`) showed only `null` — so the predicate tightened to an explicit
+  `is None` with no risk of stranding a real venue mid-wizard.
+- **A deadline without a date is not a shorter deadline, it is a different one
+  (batch 10, I3).** The staff availability screen has a month-ahead week
+  switcher and labelled every week "closes Friday, 5am", derived from whichever
+  week was collecting. The formula is `earliest shift start − (72h notice +
+  buffer)`, which puts a week's deadline in the **previous** week — so a bare
+  weekday points at the wrong Friday entirely. `/week` now carries that week's
+  own close (`notice_window.close_for_week`, which also honours a manager's
+  per-week override — the case the old label could not represent at all), and a
+  venue with no shifts says nothing rather than falling back to a day nobody
+  chose. The test that caught my own wrong assumption asserted the close lands
+  *inside* the week; it lands the Friday before.
+- **A `title` tooltip is not a UI on a phone (batch 10, I5).** Availability notes
+  — the only escape valve a staff member has for "mornings only" — reached the
+  manager solely as a hover on a 📝 emoji, inside a 640px table that scrolls
+  sideways. The notes now print as a list **outside** the scroller, which is the
+  part that has to be readable one-handed behind the bar.
+- **H4's overlap set is built from every live request at the venue, not the rows
+  the query returned.** A `status=pending` filter narrows the result — and if the
+  overlaps were derived from those rows, the already-approved week off would
+  disappear exactly when the manager most needs to see it. Two extra queries
+  total, regardless of queue size, with the allowance cached per person so three
+  requests from one member don't run the same computation three times.
+- **Two facts to carry forward.** `FIX_PLAN.md`'s **B10 has no description
+  anywhere** — it appears only in the traceability matrix (line 442) and in no
+  batch body, so nothing was built for it; if it mattered it needs re-deriving.
+  And **`(manager)/billing/page.tsx:63` fails `next lint` with `Unexpected any`,
+  which blocks `next build`** — it belongs to the concurrent Stripe session, was
+  left untouched throughout, and is the only lint error in the tree.
 - **`FIX_PLAN.md` batches 0/1/3/2 built — and the highest-value act was again
   having John verify the plan's grounding facts before a line was written.** Four
   were wrong. (1) The plan counted **six** period pickers; there are **nine**, and
