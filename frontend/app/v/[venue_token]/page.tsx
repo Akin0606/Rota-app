@@ -39,6 +39,9 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
   const [joinName, setJoinName] = useState("");
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  // E4 — the joiner is already on this roster. That's not an error to correct,
+  // it's a different destination: the PIN they already have.
+  const [alreadyJoined, setAlreadyJoined] = useState(false);
   const [revealPin, setRevealPin] = useState<string | null>(null);
   const [revealName, setRevealName] = useState<string>("");
   const [copied, setCopied] = useState(false);
@@ -123,6 +126,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
     }
     setJoining(true);
     setJoinError(null);
+    setAlreadyJoined(false);
     try {
       const res = await joinTeam(venue_token, joinCode, joinName.trim());
       rememberDevice(res.pin);
@@ -132,6 +136,12 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setJoinError("That join code didn't match. Check with your manager.");
+      } else if (err instanceof ApiError && err.status === 409) {
+        // Joining again would mint a second record with its own PIN, no shifts
+        // and no history — and the backend's own message never reached here,
+        // because 409 fell through to "Something went wrong. Try again."
+        setJoinError(err.message);
+        setAlreadyJoined(true);
       } else if (err instanceof ApiError && (err.status === 429 || err.status === 403)) {
         setJoinError(err.message);
       } else {
@@ -271,6 +281,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
                   onChange={(e) => {
                     setJoinCode(e.target.value.replace(/\D/g, "").slice(0, 4));
                     if (joinError) setJoinError(null);
+                    if (alreadyJoined) setAlreadyJoined(false);
                   }}
                   inputMode="numeric"
                   autoFocus
@@ -284,6 +295,7 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
                     onChange={(e) => {
                       setJoinName(e.target.value);
                       if (joinError) setJoinError(null);
+                      if (alreadyJoined) setAlreadyJoined(false);
                     }}
                     onKeyDown={(e) => e.key === "Enter" && handleJoin()}
                     maxLength={80}
@@ -293,6 +305,26 @@ function PinEntryContent({ venue_token }: { venue_token: string }) {
                   {joinError && (
                     <div role="alert" className="mt-2 text-center text-[13px] text-cp-red">
                       {joinError}
+                    </div>
+                  )}
+                  {alreadyJoined && (
+                    <div className="mt-3 flex flex-col items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setMode("pin");
+                          setAlreadyJoined(false);
+                          setJoinError(null);
+                        }}
+                        className="text-[13px] font-medium text-accent"
+                      >
+                        I know my PIN — sign in
+                      </button>
+                      <Link
+                        href={`/v/${venue_token}/forgot-pin`}
+                        className="text-[13px] font-medium text-ink-muted"
+                      >
+                        Send me my PIN
+                      </Link>
                     </div>
                   )}
                 </div>

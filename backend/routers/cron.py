@@ -49,10 +49,46 @@ def _target_open_week(venue_id: str) -> date:
     return this_monday + timedelta(days=7)
 
 
+def setup_is_complete(venue: dict) -> bool:
+    """False while the onboarding wizard is still running on this venue.
+
+    `venues.setup_state` holds the wizard blob and is cleared to null (or
+    `{"completed": true}`) by the final step, so it is the one honest signal for
+    "the manager has finished setting this place up". A legacy venue that
+    predates save-and-resume has null too, which is correct: it is finished.
+
+    An empty dict is deliberately read as *unfinished*: it means a blob is
+    present, and nothing in the wizard ever writes one without a step. Checked
+    against the real data before choosing — every venue on prod is a plain
+    null — so this cannot strand an existing venue in a state where its
+    availability never opens.
+    """
+    state = venue.get("setup_state")
+    if state is None:
+        return True
+    return bool(isinstance(state, dict) and state.get("completed"))
+
+
 def open_availability_for_venue(venue: dict) -> Optional[dict]:
     """Creates the current notice window's availability period for a venue, if it
     doesn't already exist. Safe to call repeatedly (idempotent) so both the raw
-    endpoint and the per-venue scheduler can share this."""
+    endpoint and the per-venue scheduler can share this.
+
+    E9 — a half-set-up venue is skipped entirely. Almost every write the wizard
+    makes (create shift, set hours, set coverage, set rules) ends in
+    `cron_scheduler.refresh_jobs()`, which calls straight back into here when
+    the clock is already inside a notice window. The wizard creates shifts
+    before it creates staff, so this was silent — until a resumed wizard, or a
+    window that opens partway through setup, put staff-with-emails on the other
+    side of it. Then a manager still choosing their coverage levels has already
+    emailed the whole team asking for availability against hours they are one
+    screen away from changing. The guard lives here, next to the send, rather
+    than on any one caller: there are three, and the newest was added by a
+    batch that had no reason to think about onboarding.
+    """
+    if not setup_is_complete(venue):
+        return None
+
     supabase = get_supabase()
     target_monday = _target_open_week(venue["id"])
 

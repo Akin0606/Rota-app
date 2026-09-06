@@ -52,7 +52,7 @@ function fmtTime(t: string): string {
   return m ? `${hh}:${String(m).padStart(2, "0")}${suf}` : `${hh}:00${suf}`;
 }
 
-type Team = { name: string; u18: boolean };
+type Team = { name: string; u18: boolean; role: string; email: string | null };
 
 // Per-day opening hours (times as "HH:MM" 24h). The default screen edits these
 // in three pub-rhythm groups; the per-day sheet edits individual days. The
@@ -86,7 +86,17 @@ type WizState = {
   days: DayHours[];
   open: string;
   close: string;
-  coverage: Record<string, number>;
+  // Two honest numbers, not one per role (E5/E6/E8). Per-role steppers seeded
+  // 3+2+2 = seven bodies on every evening of an eight-person pub, and silently
+  // dropped the fourth seeded role (Cellar) because coverage only ever read
+  // `roles.slice(0, 3)`. What the solver actually consumes is a single
+  // `min_staff` per shift, so asking per role invented precision the model
+  // cannot hold.
+  ev_cover: number;
+  day_cover: number;
+  // Superseded by ev_cover/day_cover; still read on resume so a wizard left
+  // open across this change doesn't lose the manager's answer.
+  coverage?: Record<string, number>;
   rest: boolean;
 };
 
@@ -114,12 +124,15 @@ function OnboardingWizard() {
   const [picker, setPicker] = useState<{ target: number[]; field: "open" | "close"; value: string; label: string } | null>(null);
   const [daySheet, setDaySheet] = useState(false);
   const [team, setTeam] = useState<Team[]>([]);
-  const [coverage, setCoverage] = useState<Record<string, number>>({});
+  const [evCover, setEvCover] = useState(3);
+  const [dayCover, setDayCover] = useState(2);
   const [rest, setRest] = useState(true);
 
   // Manual-add reveal
   const [memOpen, setMemOpen] = useState(false);
   const [mName, setMName] = useState("");
+  const [mEmail, setMEmail] = useState("");
+  const [mRole, setMRole] = useState("");
   const [mU18, setMU18] = useState(false);
 
   // Join code panel
@@ -199,10 +212,27 @@ function OnboardingWizard() {
         setOpen(st.open ?? "11:00");
         setClose(st.close ?? "23:00");
         setDays(st.days ?? defaultDays(st.open ?? "11:00", st.close ?? "23:00"));
-        setCoverage(st.coverage ?? {});
+        // A wizard left open across the two-number change still holds the old
+        // per-role blob; its sum is the same evening figure it was going to
+        // produce, so carry it forward rather than resetting their answer.
+        const legacyTotal = Object.values(st.coverage ?? {}).reduce(
+          (a: number, b: number) => a + b,
+          0,
+        );
+        setEvCover(st.ev_cover ?? (legacyTotal > 0 ? legacyTotal : 3));
+        setDayCover(st.day_cover ?? 2);
         setRest(st.rest ?? true);
         const savedTeam = await listStaff().catch(() => []);
-        setTeam(savedTeam.filter((m) => !m.pending).map((m) => ({ name: m.name, u18: m.is_under_18 })));
+        setTeam(
+          savedTeam
+            .filter((m) => !m.pending)
+            .map((m) => ({
+              name: m.name,
+              u18: m.is_under_18,
+              role: m.role,
+              email: m.email ?? null,
+            })),
+        );
         setSi(typeof st.step === "number" ? st.step : 1);
         setChecking(false);
       } catch (err) {
@@ -234,7 +264,8 @@ function OnboardingWizard() {
       days,
       open,
       close,
-      coverage,
+      ev_cover: evCover,
+      day_cover: dayCover,
       rest,
       ...extra,
     };
@@ -430,12 +461,7 @@ function OnboardingWizard() {
       setOpen(rep.open);
       setClose(rep.close);
       await persistShifts();
-      // Seed coverage defaults for the first three roles now that we're leaving.
-      const base = [3, 2, 2];
-      const cov: Record<string, number> = {};
-      roles.slice(0, 3).forEach((r, i) => (cov[r] = coverage[r] ?? base[i] ?? 1));
-      setCoverage(cov);
-      persist(4, { coverage: cov, open: rep.open, close: rep.close });
+      persist(4, { open: rep.open, close: rep.close });
       set(4);
     } catch {
       showToast("Could not save your hours");
@@ -464,13 +490,29 @@ function OnboardingWizard() {
   }
 
   async function handleAddMember() {
-    const nm = mName.trim() || "New member";
+    const nm = mName.trim();
+    if (!nm) {
+      showToast("Give them a name first");
+      return;
+    }
+    // E1 — this used to send {name, role: roles[0], is_under_18} and nothing
+    // else, so every manually-added member landed on whichever role happened to
+    // be first and with no email at all. That is the direct cause of a staff
+    // member nobody can ever chase: no email means no availability request, no
+    // reminder, no published rota.
+    const email = mEmail.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast("That email doesn't look right");
+      return;
+    }
+    const role = mRole || roles[0] || "Staff";
     setSaving(true);
     try {
-      const role = roles[0] ?? "Staff";
-      await createStaff({ name: nm, role, is_under_18: mU18 });
-      setTeam((t) => [...t, { name: nm, u18: mU18 }]);
+      await createStaff({ name: nm, role, email: email || null, is_under_18: mU18 });
+      setTeam((t) => [...t, { name: nm, u18: mU18, role, email: email || null }]);
       setMName("");
+      setMEmail("");
+      setMRole("");
       setMU18(false);
       setMemOpen(false);
     } catch (err) {
@@ -480,20 +522,39 @@ function OnboardingWizard() {
     }
   }
 
-  function bump(role: string, d: number) {
-    setCoverage((c) => ({ ...c, [role]: Math.max(0, (c[role] ?? 0) + d) }));
+  // Coverage is a headcount on a shift, so one is the floor: zero would tell the
+  // solver the venue opens with nobody in it.
+  function bumpCover(which: "ev" | "day", d: number) {
+    const setter = which === "ev" ? setEvCover : setDayCover;
+    setter((n) => Math.min(20, Math.max(1, n + d)));
   }
 
   async function handleGenerate() {
-    // Persist coverage (total evening cover → Evening shift min_staff) + rules,
+    // Persist coverage (a headcount per band → each shift's min_staff) + rules,
     // then run the solver. Called once, from the solve screen's effect (the CTA
     // only advances to step 7), so there's no double-fire race on these writes.
     try {
-      const total = roles.slice(0, 3).reduce((s, r) => s + (coverage[r] ?? 0), 0);
       const shifts = await listShifts().catch(() => []);
-      const evening = shifts.find((s) => /evening/i.test(s.name)) ?? shifts[shifts.length - 1];
-      if (evening && total > 0) {
-        await updateShift(evening.id, { min_staff: total, max_staff: Math.max(total + 1, evening.max_staff) });
+      // Both bands, not just the evening. persistShifts seeds every shift-day at
+      // min 1 / max 2, so a pub's Sunday roast — the busiest daytime service of
+      // its week — was rostered as one person and nothing in the wizard ever
+      // asked. These propagate onto shift_days; the rows are still uniform at
+      // this point, so batch 7's divergence guard can't fire.
+      //
+      // Matched by the names persistShifts creates. A venue that only opens one
+      // band has had the other deleted, so it simply doesn't match — better
+      // than the old "else the last shift", which would have put the evening
+      // answer on a lunch-only venue's Day shift.
+      const bands: [{ id: string; max_staff: number } | undefined, number][] = [
+        [shifts.find((s) => /evening/i.test(s.name)), evCover],
+        [shifts.find((s) => /day/i.test(s.name)), dayCover],
+      ];
+      for (const [shift, cover] of bands) {
+        if (!shift || cover <= 0) continue;
+        await updateShift(shift.id, {
+          min_staff: cover,
+          max_staff: Math.max(cover + 1, shift.max_staff),
+        });
       }
       await updateRules({ min_rest_hours: 11 }).catch(() => {});
       await updateScheduler({ require_day_off: rest }).catch(() => {});
@@ -835,7 +896,7 @@ function OnboardingWizard() {
             <div className="ob-av">{m.name.charAt(0).toUpperCase()}</div>
             <div style={{ flex: 1 }}>
               <div className="ob-rn">{m.name}{m.u18 && <span className="ob-u18">U18</span>}</div>
-              <div className="ob-rt">role not set yet</div>
+              <div className="ob-rt">{m.email ? `${m.role} · ${m.email}` : `${m.role} · no email yet`}</div>
             </div>
             <span className="rm" onClick={() => setTeam((t) => t.filter((_, j) => j !== i))} style={{ cursor: "pointer", color: "var(--faint)" }}>
               <OIcon name="x" size={15} />
@@ -849,6 +910,35 @@ function OnboardingWizard() {
         <div className={`ob-reveal ${memOpen ? "open" : ""}`}>
           <div style={{ padding: "12px 0 2px" }}>
             <input className="ob-in" value={mName} onChange={(e) => setMName(e.target.value)} placeholder="Name" style={{ marginBottom: 10 }} />
+            {/* E1 — without an email this person can never be sent an
+                availability link, a reminder or a published rota. It stays
+                optional (a manager may genuinely not have it to hand) but it
+                has to be askable, and the row below says when it's missing. */}
+            <input
+              className="ob-in"
+              type="email"
+              inputMode="email"
+              autoComplete="off"
+              value={mEmail}
+              onChange={(e) => setMEmail(e.target.value)}
+              placeholder="Email (so they get their rota)"
+              style={{ marginBottom: 10 }}
+            />
+            {roles.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 12 }}>
+                {roles.map((r) => (
+                  <button
+                    key={r}
+                    className={`ob-preset ${(mRole || roles[0]) === r ? "on" : ""}`}
+                    style={{ minHeight: 44 }}
+                    aria-pressed={(mRole || roles[0]) === r}
+                    onClick={() => setMRole(r)}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: 2 }}>
               <div>
                 <div className="ob-rn">16 or 17?</div>
@@ -867,22 +957,35 @@ function OnboardingWizard() {
   }
 
   function StepCoverage() {
-    const three = roles.slice(0, 3);
+    // Two questions, not one per role. The solver holds a single min_staff per
+    // shift, so a per-role breakdown was precision the model can't carry — and
+    // asking it four times over three visible roles is how the default became
+    // seven bodies on every evening of an eight-person pub.
+    const row = (
+      label: string,
+      sub: string,
+      value: number,
+      which: "ev" | "day",
+    ) => (
+      <div className="ob-cov">
+        <div style={{ minWidth: 0 }}>
+          <div className="ob-rn">{label}</div>
+          <div className="ob-rt">{sub}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button className="ob-mb" onClick={() => bumpCover(which, -1)} aria-label={`One fewer — ${label}`}>−</button>
+          <span className="ob-mv">{value}</span>
+          <button className="ob-mb" onClick={() => bumpCover(which, 1)} aria-label={`One more — ${label}`}>+</button>
+        </div>
+      </div>
+    );
     return (
       <div>
         <div className="ob-eyebrow">Coverage</div>
-        <div className="ob-h">How many on an evening?</div>
-        <div className="ob-p">Your busiest shift. We set a typical level for a {venue ? VENUE_TYPES[venue].label.toLowerCase() : "venue"} — nudge to match your floor.</div>
-        {three.map((r) => (
-          <div key={r} className="ob-cov">
-            <div className="ob-rn">{r}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button className="ob-mb" onClick={() => bump(r, -1)}>−</button>
-              <span className="ob-mv">{coverage[r] ?? 1}</span>
-              <button className="ob-mb" onClick={() => bump(r, 1)}>+</button>
-            </div>
-          </div>
-        ))}
+        <div className="ob-h">How many people on at once?</div>
+        <div className="ob-p">Total bodies on the floor, all roles together. Change it any time in Settings — including per day, once you know your Sundays.</div>
+        {row("On an evening", "Your busiest shift", evCover, "ev")}
+        {row("On a daytime", "Lunch and afternoons", dayCover, "day")}
         <Why>This is the target the auto-scheduler fills.</Why>
       </div>
     );
@@ -1062,18 +1165,31 @@ function InviteScreen({
           <span>Staff open the link, enter the PIN, and tell you when they’re free. Then your first rota is one tap from great.</span>
         </div>
 
+        {/* E3 — these people are already on the team with their own 4-digit
+            PIN. Telling them they "will join with the link above" sent the
+            manager to hand a join code to someone who does not need one, and
+            hid the thing they DO need: the PIN, and an email to send it to. */}
         {team.length > 0 && (
           <>
-            <div className="ob-group">You’ve added {team.length} — invite the rest</div>
+            <div className="ob-group">
+              Already on the team — {team.length} {team.length === 1 ? "person" : "people"}
+            </div>
             {team.map((m, i) => (
               <div key={i} className="ob-tm">
                 <div className="ob-av">{m.name.charAt(0).toUpperCase()}</div>
                 <div style={{ flex: 1 }}>
                   <div className="ob-rn">{m.name}{m.u18 && <span className="ob-u18">U18</span>}</div>
-                  <div className="ob-rt">will join with the link above</div>
+                  <div className="ob-rt">
+                    {m.email
+                      ? "has a PIN — find it under Team"
+                      : "has a PIN, but no email to send it to"}
+                  </div>
                 </div>
               </div>
             ))}
+            <div className="ob-hint">
+              <OIcon name="info-circle" size={12} /> They don’t need the join code — each has their own PIN. Team shows it, and lets you add an email for anyone missing one.
+            </div>
           </>
         )}
       </div>

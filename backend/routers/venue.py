@@ -11,6 +11,7 @@ from models.schemas import (
     VenueOut,
     VenueUpdateRequest,
 )
+from routers import cron
 from services import cron_scheduler, notice_window, period_resolver, schedule_windows
 from services.auth_service import get_current_manager, get_manager_venue
 from services.pin_service import generate_pin, generate_venue_slug, generate_venue_token
@@ -131,7 +132,7 @@ def update_setup_state(payload: SetupStateRequest, manager: dict = Depends(get_c
     setup_state of null marks onboarding finished (the manager skips to the app
     on any later visit)."""
     venue = get_manager_venue(manager["id"])
-    return (
+    updated = (
         get_supabase()
         .table("venues")
         .update({"setup_state": payload.setup_state})
@@ -139,6 +140,15 @@ def update_setup_state(payload: SetupStateRequest, manager: dict = Depends(get_c
         .execute()
         .data[0]
     )
+    # E9 — `open_availability_for_venue` now refuses to run (and so to email
+    # anyone) while setup_state says the wizard is mid-flight. That guard has to
+    # hand the capability back at the other end: finishing setup is the moment
+    # the venue's first real notice window becomes valid, so recompute the jobs
+    # here rather than leaving the first period to wait for a server restart or
+    # the daily sweep.
+    if cron.setup_is_complete(updated):
+        cron_scheduler.refresh_jobs()
+    return updated
 
 
 @router.post("/join-code", response_model=JoinCodeOut)

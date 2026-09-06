@@ -436,9 +436,18 @@ def join_team(venue_token: str, payload: StaffJoinRequest, request: Request):
         or []
     )
     if any((r.get("name") or "").strip().lower() == name.lower() for r in roster):
+        # E4 — this used to read "add a last initial so your manager can tell
+        # you apart", which is advice for the wrong problem. The overwhelmingly
+        # likely reader is the person already on that roster, coming back on a
+        # new phone; telling them to rename themselves manufactures a second,
+        # disconnected record with its own PIN, no shifts and no history, and
+        # the manager then has two of them. Send them to the PIN they already
+        # have. Recovery goes through forgot-PIN, which is enumeration-safe and
+        # rate-limited, so nothing here confirms anything the correct venue code
+        # hasn't already established.
         raise HTTPException(
             status_code=409,
-            detail="Someone's already registered with that name — add a last initial so your manager can tell you apart.",
+            detail="You're already on the team here — you don't need to join again, just your PIN.",
         )
 
     pin = generate_unique_pin(supabase, venue["id"])
