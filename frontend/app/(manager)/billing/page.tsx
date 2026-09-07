@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
 
 import { createCheckoutSession, createPortalSession, getBillingStatus, type BillingStatus } from "@/lib/api";
 import LoadingScreen from "@/components/loading-screen";
+import Waiting from "@/components/waiting";
 
 const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
@@ -15,6 +16,7 @@ function StatusPill({ status }: { status: string }) {
   const config: Record<string, { label: string; cls: string }> = {
     active: { label: "Active", cls: "bg-cp-green-soft text-cp-green" },
     trialing: { label: "Trial", cls: "bg-cp-amber-soft text-cp-amber" },
+    expired: { label: "Expired", cls: "bg-cp-red-soft text-cp-red" },
     past_due: { label: "Past due", cls: "bg-cp-red-soft text-cp-red" },
     cancelled: { label: "Cancelled", cls: "bg-cp-red-soft text-cp-red" },
   };
@@ -48,17 +50,61 @@ export default function BillingPage() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    getBillingStatus()
-      .then(setBilling)
-      .catch(() => setError("Couldn't load billing info"))
-      .finally(() => setLoading(false));
+  const loadStatus = useCallback(async () => {
+    try {
+      const data = await getBillingStatus();
+      setBilling(data);
+      return data;
+    } catch {
+      setError("Couldn’t load billing info");
+      return null;
+    }
   }, []);
 
+  useEffect(() => {
+    loadStatus().finally(() => setLoading(false));
+  }, [loadStatus]);
+
+  // After a successful checkout, Stripe redirects with ?session_id=... but
+  // the webhook may not have fired yet. Poll until the status flips to active.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get("session_id")) return;
+
+    let attempts = 0;
+    const maxAttempts = 8;
+
+    const poll = async () => {
+      attempts++;
+      const data = await loadStatus();
+      if (data?.subscription_status === "active" || attempts >= maxAttempts) {
+        // Clean the URL
+        window.history.replaceState({}, "", "/billing");
+        return;
+      }
+      pollRef.current = setTimeout(poll, 1500);
+    };
+
+    // Start polling after a short initial delay (give webhook time)
+    pollRef.current = setTimeout(poll, 2000);
+
+    return () => {
+      if (pollRef.current) clearTimeout(pollRef.current);
+    };
+  }, [loadStatus]);
+
   const fetchClientSecret = useCallback(async () => {
-    const { client_secret } = await createCheckoutSession();
-    return client_secret;
+    try {
+      const { client_secret } = await createCheckoutSession();
+      return client_secret;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Checkout failed — please try again";
+      setError(msg);
+      setShowCheckout(false);
+      throw e;
+    }
   }, []);
 
   const handleManage = async () => {
@@ -67,12 +113,12 @@ export default function BillingPage() {
       const { url } = await createPortalSession();
       window.location.href = url;
     } catch {
-      setError("Couldn't open billing portal");
+      setError("Couldn’t open billing portal");
       setPortalLoading(false);
     }
   };
 
-  if (loading) return <LoadingScreen />;
+  if (loading) return <LoadingScreen base="Loading billing…" />;
 
   if (error && !billing) {
     return (
@@ -93,10 +139,23 @@ export default function BillingPage() {
   const status = billing?.subscription_status ?? "trialing";
   const isActive = status === "active";
   const isTrial = status === "trialing";
+  const isExpired = status === "expired";
   const trialDaysLeft = isTrial ? daysUntil(billing?.subscription_ends_at ?? null) : null;
-  const trialExpired = isTrial && trialDaysLeft !== null && trialDaysLeft <= 0;
-  const needsSubscription = !isActive && (trialExpired || status === "cancelled");
+  const needsSubscription = !isActive && (isExpired || status === "cancelled");
   const showManage = isActive || status === "past_due";
+
+  // Post-checkout: session_id in URL means we're waiting for webhook confirmation
+  const isPolling = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("session_id");
+
+  if (isPolling && status !== "active") {
+    return (
+      <div className="px-5 py-8 md:px-8">
+        <div className="rounded-card border border-hairline bg-surface-card p-8 text-center">
+          <LoadingScreen base="Confirming your subscription…" className="min-h-[30vh]" />
+        </div>
+      </div>
+    );
+  }
 
   if (showCheckout) {
     if (!stripePromise) {
@@ -149,18 +208,18 @@ export default function BillingPage() {
               Current plan
             </div>
             <div className="text-lg font-medium">Rotally Pro</div>
-            <div className="mt-1 text-sm text-ink-muted">£29/month per venue</div>
+            <div className="mt-1 text-sm text-ink-muted">£49/month per venue</div>
           </div>
           <StatusPill status={status} />
         </div>
 
-        {isTrial && !trialExpired && (
+        {isTrial && (
           <div className="mt-4 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-ink-muted">Trial ends</span>
               <span>{formatDate(billing?.subscription_ends_at ?? null)}</span>
             </div>
-            {trialDaysLeft !== null && (
+            {trialDaysLeft !== null && trialDaysLeft > 0 && (
               <div className="rounded-xl border border-cp-amber-soft bg-cp-amber-soft p-3 text-sm text-cp-amber">
                 {trialDaysLeft} {trialDaysLeft === 1 ? "day" : "days"} left — subscribe to keep using Rotally.
               </div>
@@ -168,7 +227,7 @@ export default function BillingPage() {
           </div>
         )}
 
-        {trialExpired && (
+        {isExpired && (
           <div className="mt-4 rounded-xl border border-cp-red-soft bg-cp-red-soft p-3 text-sm text-cp-red">
             Your trial has ended. Subscribe to regain full access.
           </div>
@@ -212,7 +271,7 @@ export default function BillingPage() {
 
       {/* Actions */}
       <div className="flex flex-wrap gap-3">
-        {(needsSubscription || (isTrial && !trialExpired)) && (
+        {(needsSubscription || isTrial) && (
           <button
             onClick={() => {
               if (!stripePromise) {
@@ -224,7 +283,7 @@ export default function BillingPage() {
             }}
             className="rounded-xl bg-accent px-5 py-3 text-sm font-medium text-accent-on transition-transform active:scale-[0.98]"
           >
-            {needsSubscription ? "Subscribe — £29/mo" : "Subscribe now"}
+            {needsSubscription ? "Subscribe — £49/mo" : "Subscribe now"}
           </button>
         )}
 
@@ -234,7 +293,7 @@ export default function BillingPage() {
             disabled={portalLoading}
             className="rounded-xl border border-hairline bg-surface-card px-5 py-3 text-sm font-medium text-ink transition-transform active:scale-[0.98] disabled:opacity-50"
           >
-            {portalLoading ? "Opening…" : "Manage subscription"}
+            {portalLoading ? <Waiting label="Opening portal" /> : "Manage subscription"}
           </button>
         )}
       </div>

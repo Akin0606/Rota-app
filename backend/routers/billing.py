@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -18,7 +20,7 @@ def create_checkout_session(manager: dict = Depends(get_current_manager)):
     if not settings.stripe_price_id:
         raise HTTPException(status_code=503, detail="No price configured")
 
-    venue = get_manager_venue(manager["id"], require_active=False)
+    venue = get_manager_venue(manager["id"], require_active=True)
 
     if venue.get("subscription_status") == "active":
         raise HTTPException(status_code=400, detail="Venue already has an active subscription")
@@ -28,20 +30,28 @@ def create_checkout_session(manager: dict = Depends(get_current_manager)):
         customer = stripe.Customer.create(
             email=manager["email"],
             metadata={"venue_id": venue["id"], "venue_name": venue["name"]},
+            idempotency_key=f"cust_{venue['id']}",
         )
         customer_id = customer.id
+        # Conditional update: only write if no other request raced us
         get_supabase().table("venues").update(
             {"stripe_customer_id": customer_id}
-        ).eq("id", venue["id"]).execute()
+        ).eq("id", venue["id"]).is_("stripe_customer_id", "null").execute()
+        # Re-read in case a concurrent request won the race
+        venue = get_manager_venue(manager["id"], require_active=True)
+        customer_id = venue.get("stripe_customer_id")
 
-    session = stripe.checkout.Session.create(
-        customer=customer_id,
-        line_items=[{"price": settings.stripe_price_id, "quantity": 1}],
-        mode="subscription",
-        ui_mode="embedded_page",
-        return_url=f"{settings.frontend_url}/billing?session_id={{CHECKOUT_SESSION_ID}}",
-        metadata={"venue_id": venue["id"]},
-    )
+    try:
+        session = stripe.checkout.Session.create(
+            customer=customer_id,
+            line_items=[{"price": settings.stripe_price_id, "quantity": 1}],
+            mode="subscription",
+            ui_mode="embedded",
+            return_url=f"{settings.frontend_url}/billing?session_id={{CHECKOUT_SESSION_ID}}",
+            metadata={"venue_id": venue["id"]},
+        )
+    except stripe.error.InvalidRequestError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe configuration error: {e.user_message}")
 
     return {"client_secret": session.client_secret}
 
@@ -64,14 +74,28 @@ def create_portal_session(manager: dict = Depends(get_current_manager)):
     return {"url": session.url}
 
 
+def _effective_status(venue: dict) -> str:
+    """Compute subscription status, treating an expired trial as 'expired'."""
+    status = venue.get("subscription_status", "trialing")
+    if status == "trialing":
+        ends_at = venue.get("subscription_ends_at")
+        if ends_at:
+            try:
+                end = datetime.fromisoformat(str(ends_at).replace("Z", "+00:00"))
+                if end < datetime.now(timezone.utc):
+                    return "expired"
+            except (ValueError, TypeError):
+                pass
+    return status
+
+
 @router.get("/status")
 def get_billing_status(manager: dict = Depends(get_current_manager)):
     venue = get_manager_venue(manager["id"], require_active=False)
     return {
-        "subscription_status": venue.get("subscription_status", "trialing"),
+        "subscription_status": _effective_status(venue),
         "subscription_started_at": venue.get("subscription_started_at"),
         "subscription_ends_at": venue.get("subscription_ends_at"),
-        "stripe_customer_id": venue.get("stripe_customer_id"),
         "has_subscription": bool(venue.get("stripe_subscription_id")),
     }
 
@@ -146,5 +170,4 @@ def _sync_subscription(supabase, sub, *, status_override: str | None = None):
 def _ts(unix: int | None) -> str | None:
     if unix is None:
         return None
-    from datetime import datetime, timezone
     return datetime.fromtimestamp(unix, tz=timezone.utc).isoformat()

@@ -29,6 +29,13 @@ import { NextResponse, type NextRequest } from "next/server";
  *     session and never will.
  */
 export async function middleware(request: NextRequest) {
+  // Thread the current pathname into the request headers so the (manager)
+  // layout can read it via headers().get("x-pathname"). This MUST be set on
+  // the request — not on the response — because Next.js only forwards
+  // x-middleware-request-* prefixed copies of request headers to Server
+  // Components; a plain response header is invisible to headers().
+  request.headers.set("x-pathname", request.nextUrl.pathname);
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -59,12 +66,6 @@ export async function middleware(request: NextRequest) {
   // Authed pages must never be cached by a shared cache — one manager's
   // rendered dashboard reaching another is exactly the leak this prevents.
   supabaseResponse.headers.set("Cache-Control", "private, no-store");
-
-  // The manager layout needs to know the current path to exempt /billing from
-  // the subscription gate (expired trial → redirect to /billing, but /billing
-  // itself must stay reachable). Layouts don't receive the URL in App Router,
-  // so we thread it through a request header the layout reads via headers().
-  supabaseResponse.headers.set("x-pathname", request.nextUrl.pathname);
 
   // Returned as-is on purpose: building a fresh NextResponse here would drop
   // the refreshed cookies setAll just wrote, putting browser and server out of

@@ -87,9 +87,12 @@ export default async function ManagerLayout({ children }: { children: React.Reac
   if (!isBillingPage) {
     const subStatus = (venue as Record<string, unknown>).subscription_status as string | undefined;
     const subEndsAt = (venue as Record<string, unknown>).subscription_ends_at as string | undefined;
+    // The backend /billing/status now returns "expired" for past-due trials,
+    // but the venue endpoint still returns the raw DB status. Check both: the
+    // explicit "expired" (future-proofing) and the date comparison (current).
     const trialExpired =
       subStatus === "trialing" && subEndsAt && new Date(subEndsAt) < new Date();
-    if (subStatus === "cancelled" || trialExpired) {
+    if (subStatus === "cancelled" || subStatus === "expired" || trialExpired) {
       redirect("/billing");
     }
   }

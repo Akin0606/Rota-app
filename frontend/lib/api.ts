@@ -609,7 +609,6 @@ export type BillingStatus = {
   subscription_status: string;
   subscription_started_at: string | null;
   subscription_ends_at: string | null;
-  stripe_customer_id: string | null;
   has_subscription: boolean;
 };
 
