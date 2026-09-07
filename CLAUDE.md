@@ -435,6 +435,29 @@ Sound where it counts, with two known-weak areas flagged in-code:
 - **Never touch the OTP / PIN auth flow without flagging first** (working rule).
 
 ## Learnings (append after each session — most recent first)
+- **Staging's Render health check path is now `/health` (it was empty), and the
+  deploy log shows exactly what that bought — and what it did not.** With the
+  field blank, Render inferred liveness from port binding alone: the 09:57 deploy
+  went live having probed nothing but `HEAD /`, which this API answers **404**.
+  With it set, the 09:59 deploy shows Render's own prober hitting
+  `GET /health` twice from an internal address and only then printing "Your
+  service is live 🎉". **The honest limit: this would NOT have caught last
+  session's stale-image bug.** That instance answered `/health` 200 perfectly
+  well — it was simply running the previous build. A health check proves the
+  service responds; only a content probe (the OpenAPI diff, or now the
+  `migrations` field) proves it is the code you pushed. Keep both; neither
+  replaces the other. **Safe to point at `/health` specifically because that
+  endpoint cannot fail** — it catches its own DB and migration errors and reports
+  them in-band while still returning 200. A `/health` that 500s on a flaky pool
+  would now fail deploys and pull instances out of rotation, which is the exact
+  blast radius the migration work just shrank. **Dashboard gotchas, both already
+  in this file and both hit again:** the Render settings inputs are `readOnly`
+  until their own Edit button is clicked, and `computer` coordinate clicks are
+  unreliable there because the screenshot frame (1456px) does not match the
+  page's CSS pixels (~2000px) — drive `element.click()` through
+  `javascript_tool`, and set React inputs with the native value setter plus a
+  bubbling `input` event. And **re-read the setting on a fresh page load**: the
+  "Health check path updated" toast is not proof, a reload showing `/health` is.
 - **Migrations moved off the boot gate — and the half that mattered turned out
   to be the code half, because the Render field is paid-only.** The ask was
   "move migrations to a Render pre-deploy step". The dashboard half is
