@@ -485,6 +485,16 @@ Sound where it counts, with two known-weak areas flagged in-code:
   state this file records. `--check` is read-only and safe to run anywhere.
   **OpenAPI unchanged at 92 paths / 111 schemas**, so the deploy-diff verifier
   from the previous session stays valid. 174 backend tests green (was 167).
+  **Then confirmed live on staging** (`b01c850`): the deploy log shows the old
+  instance printing `[entrypoint] running database migrations...` and the new one
+  `[entrypoint] no pre-deploy step configured; applying migrations
+  (non-blocking)...` — the right branch, since `MIGRATE_ON_BOOT` is unset and no
+  pre-deploy step exists. The old instance answered `/health` 200 twice *while*
+  the new one booted, so the overlap is visible in the log. And because OpenAPI
+  did not move, **the new-code marker was the `migrations` field itself** —
+  `{"applied":30,"pending":[]}` on staging, against prod's 28 with 028 and 030
+  pending. A cheaper proof than the OpenAPI diff when a change adds no routes:
+  make the change observable on an endpoint you already poll.
 - **Render reported a deploy "Live" while still serving the previous image, and
   the only thing that caught it was diffing the deployed OpenAPI against a
   locally generated one.** After pushing batches 4–10, staging's `/health` was
