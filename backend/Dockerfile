@@ -9,7 +9,7 @@ COPY backend/ backend/
 COPY supabase/ supabase/
 
 WORKDIR /app/backend
-RUN chmod +x entrypoint.sh
+RUN chmod +x entrypoint.sh predeploy.sh
 
 EXPOSE 8000
 

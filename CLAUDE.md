@@ -143,10 +143,10 @@ skipping `028_suggestions.sql`, which is on `staging` only. Staging has all of
 computes `pending` as a *filename-set difference* and applies in `sorted()`
 order, so the `staging` → `main` merge applies `028` then `030` and skips the
 already-present `029`; the two pending files are independent (a new
-`suggestions` table, a new `staff_members` column). What is NOT safe is the
-blast radius — per the 027 incident a migrate failure takes the **whole prod
-API** down, not just the feature. Move migrations to a Render pre-deploy step
-before that merge.
+`suggestions` table, a new `staff_members` column). **The blast radius is now
+closed in code** — the entrypoint no longer gates the boot on migrate (see
+Learnings) — but the Render **pre-deploy field is paid-plan only and staging is
+on Free**, so the dashboard half is unfinished on both services.
 
 **Uncommitted now:** only the concurrent session's Stripe billing work
 (`routers/billing.py`, `(manager)/billing/page.tsx`) and assorted untracked
@@ -329,6 +329,17 @@ details in Learnings.)
   one is correct — audit logs freeze historical fact).
 
 ## Before go-live (blockers & gaps)
+- **Render's pre-deploy command needs a paid compute plan, and both services are
+  unset (needs a spending decision, not a code change).** `backend/predeploy.sh`
+  exists and is the command to point the field at (`./predeploy.sh`); the field
+  itself is **disabled on Free** — verified on `rota-app-staging`, where
+  `input[name="preDeployCommand"]` is `disabled` while `dockerCommand` beside it
+  is not. Prod is on a Render account this environment cannot reach at all, so
+  its field is unknown; if that service is on a paid plan the change there is one
+  field plus `MIGRATE_ON_BOOT=false`. Until then the entrypoint fallback applies
+  migrations at boot — **non-blocking**, so the 027 class of outage is already
+  gone; what a pre-deploy step would add is failing the *deploy* instead of
+  serving briefly on an unmigrated schema.
 - **Per-environment Supabase auth config is a manual checklist with no home in
   the repo (hard blocker for any new environment).** A fresh project starts on
   Supabase defaults and silently breaks login. For each project set: **Site URL**
@@ -424,6 +435,56 @@ Sound where it counts, with two known-weak areas flagged in-code:
 - **Never touch the OTP / PIN auth flow without flagging first** (working rule).
 
 ## Learnings (append after each session — most recent first)
+- **Migrations moved off the boot gate — and the half that mattered turned out
+  to be the code half, because the Render field is paid-only.** The ask was
+  "move migrations to a Render pre-deploy step". The dashboard half is
+  **blocked**: `rota-app-staging` is on Render's **Free** plan and
+  `input[name="preDeployCommand"]` is `disabled` there while `dockerCommand`
+  immediately beside it is not — a one-line DOM read that settled it far faster
+  than reading the pricing page, and worth reusing whenever a dashboard field
+  looks present but inert. The docs agree ("available for paid web services").
+  Prod's Render account is still unreachable from here, so its field is unknown.
+  **But the reason for the move was never the field — it was the blast radius**,
+  and that is now closed in code regardless. `entrypoint.sh` no longer runs
+  migrate under `set -e` before `exec uvicorn`; it runs it **non-blocking**, so a
+  migrate failure leaves the API serving on whatever schema is there instead of
+  crash-looping the whole service off the internet. Proved with a stubbed
+  migrate across four scenarios (`MIGRATE_ON_BOOT` unset/false × migrate ok/fail):
+  **every one reaches uvicorn with exit 0**, where the old script under the same
+  failure exits 1 having never started it. That contrast is the entire 027 fix.
+  **The judgement call worth keeping: the default is "apply on boot, don't
+  block", not "skip".** Skipping would be cleaner separation, but prod's
+  dashboard is unreachable, so a skip-by-default merge to `main` would ship an
+  API that silently never applies `028`/`030` — trading a loud outage for a quiet
+  wrong answer. `MIGRATE_ON_BOOT=false` is the opt-out for a service that
+  actually has the pre-deploy field wired.
+- **Three smaller things went in with it, each earning its place.** (1) A bounded
+  **connect retry** — 027 was a transient pool blip, not a bad migration, and
+  `psycopg2.connect` sat outside any try/except; this is John's own unbuilt
+  recommendation from that incident, finally built. (2) A **session advisory
+  lock** (`pg_advisory_lock`, key `crc32("rotally:schema_migrations")`) around
+  the apply phase, with the applied set re-read *after* the lock so a waiter sees
+  what the runner ahead of it committed — required by my own change, since a
+  pre-deploy step plus the boot fallback makes two concurrent runners possible
+  for the first time. (3) **`/health` now reports migration state**
+  (`{"applied": 28, "pending": [...]}`), because trading a crash-loop for a quiet
+  failure means the quiet failure has to be visible somewhere other than a deploy
+  log. It is cached for the process lifetime (the answer only changes at deploy,
+  and a deploy restarts the process) but **only on success**, so a blip on the
+  first health check doesn't freeze an error in place — and it can never fail the
+  endpoint, since a `/health` that 500s pulls the instance out of rotation, which
+  is the exact blast radius being shrunk. Verified by monkeypatching the client
+  to raise: still `200`, error reported in-band.
+- **The runner's ordering property got a test, and running it against prod
+  confirmed the file's own claim from the outside.** `pending` is a filename set
+  difference, not a high-water mark — which is the only reason prod's hole (029
+  applied, 028 skipped) is safe. `python -m scripts.migrate --check` against the
+  real prod URL printed exactly `028_suggestions.sql, 030_works_past_10pm.sql`,
+  exit 1; `/health`'s report, computed by a **different code path** (Supabase REST
+  rather than psycopg2), agreed. Two independent confirmations of the migration
+  state this file records. `--check` is read-only and safe to run anywhere.
+  **OpenAPI unchanged at 92 paths / 111 schemas**, so the deploy-diff verifier
+  from the previous session stays valid. 174 backend tests green (was 167).
 - **Render reported a deploy "Live" while still serving the previous image, and
   the only thing that caught it was diffing the deployed OpenAPI against a
   locally generated one.** After pushing batches 4–10, staging's `/health` was

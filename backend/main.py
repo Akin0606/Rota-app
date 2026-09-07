@@ -22,6 +22,7 @@ from routers import (
     venue,
     waitlist,
 )
+from scripts.migrate import pending_filenames
 from services import cron_scheduler
 
 settings = get_settings()
@@ -83,6 +84,38 @@ def _stop_scheduler():
     cron_scheduler.stop_scheduler()
 
 
+# Cached for the process lifetime: the answer only changes at deploy time, and
+# a deploy restarts the process. Only a *successful* read is cached, so a
+# transient blip on the first health check doesn't freeze an error in place.
+_migration_report: dict | None = None
+
+
+def _migrations_report() -> dict:
+    """Which migration files on disk have no `schema_migrations` row.
+
+    Migrations moved to a pre-deploy step, and the entrypoint fallback no
+    longer blocks the boot (see backend/entrypoint.sh). That trades a
+    crash-loop for a quieter failure — an API serving happily against a schema
+    that never got migrated — so the state has to be visible somewhere other
+    than a deploy log that scrolls away.
+
+    Never raises. A /health that can fail is a health check that pulls the
+    instance out of rotation, which is the exact blast radius this change
+    exists to shrink.
+    """
+    global _migration_report
+    if _migration_report is not None:
+        return _migration_report
+    try:
+        rows = get_supabase().table("schema_migrations").select("filename").execute()
+        applied = {row["filename"] for row in (rows.data or [])}
+        report: dict = {"applied": len(applied), "pending": pending_filenames(applied)}
+    except Exception as exc:
+        return {"error": str(exc)}
+    _migration_report = report
+    return report
+
+
 @app.get("/health")
 def health():
     try:
@@ -91,4 +124,4 @@ def health():
     except Exception as exc:
         db_status = f"error: {exc}"
 
-    return {"status": "ok", "db": db_status}
+    return {"status": "ok", "db": db_status, "migrations": _migrations_report()}
