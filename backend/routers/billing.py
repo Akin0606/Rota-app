@@ -54,6 +54,7 @@ def create_checkout_session(manager: dict = Depends(get_current_manager)):
             payment_settings={"save_default_payment_method": "on_subscription"},
             expand=["latest_invoice.payment_intent"],
             metadata={"venue_id": venue["id"]},
+            stripe_version="2024-12-18.acacia",
         )
     except stripe.error.AuthenticationError:
         raise HTTPException(status_code=502, detail="Stripe API key is invalid — check STRIPE_SECRET_KEY")
@@ -62,7 +63,12 @@ def create_checkout_session(manager: dict = Depends(get_current_manager)):
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)}")
 
-    return {"client_secret": subscription.latest_invoice.payment_intent.client_secret}
+    try:
+        client_secret = subscription.latest_invoice.payment_intent.client_secret
+    except (AttributeError, KeyError):
+        raise HTTPException(status_code=502, detail="Could not retrieve payment intent from Stripe")
+
+    return {"client_secret": client_secret}
 
 
 @router.post("/portal")
