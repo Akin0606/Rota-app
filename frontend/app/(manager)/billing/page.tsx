@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { loadStripe } from "@stripe/stripe-js";
-import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
+import { loadStripe, type Appearance } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 
 import { createCheckoutSession, createPortalSession, getBillingStatus, type BillingStatus } from "@/lib/api";
 import LoadingScreen from "@/components/loading-screen";
@@ -11,6 +11,50 @@ import Waiting from "@/components/waiting";
 const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
   : null;
+
+const stripeAppearance: Appearance = {
+  theme: "night",
+  variables: {
+    colorPrimary: "#f4f4f2",
+    colorBackground: "#1a1a1a",
+    colorText: "#f4f4f2",
+    colorTextSecondary: "#8f8f8a",
+    colorTextPlaceholder: "#5a5a57",
+    colorDanger: "#e5484d",
+    borderRadius: "8px",
+    fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
+    fontSizeBase: "14px",
+  },
+  rules: {
+    ".Input": {
+      backgroundColor: "#1a1a1a",
+      border: "0.5px solid rgba(244,244,242,0.08)",
+      padding: "12px 14px",
+    },
+    ".Input:focus": {
+      borderColor: "rgba(244,244,242,0.25)",
+      boxShadow: "none",
+    },
+    ".Label": {
+      color: "#8f8f8a",
+      fontSize: "13px",
+      fontWeight: "400",
+    },
+    ".Tab": {
+      backgroundColor: "#141414",
+      border: "0.5px solid rgba(244,244,242,0.08)",
+      color: "#8f8f8a",
+    },
+    ".Tab--selected": {
+      backgroundColor: "#1a1a1a",
+      borderColor: "rgba(244,244,242,0.25)",
+      color: "#f4f4f2",
+    },
+    ".Tab:hover": {
+      backgroundColor: "#1a1a1a",
+    },
+  },
+};
 
 function StatusPill({ status }: { status: string }) {
   const config: Record<string, { label: string; cls: string }> = {
@@ -44,11 +88,104 @@ function formatDate(iso: string | null): string {
   });
 }
 
+function CheckoutForm({ onSuccess }: { onSuccess: () => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [processing, setProcessing] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setProcessing(true);
+    setPayError(null);
+
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/billing?redirect_status=succeeded`,
+      },
+      redirect: "if_required",
+    });
+
+    if (error) {
+      setPayError(error.message ?? "Payment failed — please try again");
+      setProcessing(false);
+    } else {
+      onSuccess();
+    }
+  };
+
+  if (processing) {
+    return (
+      <div className="rounded-card border border-hairline bg-surface-card p-8 text-center">
+        <Waiting label="Setting up your subscription" />
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {payError && (
+        <div className="mb-4 rounded-xl border border-cp-red-soft bg-cp-red-soft p-3 text-sm text-cp-red">
+          {payError}
+        </div>
+      )}
+
+      <div className="mb-4 rounded-card border border-hairline bg-surface-card p-5">
+        <div className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-muted">
+          Your plan
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-lg font-medium">Rotally Pro</span>
+          <span className="text-xl font-medium">
+            £29<span className="text-sm font-normal text-ink-muted">/mo</span>
+          </span>
+        </div>
+        <div className="mt-1 text-sm text-ink-muted">Per venue · cancel any time</div>
+        <div className="my-4 border-t border-hairline" />
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span className="text-ink-muted">Rotally Pro × 1 venue</span>
+            <span>£29.00</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-ink-muted">VAT</span>
+            <span>£0.00</span>
+          </div>
+        </div>
+        <div className="mt-3 flex justify-between border-t border-hairline pt-3 text-sm font-medium">
+          <span>Due today</span>
+          <span>£29.00</span>
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-card border border-hairline bg-surface-card p-5">
+        <div className="mb-3 text-xs font-medium uppercase tracking-wide text-ink-muted">
+          Payment
+        </div>
+        <PaymentElement />
+      </div>
+
+      <button
+        type="submit"
+        disabled={!stripe || !elements}
+        className="w-full rounded-xl bg-accent px-5 py-3.5 text-sm font-medium text-accent-on transition-transform active:scale-[0.98] disabled:opacity-50"
+      >
+        Subscribe — £29/mo
+      </button>
+    </form>
+  );
+}
+
 export default function BillingPage() {
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showCheckout, setShowCheckout] = useState(false);
+  const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -58,7 +195,7 @@ export default function BillingPage() {
       setBilling(data);
       return data;
     } catch {
-      setError("Couldn’t load billing info");
+      setError("Couldn't load billing info");
       return null;
     }
   }, []);
@@ -67,45 +204,58 @@ export default function BillingPage() {
     loadStatus().finally(() => setLoading(false));
   }, [loadStatus]);
 
-  // After a successful checkout, Stripe redirects with ?session_id=... but
-  // the webhook may not have fired yet. Poll until the status flips to active.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (!params.get("session_id")) return;
-
+  // After a 3DS redirect or inline success, poll until the webhook flips status to active.
+  const startPolling = useCallback(() => {
+    setConfirming(true);
     let attempts = 0;
-    const maxAttempts = 8;
+    const maxAttempts = 10;
 
     const poll = async () => {
       attempts++;
       const data = await loadStatus();
       if (data?.subscription_status === "active" || attempts >= maxAttempts) {
-        // Clean the URL
+        setConfirming(false);
         window.history.replaceState({}, "", "/billing");
         return;
       }
       pollRef.current = setTimeout(poll, 1500);
     };
 
-    // Start polling after a short initial delay (give webhook time)
     pollRef.current = setTimeout(poll, 2000);
+  }, [loadStatus]);
 
+  // Handle 3DS redirect return
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("redirect_status") === "succeeded") {
+      startPolling();
+    }
+    // Legacy: handle old session_id param too
+    if (params.get("session_id")) {
+      startPolling();
+    }
     return () => {
       if (pollRef.current) clearTimeout(pollRef.current);
     };
-  }, [loadStatus]);
+  }, [startPolling]);
 
-  const fetchClientSecret = useCallback(async () => {
+  const handleSubscribe = async () => {
+    if (!stripePromise) {
+      setError("Billing is not configured yet — contact support.");
+      return;
+    }
+    setCheckoutLoading(true);
+    setError(null);
     try {
       const { client_secret } = await createCheckoutSession();
-      return client_secret;
+      setCheckoutSecret(client_secret);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Checkout failed — please try again";
       setError(msg);
-      setShowCheckout(false);
-      throw e;
+    } finally {
+      setCheckoutLoading(false);
     }
-  }, []);
+  };
 
   const handleManage = async () => {
     setPortalLoading(true);
@@ -113,9 +263,14 @@ export default function BillingPage() {
       const { url } = await createPortalSession();
       window.location.href = url;
     } catch {
-      setError("Couldn’t open billing portal");
+      setError("Couldn't open billing portal");
       setPortalLoading(false);
     }
+  };
+
+  const handlePaymentSuccess = () => {
+    setCheckoutSecret(null);
+    startPolling();
   };
 
   if (loading) return <LoadingScreen base="Loading billing…" />;
@@ -144,48 +299,35 @@ export default function BillingPage() {
   const needsSubscription = !isActive && (isExpired || status === "cancelled");
   const showManage = isActive || status === "past_due";
 
-  // Post-checkout: session_id in URL means we're waiting for webhook confirmation
-  const isPolling = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("session_id");
-
-  if (isPolling && status !== "active") {
+  // Confirming: post-payment, waiting for webhook
+  if (confirming && status !== "active") {
     return (
       <div className="px-5 py-8 md:px-8">
         <div className="rounded-card border border-hairline bg-surface-card p-8 text-center">
-          <LoadingScreen base="Confirming your subscription…" className="min-h-[30vh]" />
+          <Waiting label="Confirming your subscription" />
         </div>
       </div>
     );
   }
 
-  if (showCheckout) {
-    if (!stripePromise) {
-      return (
-        <div className="px-5 py-8 md:px-8">
-          <div className="rounded-card border border-hairline bg-surface-card p-6 text-center">
-            <p className="text-sm text-ink-muted">Billing is not configured yet — contact support.</p>
-            <button
-              onClick={() => setShowCheckout(false)}
-              className="mt-4 rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-accent-on"
-            >
-              Back
-            </button>
-          </div>
-        </div>
-      );
-    }
+  // Checkout form
+  if (checkoutSecret && stripePromise) {
     return (
       <div className="px-5 py-8 md:px-8">
         <button
-          onClick={() => setShowCheckout(false)}
+          onClick={() => setCheckoutSecret(null)}
           className="mb-6 text-sm text-ink-muted hover:text-ink"
         >
           ← Back to billing
         </button>
-        <div className="overflow-hidden rounded-card border border-hairline">
-          <EmbeddedCheckoutProvider stripe={stripePromise} options={{ fetchClientSecret }}>
-            <EmbeddedCheckout />
-          </EmbeddedCheckoutProvider>
-        </div>
+        <h2 className="mb-6 text-xl font-medium">Subscribe</h2>
+
+        <Elements
+          stripe={stripePromise}
+          options={{ clientSecret: checkoutSecret, appearance: stripeAppearance }}
+        >
+          <CheckoutForm onSuccess={handlePaymentSuccess} />
+        </Elements>
       </div>
     );
   }
@@ -208,7 +350,7 @@ export default function BillingPage() {
               Current plan
             </div>
             <div className="text-lg font-medium">Rotally Pro</div>
-            <div className="mt-1 text-sm text-ink-muted">£49/month per venue</div>
+            <div className="mt-1 text-sm text-ink-muted">£29/month per venue</div>
           </div>
           <StatusPill status={status} />
         </div>
@@ -273,17 +415,17 @@ export default function BillingPage() {
       <div className="flex flex-wrap gap-3">
         {(needsSubscription || isTrial) && (
           <button
-            onClick={() => {
-              if (!stripePromise) {
-                setError("Billing is not configured yet — contact support.");
-                return;
-              }
-              setError(null);
-              setShowCheckout(true);
-            }}
-            className="rounded-xl bg-accent px-5 py-3 text-sm font-medium text-accent-on transition-transform active:scale-[0.98]"
+            onClick={handleSubscribe}
+            disabled={checkoutLoading}
+            className="rounded-xl bg-accent px-5 py-3 text-sm font-medium text-accent-on transition-transform active:scale-[0.98] disabled:opacity-50"
           >
-            {needsSubscription ? "Subscribe — £49/mo" : "Subscribe now"}
+            {checkoutLoading ? (
+              <Waiting label={needsSubscription ? "Subscribe" : "Subscribe now"} />
+            ) : needsSubscription ? (
+              "Subscribe — £29/mo"
+            ) : (
+              "Subscribe now"
+            )}
           </button>
         )}
 

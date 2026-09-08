@@ -347,7 +347,9 @@ class TestCustomerCreationIdempotency:
             with patch("routers.billing.stripe") as mock_stripe:
                 mock_stripe.error = _stripe_error_module()
                 mock_stripe.Customer.create.return_value = MagicMock(id="cus_new_123")
-                mock_stripe.checkout.Session.create.return_value = MagicMock(client_secret="cs_test")
+                mock_sub = MagicMock()
+                mock_sub.latest_invoice.payment_intent.client_secret = "pi_secret_test"
+                mock_stripe.Subscription.create.return_value = mock_sub
 
                 with patch("routers.billing.settings") as mock_settings:
                     mock_settings.stripe_secret_key = "sk_test_xxx"
@@ -359,7 +361,7 @@ class TestCustomerCreationIdempotency:
                     manager = {"id": "mgr-1", "email": "test@example.com"}
                     result = create_checkout_session(manager=manager)
 
-                assert result == {"client_secret": "cs_test"}
+                assert result == {"client_secret": "pi_secret_test"}
                 mock_stripe.Customer.create.assert_called_once()
                 call_kwargs = mock_stripe.Customer.create.call_args[1]
                 assert call_kwargs["idempotency_key"] == f"cust_{VENUE_ID}"
@@ -371,7 +373,9 @@ class TestCustomerCreationIdempotency:
         with patch_supabase(fake, "routers.billing", "services.auth_service"):
             with patch("routers.billing.stripe") as mock_stripe:
                 mock_stripe.error = _stripe_error_module()
-                mock_stripe.checkout.Session.create.return_value = MagicMock(client_secret="cs_test")
+                mock_sub = MagicMock()
+                mock_sub.latest_invoice.payment_intent.client_secret = "pi_secret_test"
+                mock_stripe.Subscription.create.return_value = mock_sub
 
                 with patch("routers.billing.settings") as mock_settings:
                     mock_settings.stripe_secret_key = "sk_test_xxx"
@@ -384,7 +388,7 @@ class TestCustomerCreationIdempotency:
                     result = create_checkout_session(manager=manager)
 
                 mock_stripe.Customer.create.assert_not_called()
-                assert result == {"client_secret": "cs_test"}
+                assert result == {"client_secret": "pi_secret_test"}
 
 
 # ---------------------------------------------------------------------------

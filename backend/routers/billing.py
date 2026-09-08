@@ -42,18 +42,18 @@ def create_checkout_session(manager: dict = Depends(get_current_manager)):
         customer_id = venue.get("stripe_customer_id")
 
     try:
-        session = stripe.checkout.Session.create(
+        subscription = stripe.Subscription.create(
             customer=customer_id,
-            line_items=[{"price": settings.stripe_price_id, "quantity": 1}],
-            mode="subscription",
-            ui_mode="embedded_page",
-            return_url=f"{settings.frontend_url}/billing?session_id={{CHECKOUT_SESSION_ID}}",
+            items=[{"price": settings.stripe_price_id}],
+            payment_behavior="default_incomplete",
+            payment_settings={"save_default_payment_method": "on_subscription"},
+            expand=["latest_invoice.payment_intent"],
             metadata={"venue_id": venue["id"]},
         )
     except stripe.error.InvalidRequestError as e:
         raise HTTPException(status_code=502, detail=f"Stripe configuration error: {e.user_message}")
 
-    return {"client_secret": session.client_secret}
+    return {"client_secret": subscription.latest_invoice.payment_intent.client_secret}
 
 
 @router.post("/portal")
