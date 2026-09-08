@@ -27,11 +27,16 @@ def create_checkout_session(manager: dict = Depends(get_current_manager)):
 
     customer_id = venue.get("stripe_customer_id")
     if not customer_id:
-        customer = stripe.Customer.create(
-            email=manager["email"],
-            metadata={"venue_id": venue["id"], "venue_name": venue["name"]},
-            idempotency_key=f"cust_{venue['id']}",
-        )
+        try:
+            customer = stripe.Customer.create(
+                email=manager["email"],
+                metadata={"venue_id": venue["id"], "venue_name": venue["name"]},
+                idempotency_key=f"cust_{venue['id']}",
+            )
+        except stripe.error.AuthenticationError:
+            raise HTTPException(status_code=502, detail="Stripe API key is invalid — check STRIPE_SECRET_KEY")
+        except stripe.error.StripeError as e:
+            raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)}")
         customer_id = customer.id
         # Conditional update: only write if no other request raced us
         get_supabase().table("venues").update(
@@ -50,8 +55,12 @@ def create_checkout_session(manager: dict = Depends(get_current_manager)):
             expand=["latest_invoice.payment_intent"],
             metadata={"venue_id": venue["id"]},
         )
+    except stripe.error.AuthenticationError:
+        raise HTTPException(status_code=502, detail="Stripe API key is invalid — check STRIPE_SECRET_KEY")
     except stripe.error.InvalidRequestError as e:
         raise HTTPException(status_code=502, detail=f"Stripe configuration error: {e.user_message}")
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)}")
 
     return {"client_secret": subscription.latest_invoice.payment_intent.client_secret}
 
