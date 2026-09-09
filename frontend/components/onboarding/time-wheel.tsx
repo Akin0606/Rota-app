@@ -113,6 +113,40 @@ export default function TimeWheel({
     setSel({ h: pr.h, m: pr.m, p: pr.p });
   }
 
+  // Clamp the mouse wheel to one value per notch. Native scroll-snap lets a
+  // single wheel notch (~100px) or trackpad momentum skip several items, so an
+  // exact time was unreachable (the reported bug). GOTCHA: React binds onWheel
+  // as a PASSIVE listener at the root, so an onWheel JSX prop cannot
+  // preventDefault — the listener must be attached manually with
+  // { passive: false }. Per-column lock so moving between columns isn't blocked.
+  useEffect(() => {
+    if (!open) return;
+    const cols: { el: HTMLDivElement; len: number }[] = (
+      [
+        hRef.current ? { el: hRef.current, len: HOURS.length } : null,
+        mRef.current ? { el: mRef.current, len: MINS.length } : null,
+        pRef.current ? { el: pRef.current, len: PERIODS.length } : null,
+      ].filter(Boolean) as { el: HTMLDivElement; len: number }[]
+    );
+    const cleanups = cols.map(({ el, len }) => {
+      let lock = false;
+      const onWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        if (lock) return;
+        lock = true;
+        setTimeout(() => {
+          lock = false;
+        }, 90);
+        const cur = Math.round(el.scrollTop / ITEM);
+        const next = Math.max(0, Math.min(len - 1, cur + (e.deltaY > 0 ? 1 : -1)));
+        el.scrollTo({ top: next * ITEM, behavior: "smooth" });
+      };
+      el.addEventListener("wheel", onWheel, { passive: false });
+      return () => el.removeEventListener("wheel", onWheel);
+    });
+    return () => cleanups.forEach((c) => c());
+  }, [open]);
+
   const column = (
     ref: React.RefObject<HTMLDivElement>,
     values: readonly (number | string)[],
@@ -124,7 +158,16 @@ export default function TimeWheel({
       {values.map((v, i) => {
         const selIdx = values.indexOf(selVal);
         return (
-          <div key={i} className={`ob-wit ${i === selIdx ? "sel" : Math.abs(i - selIdx) === 1 ? "near" : ""}`}>
+          // Tap-to-select: click any visible value to snap it to centre. The
+          // smooth scroll settles into onScroll, which updates `sel` — so this
+          // needs no extra state. Makes exact selection reliable without relying
+          // on scroll physics at all.
+          <div
+            key={i}
+            className={`ob-wit ${i === selIdx ? "sel" : Math.abs(i - selIdx) === 1 ? "near" : ""}`}
+            style={{ cursor: "pointer" }}
+            onClick={() => ref.current?.scrollTo({ top: i * ITEM, behavior: "smooth" })}
+          >
             {fmt(v)}
           </div>
         );

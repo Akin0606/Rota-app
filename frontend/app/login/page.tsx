@@ -52,7 +52,14 @@ export default function LoginPage() {
         </div>
 
         <div className="px-7 pb-6 text-center text-[11px] text-ink-faint">
-          By signing in you agree to our Terms and Privacy Policy
+          By signing in you agree to our{" "}
+          <a href="/terms" className="underline">
+            Terms
+          </a>{" "}
+          and{" "}
+          <a href="/privacy" className="underline">
+            Privacy Policy
+          </a>
         </div>
       </div>
     </div>

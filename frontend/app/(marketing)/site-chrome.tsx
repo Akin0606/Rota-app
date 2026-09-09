@@ -265,6 +265,8 @@ export function SiteFooter() {
           <Link href="/#roadmap">Roadmap</Link>
           <Link href="/#suggest">Tell us something</Link>
           <Link href="/login">Log in</Link>
+          <Link href="/terms">Terms</Link>
+          <Link href="/privacy">Privacy</Link>
         </div>
         <div className="small">© 2026 Rotally. Made for pubs.</div>
       </div>

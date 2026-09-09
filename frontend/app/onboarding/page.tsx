@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import OIcon, { OIconName } from "@/components/onboarding/icon";
 import TimeWheel from "@/components/onboarding/time-wheel";
+import Mark from "@/components/mark";
 import {
   ApiError,
   activateOnboarding,
@@ -1088,7 +1089,7 @@ function StepSolve({
     <>
       <div className="ob-solve">
         <div className={`ob-ring ${finished ? "done" : ""}`}>
-          {finished ? <OIcon name="check" size={32} /> : <span className="spin"><OIcon name="loader" size={32} /></span>}
+          {finished ? <OIcon name="check" size={32} /> : <Mark spinning className="h-8 w-8" />}
         </div>
         <div className="ob-h" style={{ textAlign: "center" }}>{finished ? "Your venue’s ready" : "Setting up your venue…"}</div>
         <div className="ob-p" style={{ textAlign: "center", marginBottom: 0 }}>
