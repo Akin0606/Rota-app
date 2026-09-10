@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import OIcon from "@/components/onboarding/icon";
 
@@ -69,12 +70,23 @@ export default function TimeWheel({
   label,
   onSet,
   onClose,
+  portal = false,
+  variant,
 }: {
   open: boolean;
   value: string;
   label: string;
   onSet: (v: string) => void;
   onClose: () => void;
+  // Opt-in for the manager surfaces: portal the fixed scrim+sheet to
+  // document.body so they escape BottomSheet's transformed .cp-sheet-card
+  // (a transform makes the ancestor the containing block for position:fixed,
+  // which otherwise traps the wheel inside the editor card). Default false so
+  // the onboarding wizard renders byte-identical to before.
+  portal?: boolean;
+  // "manager" applies the neutral tw-manager skin (globals.css) — flat radius,
+  // hairline instead of orange band/CTA, and z-index above the z-100 sheet.
+  variant?: "manager";
 }) {
   const hRef = useRef<HTMLDivElement>(null);
   const mRef = useRef<HTMLDivElement>(null);
@@ -175,14 +187,17 @@ export default function TimeWheel({
     </div>
   );
 
-  return (
+  const tw = variant === "manager" ? " tw-manager" : "";
+  const tree = (
     // Scope the reference's --card/--text/--accent… aliases so the wheel themes
     // correctly wherever it's mounted (onboarding *or* .cp-manager). display:
     // contents means the wrapper paints nothing and adds no box — it only
-    // carries the CSS variables down to the fixed-position sheet below.
-    <div className="cp-onboarding" style={{ display: "contents" }}>
-      <div className={`ob-vscrim ob-vscrim-tw ${open ? "open" : ""}`} onClick={onClose} />
-      <div className={`ob-tw ${open ? "open" : ""}`} role="dialog" aria-label={label}>
+    // carries the CSS variables down to the fixed-position sheet below. When
+    // portaled to body, cp-manager is also stamped so the .cp-manager token
+    // overrides survive the escape from the manager DOM subtree.
+    <div className={`cp-onboarding${portal ? " cp-manager" : ""}`} style={{ display: "contents" }}>
+      <div className={`ob-vscrim ob-vscrim-tw${tw} ${open ? "open" : ""}`} onClick={onClose} />
+      <div className={`ob-tw${tw} ${open ? "open" : ""}`} role="dialog" aria-label={label}>
         <div className="ob-grab" />
         <div className="ob-twhead">
           <div className="lbl">{label}</div>
@@ -219,4 +234,9 @@ export default function TimeWheel({
       </div>
     </div>
   );
+
+  if (portal && typeof document !== "undefined") {
+    return createPortal(tree, document.body);
+  }
+  return tree;
 }

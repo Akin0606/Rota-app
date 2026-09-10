@@ -43,6 +43,10 @@ export default function TimeField({
           setOpen(false);
         }}
         onClose={() => setOpen(false)}
+        // The manager wheel opens from inside a transformed BottomSheet, so it
+        // must portal out to body and wear the neutral skin.
+        portal
+        variant="manager"
       />
     </>
   );

@@ -934,6 +934,21 @@ a:hover {
 .ob-twfoot .ob-btn { flex: 1; }
 .ob-twfoot .ob-btn.ghost { flex: 0 0 100px; }
 
+/* ── Manager skin for the TimeWheel (variant="manager", portaled to body) ────
+   The wheel is the onboarding picker reused in the manager app. Its orange is
+   NOT from --accent (already neutral) — it's hardcoded into the elevation .ob-btn
+   gradient/glow and the .ob-wband. This overrides only those hardcoded properties,
+   scoped to the tw-manager class the manager variant stamps, so onboarding is
+   untouched. It also lifts z-index above BottomSheet's z-[100]: once portaled to
+   body the wheel competes at top level and would otherwise paint behind the sheet. */
+.ob-vscrim-tw.tw-manager { z-index: 110; }
+.ob-tw.tw-manager { z-index: 111; max-width: 460px; border-top-left-radius: 16px; border-top-right-radius: 16px; box-shadow: 0 -1px 0 0 var(--c-hairline); }
+.ob-tw.tw-manager .ob-btn { background: var(--c-accent); color: var(--c-accent-on); box-shadow: none; }
+.ob-tw.tw-manager .ob-btn.ghost { background: transparent; color: var(--c-ink-muted); }
+.ob-tw.tw-manager .ob-wband { background: var(--c-accent-light); border-top: 0.5px solid var(--c-hairline); border-bottom: 0.5px solid var(--c-hairline); }
+.ob-tw.tw-manager .ob-preset.on { background: var(--c-accent-light); border-color: var(--c-hairline); color: var(--c-ink); }
+.ob-tw.tw-manager .ob-twhead .readout .ap { color: var(--c-ink-muted); }
+
 @media (prefers-reduced-motion: reduce) {
   .ob-vscrim, .ob-daysheet, .ob-tw, .ob-wit { transition: opacity 0.15s ease !important; }
   .ob-wcol { scroll-behavior: auto; }
