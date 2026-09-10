@@ -129,8 +129,10 @@ the previous one. **Check `git status` and `git log origin/main..staging` before
 believing any claim here about what is or isn't shipped.**
 
 Built, merged and deployed: staff PWA, manager app, admin console, the drop /
-give / swap / leave systems, the 8-step onboarding wizard (activation token →
-wizard → live venue), the six-batch staff UI rebuild, the staff-UX overhaul
+give / swap / leave systems, the 7-step onboarding wizard (runs as "Step X of
+7": name → venue type → roles → hours → team → coverage → safe defaults, then a
+solve screen; activation token → wizard → live venue), the six-batch staff UI
+rebuild, the staff-UX overhaul
 (a11y → bottom nav → shared-primitive a11y → motion/tactility), the rota page
 redesign, the availability per-day sync, and marketing site v1→v3.
 `staff-ui-rebuild` is a **stale branch**; `main` is ahead of it.
@@ -242,7 +244,7 @@ else manager queue) · give shift (1:1 offer) · swap shift (two-sided, own
 toggle/delete, rota view) · holiday requests phase 1 (request/approve/reject/
 cancel + solver / manual-add / grid integration) · staff self-registration (join
 link + venue PIN + pending state) · full aesthetic pass (staff + manager +
-admin) · 8-step onboarding wizard + activation loop · availability §2/§6
+admin) · 7-step onboarding wizard + activation loop · availability §2/§6
 (four-state colours, prefill echo, auto-submit).
 Next: **per-day shift model** (above) → 12.07% hours accrual → notification
 system (email/push) for claims & approvals (today: `activity_log` only, so

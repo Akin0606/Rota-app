@@ -55,7 +55,10 @@ export default function AdminWaitlistPage() {
     try {
       const res = await inviteWaitlistEntry(entry.id);
       setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, status: "invited" } : e)));
-      showToast(`Account created for ${res.email}. They can sign in at ${res.login_url}.`);
+      // Don't surface the raw activation-token URL — the backend emails the
+      // link to the manager as part of the invite. A branded confirmation is
+      // enough; the token stays out of the console UI.
+      showToast(`Invite sent — activation email on its way to ${res.email}.`);
     } catch (err) {
       showToast(err instanceof AdminApiError ? err.message : "Could not invite this signup.");
     } finally {

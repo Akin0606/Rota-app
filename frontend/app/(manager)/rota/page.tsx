@@ -794,6 +794,16 @@ export default function RotaPage() {
   // schedulable, so counting them would make readiness read short forever.
   const assignableStaff = staff.filter((m) => m.is_active && !m.pending);
 
+  // VIS-6: while collecting, the period pill reads amber "Awaiting Availability"
+  // even when the readiness banner right below it says everyone's in — two true
+  // statements that read as a contradiction. Once every assignable staffer has
+  // submitted, the week is genuinely ready, so the pill goes green "Ready to
+  // build" to match. Only a real, non-empty, fully-in roster flips it.
+  const allSubmittedIn =
+    period?.status === "collecting" &&
+    assignableStaff.length > 0 &&
+    assignableStaff.every((m) => m.submitted);
+
   // R2 — the entry state machine. Gate on state, never blanket: a manager who
   // taps back onto a week they published last Thursday and gets told to
   // "Generate" reads that as "your rota's gone".
@@ -916,7 +926,14 @@ export default function RotaPage() {
           {formatWeekRange(selectedWeek)}
         </div>
         {period ? (
-          <StatusBanner status={period.status} />
+          allSubmittedIn ? (
+            <span className="inline-flex items-center gap-2 rounded-full bg-avail-bg px-3.5 py-1.5 text-xs font-medium text-avail-text">
+              <span className="h-1.5 w-1.5 rounded-full bg-avail-border" />
+              Ready to build
+            </span>
+          ) : (
+            <StatusBanner status={period.status} />
+          )
         ) : (
           <span className="inline-flex items-center gap-2 rounded-full bg-surface-subtle px-3 py-1 text-[11px] font-medium text-ink-muted">
             Not started

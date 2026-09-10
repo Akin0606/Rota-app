@@ -690,6 +690,14 @@
   max-width: 30rem;
   margin-inline: auto;
 }
+/* Two text inputs share the row alongside the submit button. Without an
+   explicit flex basis + min-width:0 they take their width:100% intrinsic
+   size, overflow, then flex-shrink clips the placeholder ("Your venue's nam").
+   flex:1 + min-width:0 lets them shrink cleanly to an equal, un-clipped share. */
+.rotally .hero-form .field {
+  flex: 1;
+  min-width: 0;
+}
 .rotally .hero-note {
   margin-top: 0.875rem;
   font-size: 0.8125rem;

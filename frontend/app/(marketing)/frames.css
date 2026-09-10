@@ -77,9 +77,13 @@
   border-radius: 0.4375rem;
   color: var(--ink-3);
 }
+/* VIS-3: these mock the real manager app, whose active accent is NEUTRAL
+   (black/white), not the marketing orange. ink/bg reproduce the real app's
+   high-contrast neutral accent so the walkthrough doesn't misrepresent the UI.
+   The wordmark wheel (.f-mark span) and semantic tints stay orange. */
 .rotally .f-tab.on {
-  background: var(--accent);
-  color: var(--accent-on);
+  background: var(--ink);
+  color: var(--bg);
 }
 .rotally .f-card {
   background: var(--surface);
@@ -157,9 +161,9 @@
   white-space: nowrap;
 }
 .rotally .f-btn.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-on);
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
 }
 .rotally .f-row {
   display: flex;
@@ -288,8 +292,8 @@
   color: var(--ink-2);
 }
 .rotally .f-cta {
-  background: var(--accent);
-  color: var(--accent-on);
+  background: var(--ink);
+  color: var(--bg);
   font-size: 0.6875rem;
   font-weight: 600;
   padding: 0.4375rem 0.875rem;

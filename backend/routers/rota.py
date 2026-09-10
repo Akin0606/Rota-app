@@ -23,6 +23,7 @@ from models.schemas import (
     SwapOut,
 )
 from services import (
+    dates,
     email_service,
     leave,
     notice_window,
@@ -1474,7 +1475,7 @@ def _send_published_rota_emails(
     staff_by_id = {s["id"]: s for s in staff}
 
     week_start = date.fromisoformat(str(period["week_start"]))
-    week_label = f"w/c {week_start.strftime('%d %b %Y')}"
+    week_label = f"w/c {dates.uk_date(week_start)}"
     venue_link = f"{settings.frontend_url}/v/{venue['link_token']}/rota"
 
     by_staff: dict[str, list[dict]] = {}
@@ -1495,7 +1496,7 @@ def _send_published_rota_emails(
             start_time, end_time = shift_bounds.bounds_for(shift, a["day_index"], shift_days_idx)
             shift_rows.append(
                 {
-                    "day_label": f"{email_service.DAY_NAMES[a['day_index']]} {day_date.strftime('%d %b')}",
+                    "day_label": f"{email_service.DAY_NAMES[a['day_index']]} {dates.uk_date(day_date, with_year=False)}",
                     "shift_name": shift["name"],
                     "start_time": start_time,
                     "end_time": end_time,
@@ -1778,7 +1779,7 @@ def email_rota(
         orientation=orientation,
     )
     attachment = email_service.pdf_attachment(_export_filename(venue, period, "pdf"), pdf)
-    week_label = f"w/c {week_start.strftime('%d %b %Y')}"
+    week_label = f"w/c {dates.uk_date(week_start)}"
 
     if payload.target == "manager":
         result = email_service.send_manager_rota_email(

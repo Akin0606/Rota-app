@@ -13,6 +13,8 @@ from datetime import date, datetime, time, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from services import dates
+
 LONDON = ZoneInfo("Europe/London")
 
 # Storage/display format for the naive wall-clock datetimes.
@@ -120,14 +122,14 @@ def format_deadline(value: Optional[str]) -> Optional[str]:
     dt = parse(value)
     if dt is None:
         return None
-    return f"{dt.strftime('%A %d %b')}, {dt.strftime('%H:%M')}"
+    return f"{dt.strftime('%A')} {dates.uk_date(dt, with_year=False)}, {dt.strftime('%H:%M')}"
 
 
 def format_deadline_dt(dt: Optional[datetime]) -> Optional[str]:
     """Human deadline label for a datetime (as opposed to a stored string)."""
     if dt is None:
         return None
-    return f"{dt.strftime('%A %d %b')}, {dt.strftime('%H:%M')}"
+    return f"{dt.strftime('%A')} {dates.uk_date(dt, with_year=False)}, {dt.strftime('%H:%M')}"
 
 
 # --- Automated 72-hour notice window -----------------------------------------

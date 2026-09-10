@@ -130,10 +130,8 @@ function EmailStep({
         We&apos;ll email you a sign-in code — {OTP_LENGTH} digits, no password to remember.
       </div>
       <div className="mt-2 text-center text-xs text-ink-muted">
-        Staff member?{" "}
-        <a href="/" className="font-medium text-accent">
-          Use your venue link
-        </a>
+        Staff member? Open the venue link and PIN your manager gave you — this
+        sign-in is for managers only.
       </div>
     </div>
   );

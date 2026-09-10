@@ -19,7 +19,7 @@ from models.schemas import (
     SchedulerOverrideResponse,
     SchedulerWeekOut,
 )
-from services import cron_scheduler, notice_window, schedule_windows
+from services import cron_scheduler, dates, notice_window, schedule_windows
 from services.auth_service import get_current_manager, get_manager_venue
 
 router = APIRouter(prefix="/api/scheduler", tags=["scheduler"])
@@ -33,7 +33,7 @@ def _config_out(venue_id: str) -> SchedulerConfigOut:
     weeks = [
         SchedulerWeekOut(
             week_start=w["week_monday"].isoformat(),
-            week_label=f"w/c {w['week_monday'].strftime('%d %b %Y')}",
+            week_label=f"w/c {dates.uk_date(w['week_monday'])}",
             opens_at=w["opens_at"].strftime(FMT),
             reminder_at=w["reminder_at"].strftime(FMT),
             closes_at=w["closes_at"].strftime(FMT),
@@ -145,7 +145,7 @@ def set_override(
             "action": "close_time_overridden",
             "detail": (
                 f"Close time for week of {week_monday.isoformat()} set to "
-                f"{close_dt.strftime('%a %d %b, %H:%M')} ({round(hours)}h notice)"
+                f"{close_dt.strftime('%a')} {dates.uk_date(close_dt, with_year=False)}, {close_dt.strftime('%H:%M')} ({round(hours)}h notice)"
             ),
         }
     ).execute()

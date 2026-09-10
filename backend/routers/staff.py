@@ -13,7 +13,7 @@ from models.schemas import (
     StaffManagerOut,
     StaffUpdateRequest,
 )
-from services import email_service, lifecycle, notice_window, schedule_windows
+from services import dates, email_service, lifecycle, notice_window, schedule_windows
 from services.auth_service import get_current_manager, get_manager_venue
 from services.pin_service import generate_unique_pin
 
@@ -451,7 +451,7 @@ def _reminder_context(venue: dict, period_id: Optional[str]) -> tuple[str, str, 
         return "this week", "soon", None
 
     week_start = date.fromisoformat(str(period_res.data[0]["week_start"]))
-    week_label = f"w/c {week_start.strftime('%d %b %Y')}"
+    week_label = f"w/c {dates.uk_date(week_start)}"
 
     # The close deadline is derived from this week's notice window.
     deadline_label = (

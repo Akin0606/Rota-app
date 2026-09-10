@@ -42,7 +42,7 @@ export function WaitlistForm({ id }: { id?: string }) {
           id={`${id ?? "wl"}-venue`}
           className="field"
           type="text"
-          placeholder="Your venue's name"
+          placeholder="Venue name"
           value={venueName}
           onChange={(e) => setVenueName(e.target.value)}
           required

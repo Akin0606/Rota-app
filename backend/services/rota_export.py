@@ -18,7 +18,7 @@ from datetime import date, timedelta
 
 from fpdf import FPDF
 
-from services import shift_bounds
+from services import dates, shift_bounds
 
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -87,8 +87,8 @@ def _pdf_safe(text: str) -> str:
 def _week_range_label(week_start: date) -> str:
     end = week_start + timedelta(days=6)
     if week_start.month == end.month:
-        return f"{week_start.day}–{end.day} {end.strftime('%b %Y')}"
-    return f"{week_start.strftime('%d %b')} – {end.strftime('%d %b %Y')}"
+        return f"{week_start.day}–{end.day} {dates.uk_month(end)} {end.year}"
+    return f"{dates.uk_date(week_start, with_year=False)} – {dates.uk_date(end)}"
 
 
 def _build_matrix(shifts: list[dict], assignments: list[dict], shift_days_idx: dict | None = None):

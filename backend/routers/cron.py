@@ -8,7 +8,7 @@ from database import get_supabase
 from routers.availability import _most_recent_submission_pattern
 from routers.rota import _build_summary, run_solver_for_period
 from routers.staff import _reminder_context
-from services import cron_scheduler, email_service, notice_window, period_resolver, schedule_windows
+from services import cron_scheduler, dates, email_service, notice_window, period_resolver, schedule_windows
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])
 
@@ -142,7 +142,7 @@ def _auto_submit_for_new_period(venue: dict, period: dict) -> None:
         .execute()
         .data
     )
-    week_label = f"w/c {week_monday.strftime('%d %b %Y')}"
+    week_label = f"w/c {dates.uk_date(week_monday)}"
     # A5 — "change it before the deadline" has to open the week we submitted for.
     venue_link_url = email_service.availability_url(
         get_settings().frontend_url, venue["link_token"], week_monday
@@ -193,7 +193,7 @@ def _auto_submit_for_new_period(venue: dict, period: dict) -> None:
 def _send_open_emails(venue: dict, week_monday: date) -> None:
     """Tells every active staff member availability has opened for the week."""
     settings = get_settings()
-    week_label = f"w/c {week_monday.strftime('%d %b %Y')}"
+    week_label = f"w/c {dates.uk_date(week_monday)}"
     deadline_label = (
         schedule_windows.format_deadline_dt(notice_window.close_for_week(venue["id"], week_monday))
         or "soon"
@@ -262,7 +262,7 @@ def close_availability_for_venue(venue: dict) -> Optional[dict]:
 def _send_closed_emails(venue: dict, week_start) -> None:
     """Tells every active staff member the week's availability has locked."""
     settings = get_settings()
-    week_label = f"w/c {date.fromisoformat(str(week_start)).strftime('%d %b %Y')}"
+    week_label = f"w/c {dates.uk_date(date.fromisoformat(str(week_start)))}"
     rota_link_url = f"{settings.frontend_url}/v/{venue['link_token']}/rota"
     for member in _active_staff(venue["id"]):
         if not member.get("email"):
@@ -317,7 +317,7 @@ def send_review_email_for_venue(venue: dict) -> Optional[dict]:
     summary = _build_summary(venue["id"], period)
 
     week_start = date.fromisoformat(str(period["week_start"]))
-    week_label = f"w/c {week_start.strftime('%d %b %Y')}"
+    week_label = f"w/c {dates.uk_date(week_start)}"
 
     email_result = email_service.send_manager_review_email(
         to_email=venue["manager_email"],
