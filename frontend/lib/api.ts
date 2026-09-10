@@ -603,6 +603,9 @@ export type Venue = {
   subscription_status?: string;
   subscription_started_at?: string | null;
   subscription_ends_at?: string | null;
+  // Admin comp flag. When true the venue is entitled regardless of Stripe, so
+  // the manager layout must not redirect it to /billing.
+  billing_exempt?: boolean;
 };
 
 export type BillingStatus = {

@@ -11,15 +11,19 @@ import {
   AdminApiError,
   AdminVenueDetail,
   AdminVenueRota,
+  CompReason,
   adminGenerateRota,
   adminUnpublishRota,
   adminResetPin,
   createSupportLoginLink,
   deleteAdminVenue,
+  exportAdminVenue,
   getAdminVenueDetail,
   getAdminVenueRota,
   setVenueActive,
+  setVenueComp,
   setVenueNotes,
+  setVenueTrialEnd,
 } from "@/lib/admin-api";
 import { formatWeekRange } from "@/lib/utils";
 import Mark from "@/components/mark";
@@ -33,6 +37,33 @@ function initials(name: string): string {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+}
+
+const COMP_REASONS: { value: CompReason; label: string }[] = [
+  { value: "pilot", label: "Pilot venue" },
+  { value: "friends_family", label: "Friends & family" },
+  { value: "goodwill", label: "Goodwill / write-off" },
+  { value: "other", label: "Other" },
+];
+
+const STATUS_LABELS: Record<string, string> = {
+  trialing: "On trial",
+  active: "Paying",
+  past_due: "Past due",
+  cancelled: "Cancelled",
+  expired: "Expired",
+};
+
+// Tone by billing status: green = healthy/paying, amber = attention (trial/past
+// due), red = lapsed. Matches the coverage-colour discipline used elsewhere.
+function statusChipClass(status: string): string {
+  if (status === "active") return "bg-avail-bg text-avail-text";
+  if (status === "trialing" || status === "past_due") return "bg-warn-bg text-warn-text";
+  return "bg-unavail-bg text-unavail-text";
+}
+
+function reasonLabel(reason: string | null): string {
+  return COMP_REASONS.find((r) => r.value === reason)?.label ?? reason ?? "—";
 }
 
 export default function AdminVenueDetailPage() {
@@ -58,6 +89,14 @@ export default function AdminVenueDetailPage() {
   const [linkLoading, setLinkLoading] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [compOpen, setCompOpen] = useState(false);
+  const [compReason, setCompReason] = useState<CompReason>("pilot");
+  const [compUntil, setCompUntil] = useState(""); // yyyy-mm-dd, "" = forever
+  const [savingComp, setSavingComp] = useState(false);
+  const [trialEdit, setTrialEdit] = useState(false);
+  const [trialDraft, setTrialDraft] = useState(""); // yyyy-mm-dd
+  const [savingTrial, setSavingTrial] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -100,6 +139,66 @@ export default function AdminVenueDetailPage() {
       showToast(err instanceof AdminApiError ? err.message : "Could not save notes");
     } finally {
       setSavingNotes(false);
+    }
+  }
+
+  async function handleComp(exempt: boolean) {
+    if (!venue) return;
+    setSavingComp(true);
+    try {
+      const updated = exempt
+        ? await setVenueComp(venue.id, {
+            exempt: true,
+            reason: compReason,
+            // A date input gives a local yyyy-mm-dd; send it as end-of-day UTC so
+            // "comp until the 30th" covers the whole 30th. "" = comped forever.
+            until: compUntil ? `${compUntil}T23:59:59Z` : null,
+          })
+        : await setVenueComp(venue.id, { exempt: false });
+      setVenue(updated);
+      setCompOpen(false);
+      showToast(exempt ? "Venue comped — free pass on" : "Comp removed");
+    } catch (err) {
+      showToast(err instanceof AdminApiError ? err.message : "Could not update comp");
+    } finally {
+      setSavingComp(false);
+    }
+  }
+
+  async function handleSaveTrialEnd() {
+    if (!venue || !trialDraft) return;
+    setSavingTrial(true);
+    try {
+      const updated = await setVenueTrialEnd(venue.id, `${trialDraft}T23:59:59Z`);
+      setVenue(updated);
+      setTrialEdit(false);
+      showToast("Trial end updated");
+    } catch (err) {
+      showToast(err instanceof AdminApiError ? err.message : "Could not update trial");
+    } finally {
+      setSavingTrial(false);
+    }
+  }
+
+  async function handleExport() {
+    if (!venue) return;
+    setExporting(true);
+    try {
+      const data = await exportAdminVenue(venue.id);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${venue.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-export.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast("Export downloaded");
+    } catch (err) {
+      showToast(err instanceof AdminApiError ? err.message : "Could not export venue");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -326,6 +425,140 @@ export default function AdminVenueDetailPage() {
         />
       </div>
 
+      <div className="mb-6 rounded-panel border border-hairline bg-surface-card p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+            Billing
+          </div>
+          <div className="flex items-center gap-2">
+            {venue.billing_exempt ? (
+              <span className="rounded-full bg-accent-light px-2.5 py-1 text-[11px] font-semibold text-accent">
+                Comped
+              </span>
+            ) : (
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusChipClass(
+                  venue.effective_status,
+                )}`}
+              >
+                {STATUS_LABELS[venue.effective_status] ?? venue.effective_status}
+              </span>
+            )}
+            <span
+              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                venue.entitled ? "bg-avail-bg text-avail-text" : "bg-unavail-bg text-unavail-text"
+              }`}
+            >
+              {venue.entitled ? "Entitled" : "Locked out"}
+            </span>
+          </div>
+        </div>
+
+        {!venue.entitled && (
+          <div className="mb-3 rounded-input border border-unavail-border bg-unavail-bg px-3 py-2 text-[12px] text-unavail-text">
+            This venue can&apos;t generate or publish rotas, and its availability
+            weeks won&apos;t auto-open. Comp it or fix billing to restore access.
+          </div>
+        )}
+
+        <div className="mb-3 grid gap-x-6 gap-y-1.5 text-[13px] sm:grid-cols-2">
+          <div className="flex justify-between gap-2">
+            <span className="text-ink-faint">Stripe status</span>
+            <span className="font-medium text-ink-label">
+              {STATUS_LABELS[venue.effective_status] ?? venue.effective_status}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-ink-faint">
+              {venue.effective_status === "trialing" ? "Trial ends" : "Renews / ends"}
+            </span>
+            {trialEdit ? (
+              <span className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={trialDraft}
+                  onChange={(e) => setTrialDraft(e.target.value)}
+                  className="rounded-input border border-hairline bg-surface-subtle px-2 py-1 text-[12px] text-ink outline-none focus:border-accent"
+                />
+                <button
+                  onClick={handleSaveTrialEnd}
+                  disabled={savingTrial || !trialDraft}
+                  className="rounded-md bg-accent px-2 py-1 text-[11px] font-semibold text-accent-on disabled:opacity-50"
+                >
+                  {savingTrial ? "…" : "Save"}
+                </button>
+                <button
+                  onClick={() => setTrialEdit(false)}
+                  className="text-[11px] font-medium text-ink-faint"
+                >
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <span className="flex items-center gap-2">
+                <span className="font-medium text-ink-label">
+                  {venue.subscription_ends_at
+                    ? new Date(venue.subscription_ends_at).toLocaleDateString()
+                    : "—"}
+                </span>
+                <button
+                  onClick={() => {
+                    setTrialDraft(
+                      venue.subscription_ends_at
+                        ? new Date(venue.subscription_ends_at).toISOString().slice(0, 10)
+                        : "",
+                    );
+                    setTrialEdit(true);
+                  }}
+                  className="text-[11px] font-medium text-accent"
+                >
+                  Edit
+                </button>
+              </span>
+            )}
+          </div>
+          {venue.billing_exempt && (
+            <>
+              <div className="flex justify-between gap-2">
+                <span className="text-ink-faint">Comp reason</span>
+                <span className="font-medium text-ink-label">
+                  {reasonLabel(venue.billing_exempt_reason)}
+                </span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-ink-faint">Comp until</span>
+                <span className="font-medium text-ink-label">
+                  {venue.billing_exempt_until
+                    ? new Date(venue.billing_exempt_until).toLocaleDateString()
+                    : "Forever"}
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {venue.billing_exempt ? (
+          <button
+            onClick={() => handleComp(false)}
+            disabled={savingComp}
+            className="rounded-lg border border-hairline bg-surface-card px-3.5 py-2 text-xs font-semibold text-ink-muted disabled:opacity-50"
+          >
+            {savingComp ? <Waiting label="Saving…" /> : "Remove comp"}
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              setCompReason("pilot");
+              setCompUntil("");
+              setCompOpen(true);
+            }}
+            className="rounded-lg bg-accent px-3.5 py-2 text-xs font-semibold text-accent-on"
+          >
+            Give free pass
+          </button>
+        )}
+      </div>
+
       {showRota && (
         <div className="mb-6 overflow-hidden rounded-panel border border-hairline bg-surface-card">
           <div className="flex items-center justify-between border-b border-surface-page px-5 py-3">
@@ -407,17 +640,27 @@ export default function AdminVenueDetailPage() {
         <div className="mb-1 text-sm font-bold text-unavail-text">Danger zone</div>
         <div className="mb-3 text-[13px] text-unavail-text">
           Permanently delete this venue and all its data — staff, shifts, periods, availability,
-          rota assignments and activity. This cannot be undone.
+          rota assignments and activity. This cannot be undone. Export a copy first — a delete
+          erases staff records with no other backup.
         </div>
-        <button
-          onClick={() => {
-            setDeleteConfirm("");
-            setDeleteOpen(true);
-          }}
-          className="rounded-lg bg-unavail-text px-3.5 py-2 text-xs font-semibold text-status-on"
-        >
-          Delete venue
-        </button>
+        <div className="flex flex-wrap gap-2.5">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="rounded-lg border border-unavail-border bg-surface-card px-3.5 py-2 text-xs font-semibold text-unavail-text disabled:opacity-50"
+          >
+            {exporting ? <Waiting label="Exporting…" /> : "Export data (JSON)"}
+          </button>
+          <button
+            onClick={() => {
+              setDeleteConfirm("");
+              setDeleteOpen(true);
+            }}
+            className="rounded-lg bg-unavail-text px-3.5 py-2 text-xs font-semibold text-status-on"
+          >
+            Delete venue
+          </button>
+        </div>
       </div>
 
       <Modal open={!!loginLink} onClose={() => setLoginLink(null)} title="Support login link">
@@ -447,6 +690,50 @@ export default function AdminVenueDetailPage() {
           >
             Open
           </a>
+        </div>
+      </Modal>
+
+      <Modal open={compOpen} onClose={() => setCompOpen(false)} title="Give a free pass">
+        <div className="mb-3 text-[13px] text-ink-muted">
+          Comping <span className="font-semibold text-ink">{venue.name}</span> entitles it to the
+          full product regardless of Stripe — trials and subscriptions are ignored while the comp
+          is on. Stripe billing is never touched.
+        </div>
+        <label className="mb-1 block text-xs font-semibold text-ink-label">Reason</label>
+        <select
+          value={compReason}
+          onChange={(e) => setCompReason(e.target.value as CompReason)}
+          className="mb-3 w-full rounded-input border border-hairline bg-surface-subtle px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
+        >
+          {COMP_REASONS.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+        <label className="mb-1 block text-xs font-semibold text-ink-label">
+          Until (optional — blank = forever)
+        </label>
+        <input
+          type="date"
+          value={compUntil}
+          onChange={(e) => setCompUntil(e.target.value)}
+          className="mb-4 w-full rounded-input border border-hairline bg-surface-subtle px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
+        />
+        <div className="flex gap-2.5">
+          <button
+            onClick={() => setCompOpen(false)}
+            className="flex-1 rounded-xl bg-unset-bg py-3.5 text-center text-sm font-semibold text-ink-muted"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => handleComp(true)}
+            disabled={savingComp}
+            className="flex-1 rounded-xl bg-accent py-3.5 text-center text-sm font-semibold text-accent-on disabled:opacity-50"
+          >
+            {savingComp ? <Waiting label="Saving…" /> : "Comp this venue"}
+          </button>
         </div>
       </Modal>
 

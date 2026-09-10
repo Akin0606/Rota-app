@@ -34,6 +34,7 @@ from services import (
     swap_guard,
 )
 from services.auth_service import get_current_manager, get_manager_venue
+from services.entitlement import venue_is_entitled
 from services.solver import (
     AVAILABLE,
     DAY_NAMES,
@@ -112,6 +113,21 @@ def _get_period_or_404(venue_id: str, period_id: str) -> dict:
     if not res.data:
         raise HTTPException(status_code=404, detail="Period not found")
     return res.data[0]
+
+
+def _require_entitled(venue: dict) -> None:
+    """402 when a venue isn't entitled (cancelled/expired trial, not comped).
+
+    Gates the two manager actions that drive paid output — generate (solve) and
+    publish (send the rota to staff). Distinct from get_manager_venue's
+    require_active 403: a venue can be active (not admin-disabled) yet unpaid.
+    402 Payment Required is the signal the frontend billing gate keys off.
+    """
+    if not venue_is_entitled(venue):
+        raise HTTPException(
+            status_code=402,
+            detail="This venue's subscription has lapsed — update billing to generate or publish rotas.",
+        )
 
 
 def _submission_demand_slots(
@@ -1108,6 +1124,7 @@ def generate(period_id: str, manager: dict = Depends(get_current_manager)):
     endpoint is reachable directly and the backend runs on the service-role key
     with no RLS net."""
     venue = get_manager_venue(manager["id"])
+    _require_entitled(venue)
     period = _get_period_or_404(venue["id"], period_id)
     return run_solver_for_period(venue, period)
 
@@ -1537,6 +1554,7 @@ def publish(period_id: str, manager: dict = Depends(get_current_manager)):
     once its window closes — see confirm_published_periods_for_venue, swept
     from cron_scheduler.refresh_jobs()."""
     venue = get_manager_venue(manager["id"])
+    _require_entitled(venue)
     period = _get_period_or_404(venue["id"], period_id)
     supabase = get_supabase()
 

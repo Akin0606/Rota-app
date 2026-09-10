@@ -42,6 +42,18 @@ async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// Billing verdict shared by the list and detail views. effective_status resolves
+// an expired trial to "expired"; entitled is the single computed answer the
+// server-side enforcement gate uses (comped OR trialing/active/past_due).
+export type EffectiveStatus =
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "cancelled"
+  | "expired";
+
+export type CompReason = "pilot" | "friends_family" | "goodwill" | "other";
+
 export type AdminVenue = {
   id: string;
   name: string;
@@ -52,6 +64,11 @@ export type AdminVenue = {
   pending: boolean;
   is_active: boolean;
   last_active_at: string | null;
+  effective_status: EffectiveStatus;
+  billing_exempt: boolean;
+  billing_exempt_until: string | null;
+  entitled: boolean;
+  trial_days_left: number | null;
 };
 
 export type AdminManager = {
@@ -81,6 +98,15 @@ export type AdminVenueDetail = {
   admin_notes: string | null;
   staff: AdminStaff[];
   period: { id: string; week_start: string; status: string } | null;
+  effective_status: EffectiveStatus;
+  subscription_started_at: string | null;
+  subscription_ends_at: string | null;
+  billing_exempt: boolean;
+  billing_exempt_reason: CompReason | null;
+  billing_exempt_until: string | null;
+  billing_exempt_at: string | null;
+  billing_exempt_by: string | null;
+  entitled: boolean;
 };
 
 export type AdminActivity = {
@@ -102,6 +128,9 @@ export type AdminStats = {
   total_staff: number;
   open_periods: number;
   published_rotas: number;
+  paying_venues: number;
+  trialing_venues: number;
+  comped_venues: number;
 };
 
 export function listAdminVenues(): Promise<AdminVenue[]> {
@@ -176,6 +205,52 @@ export function setVenueNotes(id: string, notes: string): Promise<AdminVenueDeta
     method: "PATCH",
     body: JSON.stringify({ admin_notes: notes }),
   });
+}
+
+// Turn a comp on (reason required; until = null means forever) or off. The
+// server stamps who/when and, on removal, clears the reason/until.
+export function setVenueComp(
+  id: string,
+  args:
+    | { exempt: true; reason: CompReason; until?: string | null }
+    | { exempt: false },
+): Promise<AdminVenueDetail> {
+  const body: Record<string, unknown> = { billing_exempt: args.exempt };
+  if (args.exempt) {
+    body.billing_exempt_reason = args.reason;
+    body.billing_exempt_until = args.until ?? null;
+  }
+  return adminRequest(`/api/admin/venues/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+// Extend/shorten a trial without touching Stripe. ISO timestamp.
+export function setVenueTrialEnd(id: string, endsAt: string): Promise<AdminVenueDetail> {
+  return adminRequest(`/api/admin/venues/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ subscription_ends_at: endsAt }),
+  });
+}
+
+export type AdminAudit = {
+  id: string;
+  action: string;
+  target_venue_id: string | null;
+  target_venue_name: string | null;
+  target_email: string | null;
+  detail: string | null;
+  created_at: string;
+};
+
+export function listAdminAudit(limit = 100): Promise<AdminAudit[]> {
+  return adminRequest(`/api/admin/audit?limit=${limit}`);
+}
+
+// Full JSON snapshot of a venue, for the admin to keep before a delete.
+export function exportAdminVenue(id: string): Promise<unknown> {
+  return adminRequest(`/api/admin/venues/${id}/export`);
 }
 
 export type AdminShift = {

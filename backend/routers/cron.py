@@ -9,6 +9,7 @@ from routers.availability import _most_recent_submission_pattern
 from routers.rota import _build_summary, run_solver_for_period
 from routers.staff import _reminder_context
 from services import cron_scheduler, dates, email_service, notice_window, period_resolver, schedule_windows
+from services.entitlement import venue_is_entitled
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])
 
@@ -87,6 +88,13 @@ def open_availability_for_venue(venue: dict) -> Optional[dict]:
     batch that had no reason to think about onboarding.
     """
     if not setup_is_complete(venue):
+        return None
+
+    # Billing gate: a venue that isn't entitled (cancelled/expired and not
+    # comped) stops getting the paid machinery — no new availability weeks open
+    # and no staff email goes out. Checked next to the send, mirroring the
+    # setup_is_complete guard above, because the same three callers reach here.
+    if not venue_is_entitled(venue):
         return None
 
     supabase = get_supabase()
@@ -222,6 +230,10 @@ def _send_open_emails(venue: dict, week_monday: date) -> None:
 def close_availability_for_venue(venue: dict) -> Optional[dict]:
     """Closes the venue's currently-collecting period and runs the solver.
     No-op if there's nothing collecting (already closed, or never opened)."""
+    # Billing gate — a non-entitled venue's week doesn't auto-close-and-solve or
+    # send closed/rota emails. It keeps whatever collecting period it has.
+    if not venue_is_entitled(venue):
+        return None
     supabase = get_supabase()
     # A13 — the week the notice window points at, not merely the newest open
     # one. Those differ whenever a manager has planned ahead (create_period
@@ -287,6 +299,10 @@ def send_review_email_for_venue(venue: dict) -> Optional[dict]:
     if not venue.get("manager_email"):
         return None
 
+    # Billing gate — no manager review email for a non-entitled venue.
+    if not venue_is_entitled(venue):
+        return None
+
     # A picker the fix plan's grounding facts missed: newest-of-any-status, the
     # same rule A9 splits in the admin console. So the email a manager actually
     # reads could name a different week from every screen in the app. It reports
@@ -346,6 +362,9 @@ def send_review_email_for_venue(venue: dict) -> Optional[dict]:
 def send_reminders_for_venue(venue: dict) -> Optional[dict]:
     """Emails everyone who hasn't submitted for the currently-collecting
     period. No-op if nothing is currently collecting."""
+    # Billing gate — no reminder emails for a non-entitled venue.
+    if not venue_is_entitled(venue):
+        return None
     supabase = get_supabase()
     settings = get_settings()
 

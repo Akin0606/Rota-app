@@ -1,3 +1,4 @@
+import hmac
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -7,6 +8,7 @@ from config import get_settings
 from database import get_supabase
 from models.schemas import (
     AdminActivityOut,
+    AdminAuditOut,
     AdminCreateManagerRequest,
     AdminManagerOut,
     AdminStatsOut,
@@ -23,6 +25,7 @@ from models.schemas import (
 from routers.rota import _build_summary, run_solver_for_period
 from routers.staff import _generate_unique_pin
 from services import email_service, onboarding, period_resolver
+from services.entitlement import effective_status, is_comped, venue_is_entitled
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -33,11 +36,45 @@ STALE_DAYS = 14
 # clean 400 rather than a Postgres constraint violation surfacing as a 500.
 _SUGGESTION_STATUSES = {"new", "read", "actioned", "archived"}
 
+# Comp reasons the console offers. Validated so a comp is always countable, not
+# free text; "other" is the escape hatch (a note can go in admin_notes).
+_COMP_REASONS = {"pilot", "friends_family", "goodwill", "other"}
+
 
 def require_admin(x_admin_secret: str = Header(default="")) -> None:
     settings = get_settings()
-    if not settings.admin_secret or x_admin_secret != settings.admin_secret:
+    # Constant-time compare so a wrong secret can't be recovered by timing the
+    # response. hmac.compare_digest short-circuits only on differing length.
+    if not settings.admin_secret or not hmac.compare_digest(
+        x_admin_secret, settings.admin_secret
+    ):
         raise HTTPException(status_code=401, detail="Invalid admin secret")
+
+
+def _log_admin_audit(
+    action: str,
+    *,
+    venue: Optional[dict] = None,
+    target_email: Optional[str] = None,
+    detail: Optional[str] = None,
+) -> None:
+    """Append one row to admin_audit — the only accountability the console has
+    under a single shared ADMIN_SECRET (it records what was done to which
+    venue, never which admin). Stored outside the venue cascade, so the venue's
+    name/email are copied onto the row and survive a delete. Best-effort: a
+    logging failure must never break the action it records."""
+    try:
+        get_supabase().table("admin_audit").insert(
+            {
+                "action": action,
+                "target_venue_id": venue["id"] if venue else None,
+                "target_venue_name": venue.get("name") if venue else None,
+                "target_email": (venue.get("manager_email") if venue else None) or target_email,
+                "detail": detail,
+            }
+        ).execute()
+    except Exception:
+        pass
 
 
 def _get_venue_or_404(venue_id: str) -> dict:
@@ -46,6 +83,23 @@ def _get_venue_or_404(venue_id: str) -> dict:
     if not res.data:
         raise HTTPException(status_code=404, detail="Venue not found")
     return res.data[0]
+
+
+def _trial_days_left(venue: dict) -> Optional[int]:
+    """Whole days until a trialing venue's end date, else None. Negative days
+    (an already-expired trial) clamp to 0 so the UI never shows a past figure."""
+    if (venue.get("subscription_status") or "trialing") != "trialing":
+        return None
+    ends_at = venue.get("subscription_ends_at")
+    if not ends_at:
+        return None
+    try:
+        end = datetime.fromisoformat(str(ends_at).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    return max(0, (end - datetime.now(timezone.utc)).days)
 
 
 
@@ -96,6 +150,11 @@ def list_venues():
             "pending": False,
             "is_active": v.get("is_active", True),
             "last_active_at": last_active.get(v["id"]),
+            "effective_status": effective_status(v),
+            "billing_exempt": bool(v.get("billing_exempt")),
+            "billing_exempt_until": v.get("billing_exempt_until"),
+            "entitled": venue_is_entitled(v),
+            "trial_days_left": _trial_days_left(v),
         }
         for v in venues
     ]
@@ -132,8 +191,28 @@ def get_stats():
     """At-a-glance operational stats across all venues."""
     supabase = get_supabase()
 
-    venues = supabase.table("venues").select("id, is_active").execute().data
+    venues = (
+        supabase.table("venues")
+        .select(
+            "id, is_active, subscription_status, subscription_ends_at, "
+            "billing_exempt, billing_exempt_until"
+        )
+        .execute()
+        .data
+    )
     active = sum(1 for v in venues if v.get("is_active", True))
+
+    # Billing breakdown. comped wins first (a comped trial counts as comped, not
+    # trialing); then paying (active/past_due Stripe) vs live trials.
+    comped = sum(1 for v in venues if is_comped(v))
+    paying = sum(
+        1
+        for v in venues
+        if not is_comped(v) and effective_status(v) in ("active", "past_due")
+    )
+    trialing = sum(
+        1 for v in venues if not is_comped(v) and effective_status(v) == "trialing"
+    )
 
     staff = supabase.table("staff_members").select("id").eq("is_active", True).execute().data
 
@@ -180,6 +259,9 @@ def get_stats():
         "total_staff": len(staff),
         "open_periods": open_periods,
         "published_rotas": published,
+        "paying_venues": paying,
+        "trialing_venues": trialing,
+        "comped_venues": comped,
     }
 
 
@@ -345,6 +427,15 @@ def get_venue_detail(venue_id: str):
             if period
             else None
         ),
+        "effective_status": effective_status(venue),
+        "subscription_started_at": venue.get("subscription_started_at"),
+        "subscription_ends_at": venue.get("subscription_ends_at"),
+        "billing_exempt": bool(venue.get("billing_exempt")),
+        "billing_exempt_reason": venue.get("billing_exempt_reason"),
+        "billing_exempt_until": venue.get("billing_exempt_until"),
+        "billing_exempt_at": venue.get("billing_exempt_at"),
+        "billing_exempt_by": venue.get("billing_exempt_by"),
+        "entitled": venue_is_entitled(venue),
     }
 
 
@@ -354,14 +445,56 @@ def get_venue_detail(venue_id: str):
     dependencies=[Depends(require_admin)],
 )
 def set_venue_active(venue_id: str, payload: AdminVenueUpdateRequest):
-    """Enables/disables a venue and/or updates the admin's support notes for it.
-    Disabling blocks manager login and staff PIN entry immediately — this is the
-    hook a payment gateway can flip automatically later. Notes are admin-only,
-    never shown to managers or staff."""
+    """Enables/disables a venue, updates support notes, and controls the billing
+    comp (free pass) + trial end.
+
+    is_active is the on/off switch (blocks login/PIN entry). billing_exempt is
+    the separate comp gate: a comped venue is entitled to the paid machinery
+    regardless of Stripe, and is never touched by the billing webhook. Only the
+    fields declared on AdminVenueUpdateRequest are writable here, so
+    subscription_status (Stripe's) can't be set through this endpoint."""
     supabase = get_supabase()
     venue = _get_venue_or_404(venue_id)
 
     updates = payload.model_dump(exclude_unset=True)
+
+    # --- Validate the comp fields before writing anything. ---
+    setting_exempt = updates.get("billing_exempt")
+    if setting_exempt is True:
+        # A reason is required when turning comp ON (from the payload, or already
+        # stored). A comp with no reason is a future support mystery.
+        reason = updates.get("billing_exempt_reason") or venue.get("billing_exempt_reason")
+        if not reason:
+            raise HTTPException(
+                status_code=400, detail="A reason is required to comp a venue"
+            )
+    if "billing_exempt_reason" in updates and updates["billing_exempt_reason"] is not None:
+        if updates["billing_exempt_reason"] not in _COMP_REASONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Reason must be one of: {', '.join(sorted(_COMP_REASONS))}",
+            )
+    for date_field in ("billing_exempt_until", "subscription_ends_at"):
+        val = updates.get(date_field)
+        if val:
+            try:
+                datetime.fromisoformat(str(val).replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                raise HTTPException(
+                    status_code=400, detail=f"{date_field} must be an ISO timestamp"
+                )
+
+    # Stamp who/when whenever the comp flag itself is toggled, in either
+    # direction, so the audit stays honest about when a venue went (un)comped.
+    if "billing_exempt" in updates:
+        updates["billing_exempt_at"] = datetime.now(timezone.utc).isoformat()
+        updates["billing_exempt_by"] = "admin console"
+        if setting_exempt is False:
+            # Clearing the comp clears its reason/expiry too, so a lapsed comp
+            # doesn't leave a stale "why" behind.
+            updates["billing_exempt_reason"] = None
+            updates["billing_exempt_until"] = None
+
     if updates:
         supabase.table("venues").update(updates).eq("id", venue_id).execute()
 
@@ -375,6 +508,26 @@ def set_venue_active(venue_id: str, payload: AdminVenueUpdateRequest):
                 ),
             }
         ).execute()
+        _log_admin_audit(
+            "venue_activated" if payload.is_active else "venue_deactivated",
+            venue=venue,
+        )
+
+    if "billing_exempt" in updates:
+        if setting_exempt:
+            reason = updates.get("billing_exempt_reason") or venue.get("billing_exempt_reason")
+            until = updates.get("billing_exempt_until")
+            detail = f"Comped ({reason})" + (f" until {until}" if until else " — no expiry")
+        else:
+            detail = "Comp removed"
+        _log_admin_audit("venue_comped" if setting_exempt else "venue_uncomped", venue=venue, detail=detail)
+
+    if "subscription_ends_at" in updates and "billing_exempt" not in updates:
+        _log_admin_audit(
+            "trial_end_changed",
+            venue=venue,
+            detail=f"Trial end set to {updates['subscription_ends_at']}",
+        )
 
     return get_venue_detail(venue_id)
 
@@ -404,6 +557,12 @@ def create_support_login_link(venue_id: str):
     link establishes the manager's session on click."""
     venue = _get_venue_or_404(venue_id)
     action_link = _generate_magic_link(venue["manager_email"])
+    # Impersonation is the most sensitive thing the console does — always audited.
+    _log_admin_audit(
+        "support_login_link",
+        venue=venue,
+        detail="Support magic login link minted (impersonation)",
+    )
     return {"email": venue["manager_email"], "status": "link_created", "login_url": action_link}
 
 
@@ -423,13 +582,83 @@ def resend_pending_manager_login_link(email: str):
     return {"email": email, "status": "link_created", "login_url": activation_url}
 
 
+def _export_venue_data(venue: dict) -> dict:
+    """Assembles a plain-dict snapshot of everything the venue cascade would
+    erase — staff (incl. PII), shifts, periods, submissions, assignments, leave,
+    activity — so the admin has a record before a destructive delete. Read-only.
+    """
+    supabase = get_supabase()
+    venue_id = venue["id"]
+
+    def _rows(table: str, select: str = "*") -> list[dict]:
+        try:
+            return supabase.table(table).select(select).eq("venue_id", venue_id).execute().data or []
+        except Exception:
+            return []
+
+    staff = _rows("staff_members")
+    period_ids = [p["id"] for p in _rows("availability_periods")]
+    submissions: list[dict] = []
+    assignments: list[dict] = []
+    if period_ids:
+        try:
+            submissions = (
+                supabase.table("availability_submissions")
+                .select("*").in_("period_id", period_ids).execute().data or []
+            )
+            assignments = (
+                supabase.table("rota_assignments")
+                .select("*").in_("period_id", period_ids).execute().data or []
+            )
+        except Exception:
+            pass
+
+    return {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "venue": venue,
+        "staff": staff,
+        "shifts": _rows("shifts"),
+        "periods": _rows("availability_periods"),
+        "submissions": submissions,
+        "assignments": assignments,
+        "leave_requests": _rows("leave_requests"),
+        "activity_log": _rows("activity_log"),
+    }
+
+
+@router.get("/venues/{venue_id}/export", dependencies=[Depends(require_admin)])
+def export_venue(venue_id: str):
+    """Full JSON snapshot of a venue's data, for the admin to keep before a
+    delete (a delete cascades away staff PII with no other backup) or on
+    request. Reading it is audited so a bulk data pull leaves a trail."""
+    venue = _get_venue_or_404(venue_id)
+    data = _export_venue_data(venue)
+    _log_admin_audit(
+        "venue_exported",
+        venue=venue,
+        detail=f"Data export: {len(data['staff'])} staff, {len(data['assignments'])} assignments",
+    )
+    return data
+
+
 @router.delete("/venues/{venue_id}", dependencies=[Depends(require_admin)])
 def delete_venue(venue_id: str):
     """Permanently deletes a venue and all related data. Foreign-key cascades
     remove shifts, staff, scheduling rules, periods, submissions, assignments
-    and activity log for the venue (see migrations 001/007/008)."""
+    and activity log for the venue (see migrations 001/007/008). The admin_audit
+    row is written BEFORE the delete and survives it (target_venue_id is a plain
+    uuid, not an FK), so a deleted venue still has an accountability trail."""
     supabase = get_supabase()
     venue = _get_venue_or_404(venue_id)
+
+    staff_count = (
+        len(supabase.table("staff_members").select("id").eq("venue_id", venue_id).execute().data or [])
+    )
+    _log_admin_audit(
+        "venue_deleted",
+        venue=venue,
+        detail=f"Venue permanently deleted ({staff_count} staff records erased)",
+    )
 
     supabase.table("venues").delete().eq("id", venue_id).execute()
 
@@ -466,6 +695,21 @@ def list_all_activity(limit: int = Query(default=50, le=200)):
         r["staff_name"] = staff_by_id.get(r["staff_id"]) if r.get("staff_id") else None
 
     return rows
+
+
+@router.get("/audit", response_model=list[AdminAuditOut], dependencies=[Depends(require_admin)])
+def list_admin_audit(limit: int = Query(default=100, le=500)):
+    """The admin-action trail (comps, deletes, impersonation, trial edits).
+    Self-contained rows — no join — so deleted venues still read correctly."""
+    supabase = get_supabase()
+    return (
+        supabase.table("admin_audit")
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+        .data
+    )
 
 
 @router.get(

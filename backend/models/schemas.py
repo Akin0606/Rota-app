@@ -255,6 +255,11 @@ class VenueOut(BaseModel):
     subscription_status: str = "trialing"
     subscription_started_at: Optional[str] = None
     subscription_ends_at: Optional[str] = None
+    # Admin comp flag (migration 031). When true (and not past billing_exempt_until),
+    # the venue is entitled regardless of subscription_status, so the manager
+    # layout must NOT redirect it to /billing. The reason/until/stamps stay
+    # admin-only; only the boolean the gate needs is exposed here.
+    billing_exempt: bool = False
 
 
 class OnboardingActivateRequest(BaseModel):
@@ -725,11 +730,31 @@ class AdminVenueOut(BaseModel):
     # Most recent activity_log timestamp for the venue (for spotting stale
     # venues). None if the venue has no activity yet.
     last_active_at: Optional[str] = None
+    # Billing visibility (migration 029/031). effective_status resolves an
+    # expired trial to "expired"; billing_exempt/until describe the comp; and
+    # entitled is the single computed verdict the enforcement path uses, so the
+    # admin list can show exactly who the machinery will and won't run for.
+    effective_status: str = "trialing"
+    billing_exempt: bool = False
+    billing_exempt_until: Optional[str] = None
+    entitled: bool = True
+    trial_days_left: Optional[int] = None
 
 
 class AdminVenueUpdateRequest(BaseModel):
     is_active: Optional[bool] = None
     admin_notes: Optional[str] = None
+    # Comp control (migration 031). Only these declared fields are writable via
+    # the PATCH (BaseModel ignores extras + the router uses exclude_unset), so
+    # subscription_status — owned by the Stripe webhook — can never be poked
+    # through this endpoint. billing_exempt_reason is required by the router
+    # whenever billing_exempt is set true.
+    billing_exempt: Optional[bool] = None
+    billing_exempt_reason: Optional[str] = None
+    billing_exempt_until: Optional[str] = None
+    # Editable trial end, so an admin can extend/shorten a trial without Stripe.
+    # Never touches subscription_status directly.
+    subscription_ends_at: Optional[str] = None
 
 
 class WaitlistRequest(BaseModel):
@@ -796,6 +821,16 @@ class AdminVenueDetailOut(BaseModel):
     admin_notes: Optional[str] = None
     staff: list[AdminStaffOut]
     period: Optional[PeriodOut] = None
+    # Billing / comp snapshot for the detail page (see AdminVenueOut).
+    effective_status: str = "trialing"
+    subscription_started_at: Optional[str] = None
+    subscription_ends_at: Optional[str] = None
+    billing_exempt: bool = False
+    billing_exempt_reason: Optional[str] = None
+    billing_exempt_until: Optional[str] = None
+    billing_exempt_at: Optional[str] = None
+    billing_exempt_by: Optional[str] = None
+    entitled: bool = True
 
 
 class StaffRotaAssignmentOut(BaseModel):
@@ -934,6 +969,11 @@ class AdminStatsOut(BaseModel):
     total_staff: int
     open_periods: int
     published_rotas: int
+    # Billing breakdown (migration 029/031): paying = active/past_due Stripe
+    # subscriptions, trialing = live trials, comped = admin free passes.
+    paying_venues: int = 0
+    trialing_venues: int = 0
+    comped_venues: int = 0
 
 
 class AdminVenueRotaOut(BaseModel):
@@ -953,6 +993,20 @@ class AdminActivityOut(BaseModel):
     staff_id: Optional[str] = None
     staff_name: Optional[str] = None
     action: str
+    detail: Optional[str] = None
+    created_at: str
+
+
+class AdminAuditOut(BaseModel):
+    """One admin-console action, from the append-only admin_audit table. Kept
+    outside the venue cascade, so target_venue_name/email are stored on the row
+    rather than joined — a deleted venue's audit rows still read correctly."""
+
+    id: str
+    action: str
+    target_venue_id: Optional[str] = None
+    target_venue_name: Optional[str] = None
+    target_email: Optional[str] = None
     detail: Optional[str] = None
     created_at: str
 

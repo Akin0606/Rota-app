@@ -26,7 +26,7 @@ function isStale(lastActiveAt: string | null): boolean {
   return Date.now() - last > STALE_DAYS * 24 * 60 * 60 * 1000;
 }
 
-type StatusFilter = "all" | "active" | "inactive" | "stale" | "pending";
+type StatusFilter = "all" | "active" | "inactive" | "stale" | "pending" | "locked" | "comped";
 
 const FILTERS: { key: StatusFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -34,7 +34,17 @@ const FILTERS: { key: StatusFilter; label: string }[] = [
   { key: "inactive", label: "Inactive" },
   { key: "stale", label: "Stale" },
   { key: "pending", label: "Pending" },
+  { key: "locked", label: "Locked out" },
+  { key: "comped", label: "Comped" },
 ];
+
+const BILLING_LABELS: Record<string, string> = {
+  trialing: "Trial",
+  active: "Paying",
+  past_due: "Past due",
+  cancelled: "Cancelled",
+  expired: "Expired",
+};
 
 function initials(name: string): string {
   return name
@@ -147,6 +157,10 @@ export default function AdminVenuesPage() {
         return !v.pending && isStale(v.last_active_at);
       case "pending":
         return v.pending;
+      case "locked":
+        return !v.pending && !v.entitled;
+      case "comped":
+        return !v.pending && v.billing_exempt;
       default:
         return true;
     }
@@ -181,15 +195,22 @@ export default function AdminVenuesPage() {
       </div>
 
       {stats && (
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-          <Stat label="Venues" value={stats.total_venues} />
-          <Stat label="Active" value={stats.active_venues} />
-          <Stat label="Inactive" value={stats.inactive_venues} tone={stats.inactive_venues > 0 ? "warn" : undefined} />
-          <Stat label="Stale" value={stats.stale_venues} tone={stats.stale_venues > 0 ? "warn" : undefined} />
-          <Stat label="Staff" value={stats.total_staff} />
-          <Stat label="Open weeks" value={stats.open_periods} />
-          <Stat label="Published" value={stats.published_rotas} />
-        </div>
+        <>
+          <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+            <Stat label="Venues" value={stats.total_venues} />
+            <Stat label="Active" value={stats.active_venues} />
+            <Stat label="Inactive" value={stats.inactive_venues} tone={stats.inactive_venues > 0 ? "warn" : undefined} />
+            <Stat label="Stale" value={stats.stale_venues} tone={stats.stale_venues > 0 ? "warn" : undefined} />
+            <Stat label="Staff" value={stats.total_staff} />
+            <Stat label="Open weeks" value={stats.open_periods} />
+            <Stat label="Published" value={stats.published_rotas} />
+          </div>
+          <div className="mb-6 grid grid-cols-3 gap-3">
+            <Stat label="Paying" value={stats.paying_venues} />
+            <Stat label="On trial" value={stats.trialing_venues} />
+            <Stat label="Comped" value={stats.comped_venues} />
+          </div>
+        </>
       )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2.5">
@@ -264,6 +285,31 @@ export default function AdminVenuesPage() {
                     </span>
                   )}
                 </div>
+                {!v.pending && (
+                  <div className="w-24 shrink-0">
+                    {v.billing_exempt ? (
+                      <span className="inline-block rounded-full bg-accent-light px-2.5 py-1 text-[11px] font-semibold text-accent">
+                        Comped
+                      </span>
+                    ) : !v.entitled ? (
+                      <span className="inline-block rounded-full bg-unavail-bg px-2.5 py-1 text-[11px] font-semibold text-unavail-text">
+                        Locked out
+                      </span>
+                    ) : v.effective_status === "trialing" ? (
+                      <span className="inline-block rounded-full bg-warn-bg px-2.5 py-1 text-[11px] font-semibold text-warn-text">
+                        {v.trial_days_left != null ? `Trial · ${v.trial_days_left}d` : "Trial"}
+                      </span>
+                    ) : v.effective_status === "past_due" ? (
+                      <span className="inline-block rounded-full bg-warn-bg px-2.5 py-1 text-[11px] font-semibold text-warn-text">
+                        Past due
+                      </span>
+                    ) : (
+                      <span className="inline-block rounded-full bg-avail-bg px-2.5 py-1 text-[11px] font-semibold text-avail-text">
+                        {BILLING_LABELS[v.effective_status] ?? v.effective_status}
+                      </span>
+                    )}
+                  </div>
+                )}
               </>
             );
 

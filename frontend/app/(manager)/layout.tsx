@@ -84,7 +84,12 @@ export default async function ManagerLayout({ children }: { children: React.Reac
   const pathname = reqHeaders.get("x-pathname") ?? "";
   const isBillingPage = pathname === "/billing" || pathname.startsWith("/billing/");
 
-  if (!isBillingPage) {
+  // A comped (billing_exempt) venue is entitled regardless of Stripe — an admin
+  // gave it a free pass — so it must never be sent to /billing. This mirrors the
+  // server-side venue_is_entitled() gate that comp-checks first; keeping the
+  // redirect off comped venues is what stops a pilot pub being locked out.
+  const billingExempt = (venue as Record<string, unknown>).billing_exempt === true;
+  if (!isBillingPage && !billingExempt) {
     const subStatus = (venue as Record<string, unknown>).subscription_status as string | undefined;
     const subEndsAt = (venue as Record<string, unknown>).subscription_ends_at as string | undefined;
     // The backend /billing/status now returns "expired" for past-due trials,
