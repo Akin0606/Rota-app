@@ -21,14 +21,43 @@ const DEVICES: Device[] = [
   { key: "galaxy", name: "Galaxy S (Android)", w: 360, h: 800, dpr: 3, platform: "android" },
 ];
 
-// One-tap routes. Authed manager/staff routes will bounce to login/PIN locally
-// — for those, point at a throwaway .cp-manager preview route instead.
-const QUICK: { label: string; path: string }[] = [
-  { label: "Landing", path: "/" },
-  { label: "Walkthrough", path: "/walkthrough" },
-  { label: "Login", path: "/login" },
-  { label: "Onboarding", path: "/onboarding" },
-  { label: "Shift picker", path: "/devlab/preview" },
+// One-tap routes, grouped. Staff routes are the real /v/demo/* pages (a dev-only
+// layout stubs fetch + plants the demo PIN, so the bottom nav works natively);
+// manager routes are hosted previews (the real (manager) layout is a server auth
+// gate that would redirect before any client stub could run).
+const QUICK: { group: string; items: { label: string; path: string }[] }[] = [
+  {
+    group: "Public",
+    items: [
+      { label: "Landing", path: "/" },
+      { label: "Walkthrough", path: "/walkthrough" },
+      { label: "Login", path: "/login" },
+      { label: "Onboarding", path: "/onboarding" },
+    ],
+  },
+  {
+    group: "Staff",
+    items: [
+      { label: "Hub", path: "/v/demo/hub" },
+      { label: "My shifts", path: "/v/demo/rota" },
+      { label: "Availability", path: "/v/demo/availability" },
+      { label: "Hours", path: "/v/demo/hours" },
+      { label: "Time off", path: "/v/demo/leave" },
+      { label: "Swap", path: "/v/demo/drop" },
+    ],
+  },
+  {
+    group: "Manager",
+    items: [
+      { label: "Dashboard", path: "/devlab/manager/dashboard" },
+      { label: "Rota", path: "/devlab/manager/rota" },
+      { label: "Scheduler", path: "/devlab/manager/scheduler" },
+      { label: "Team", path: "/devlab/manager/team" },
+      { label: "Settings", path: "/devlab/manager/settings" },
+      { label: "Leave", path: "/devlab/manager/leave" },
+      { label: "Shift editor", path: "/devlab/preview" },
+    ],
+  },
 ];
 
 const CHROME = "#0d0d0e";
@@ -132,9 +161,14 @@ export default function DeviceLab() {
           <button type="button" style={btn()} onClick={() => setReloadKey((k) => k + 1)} title="Reload">↻</button>
         </form>
 
-        <div style={{ display: "flex", gap: 4 }}>
-          {QUICK.map((q) => (
-            <button key={q.path} style={btn(path === q.path)} onClick={() => go(q.path)}>{q.label}</button>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", width: "100%" }}>
+          {QUICK.map((grp) => (
+            <div key={grp.group} style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.05em", color: DIM, paddingRight: 2 }}>{grp.group}</span>
+              {grp.items.map((q) => (
+                <button key={q.path} style={btn(path === q.path)} onClick={() => go(q.path)}>{q.label}</button>
+              ))}
+            </div>
           ))}
         </div>
       </div>

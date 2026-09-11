@@ -137,7 +137,13 @@ export default function SettingsPage() {
         if (isFirst) setError(true);
         else showToast("Couldn't refresh — your saved changes are safe. Pull to reload if needed.");
       } finally {
-        if (!cancelled && isFirst) setLoading(false);
+        // Clear loading on any run that wasn't cancelled — not just the one
+        // that observed isFirst. Under React's dev StrictMode the mount effect
+        // double-invokes: the first run sets firstLoad.current=false then is
+        // cancelled, so the run that actually completes sees isFirst=false and
+        // would never clear loading. On a background reload this is a no-op
+        // (loading is already false), so keeping the current UI up still holds.
+        if (!cancelled) setLoading(false);
       }
     }
     load();
