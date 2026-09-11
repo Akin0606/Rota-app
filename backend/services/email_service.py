@@ -160,10 +160,12 @@ def send_magic_link_email(to_email: str, venue_name: str, magic_link_url: str) -
 
 def send_activation_email(to_email: str, activation_url: str) -> dict:
     subject = "You're in — set up your venue"
+    tour_url = f"{get_settings().frontend_url}/tour"
     body = f"""
 <p style="margin:0 0 16px;">You're in. Set up your venue in about 3 minutes — no password to create, this link signs you in.</p>
 {_button("Set up my venue", activation_url)}
-<p style="margin:20px 0 0;font-size:13px;color:#6b7280;">This link works for 7 days and signs you in once. If you didn't request it, you can ignore this email.</p>
+<p style="margin:20px 0 0;font-size:14px;color:#374151;">New to Rotally? <a href="{tour_url}" style="color:#B04D0B;font-weight:600;text-decoration:none;">Take the 2-minute tour</a> to see how the whole week comes together first.</p>
+<p style="margin:16px 0 0;font-size:13px;color:#6b7280;">This link works for 7 days and signs you in once. If you didn't request it, you can ignore this email.</p>
 """
     html = _shell("You're in — set up your venue", "Your Rotally invite is ready — set up your venue in about 3 minutes.", body)
     return _send(to_email, subject, html)
