@@ -7,49 +7,87 @@ export const metadata: Metadata = {
   description: "How Rotally collects, uses, and protects personal data.",
 };
 
-// NOTE: This is a structured SHELL, not finalised legal copy. Rotally stores
-// staff personal data including under-18 status, so the Privacy Policy is a
-// go-live/GDPR requirement. The headings below map the sections a UK privacy
-// policy for this kind of service needs; the body is placeholder. Replace each
-// with solicitor-reviewed wording (and set the real "Last updated" date) before
-// go-live. Sub-processors listed are the actual stack — keep this list accurate.
+const LAST_UPDATED = "10 September 2026";
 
-const SECTIONS: { h: string; body: string }[] = [
+const OPERATOR = "Pycroft Solutions (Oluwaseun Akinshilo), Friars Croft, Pine Walk Road, Chilworth, Southampton SO16 7HN, United Kingdom";
+const CONTACT = "privacy@rotally.co.uk";
+
+type Section = { h: string; body?: string | string[]; bullets?: string[] };
+
+const SECTIONS: Section[] = [
   {
-    h: "1. Controller and processor",
-    body: "For staff data entered into a venue, the venue (your business) is the data controller and Rotally is the processor acting on your instructions. For account and billing data, Rotally is the controller. Operated by [legal entity name and registered address].",
+    h: "1. Who this policy is from",
+    body: [
+      `This policy explains how Rotally, operated by ${OPERATOR} ("we", "us", "Rotally"), handles personal data. Rotally is a rota-scheduling service for small independent pubs and restaurants in the United Kingdom.`,
+      "Two roles matter here. For the personal data of staff that a venue adds, the venue (the business) is the data controller and Rotally is the processor, acting on the venue's instructions. For the manager's own account details and any billing data, Rotally is the controller. If you are a staff member with a question about your data, contact your venue first, as they control it.",
+    ],
   },
   {
     h: "2. What we collect",
-    body: "Manager account: email. Staff: name, contact email, a 4-digit PIN, whether the person is under 18, availability, shifts, and leave. We do not collect payment card details directly — those go to our payment processor.",
+    body: "We keep the data that a rota service needs and no more:",
+    bullets: [
+      "Manager account: email address (used to sign in via a one-time code) and basic venue details you enter, such as the venue name, opening hours, roles, and shifts.",
+      "Staff: name, contact email, a 4-digit PIN for signing in, whether the person is under 18, and their availability, assigned shifts, and leave requests.",
+      "Usage: an activity log of key actions in your venue (for example, a shift being published or a swap approved), and standard technical data such as IP address and request logs kept by our hosting providers to run and secure the service.",
+    ],
   },
   {
-    h: "3. Why we collect it (lawful basis)",
-    body: "[Lawful basis for each category — e.g. contract performance for running the rota, legitimate interests, and legal obligation for under-18 working-time compliance.]",
+    h: "3. What we do not collect",
+    body: `We do not collect payment card details directly — if paid plans are introduced, card data is handled by our payment processor and never touches our servers. We do not use advertising or third-party tracking cookies, and we do not build marketing profiles. The service stores small amounts of data in your browser (for example, your theme choice and a remembered venue on a shared device) to make it work; this stays on your device.`,
   },
   {
-    h: "4. Under-18 data",
-    body: "We record whether a staff member is under 18 solely to enforce UK working-time rules for young workers when generating rotas. [Add any additional safeguards and retention specifics.]",
+    h: "4. Why we use it (lawful basis)",
+    body: "We rely on the following lawful bases under UK GDPR:",
+    bullets: [
+      "Contract — to provide the service to the venue: creating rotas, collecting availability, sending reminders and published rotas.",
+      "Legitimate interests — to keep the service secure, prevent abuse, maintain an activity log, and improve how it works, balanced against your rights.",
+      "Legal obligation — recording whether a staff member is under 18 so the rota can respect UK working-time rules for young workers.",
+      "Consent — where we ever ask for it specifically; you can withdraw it at any time.",
+    ],
   },
   {
-    h: "5. How long we keep it",
-    body: "[Retention periods per category, and what happens when a venue or staff member is removed.]",
+    h: "5. Under-18 data",
+    body: `We record only whether a staff member is under 18 — a simple yes/no — and we use it for one purpose: to apply UK working-time limits for young workers when a rota is generated, so they are not scheduled outside their permitted hours. We do not collect dates of birth or other special-category data for this. The venue is responsible for confirming this status accurately and for having the right to record it.`,
   },
   {
-    h: "6. Who we share it with (sub-processors)",
-    body: "We use: Supabase (database and authentication), Resend (transactional email), Vercel (frontend hosting), Render (backend hosting), and Stripe (payments). Each processes data only to provide their part of the service.",
+    h: "6. How long we keep it",
+    body: `We keep personal data while a venue is active and using the service. If a staff member is removed, their personal data is deactivated and no longer used to build rotas; if a venue is closed, we delete or anonymise its personal data within a reasonable period, except where we must keep limited records to meet a legal obligation or to resolve a dispute. Activity-log entries are kept as a historical record of what happened in the venue.`,
   },
   {
-    h: "7. Your rights",
-    body: "[Access, rectification, erasure, portability, objection, and how to exercise them.] Staff should contact their venue in the first instance, as the venue is the controller of their data.",
+    h: "7. Who we share it with",
+    body: [
+      "We do not sell personal data. We share it only with service providers (sub-processors) that help us run Rotally, each processing data solely for their part of the service and under a contract with us:",
+    ],
+    bullets: [
+      "Supabase — database and manager sign-in.",
+      "Render — backend hosting.",
+      "Vercel — frontend hosting.",
+      "Resend — sending transactional emails (sign-in codes, availability reminders, published rotas).",
+      "Stripe — payment processing, if and when paid plans apply.",
+    ],
   },
   {
-    h: "8. Security",
-    body: "[Security measures — encryption in transit, access controls, tenant isolation.]",
+    h: "8. Where data is processed",
+    body: `We aim to have data processed in the UK or the European Economic Area. Some of our providers may process data outside the UK. Where they do, we rely on the safeguards required by UK data protection law — such as UK adequacy regulations or the International Data Transfer Agreement (or equivalent clauses) — so your data keeps a similar level of protection.`,
   },
   {
-    h: "9. Contact",
-    body: "Privacy questions or requests: [contact email].",
+    h: "9. Your rights",
+    body: [
+      "You have the right to access your personal data, to have it corrected or erased, to restrict or object to how it is used, and to data portability, subject to the limits in the law.",
+      "Because a venue is the controller of its staff's data, staff should make requests to their venue in the first instance, and we will help the venue respond. For account and billing data that we control, contact us directly using the details below.",
+    ],
+  },
+  {
+    h: "10. Security",
+    body: `We take reasonable measures to protect personal data: it is encrypted in transit, access is restricted, and each venue's data is kept separated from every other venue's so one business cannot see another's. PIN sign-in is rate-limited to resist guessing. No system is perfectly secure, but we work to reduce risk and to respond quickly if something goes wrong.`,
+  },
+  {
+    h: "11. Changes to this policy",
+    body: `We may update this policy as the service develops. When we make a material change we will update the date at the top, and where appropriate we will let you know. Please check back from time to time.`,
+  },
+  {
+    h: "12. Contact and complaints",
+    body: `Privacy questions or requests: ${CONTACT}. If you are in the UK and are not satisfied with how we have handled your data, you can complain to the Information Commissioner's Office (ICO) at ico.org.uk, though we would appreciate the chance to put things right first.`,
   },
 ];
 
@@ -68,7 +106,7 @@ export default function PrivacyPage() {
               <h1 className="d2" style={{ marginBottom: "0.875rem" }}>
                 Privacy Policy
               </h1>
-              <p className="lede">Last updated: [date]</p>
+              <p className="lede">Last updated: {LAST_UPDATED}</p>
             </div>
           </div>
         </section>
@@ -76,16 +114,6 @@ export default function PrivacyPage() {
         <section style={{ paddingBottom: "clamp(4rem, 8vw, 7rem)" }}>
           <div className="wrap">
             <div style={{ maxWidth: "42rem" }}>
-              <div
-                className="plate"
-                style={{ padding: "1rem 1.25rem", marginBottom: "2rem" }}
-              >
-                <p className="small">
-                  Placeholder — this document has not been finalised. Replace with
-                  your reviewed legal copy before go-live.
-                </p>
-              </div>
-
               {SECTIONS.map((s) => (
                 <div key={s.h} style={{ marginBottom: "1.75rem" }}>
                   <h2
@@ -97,9 +125,36 @@ export default function PrivacyPage() {
                   >
                     {s.h}
                   </h2>
-                  <p style={{ lineHeight: 1.7, color: "var(--ink-2, inherit)" }}>
-                    {s.body}
-                  </p>
+                  {(Array.isArray(s.body) ? s.body : s.body ? [s.body] : []).map(
+                    (p, i) => (
+                      <p
+                        key={i}
+                        style={{
+                          lineHeight: 1.7,
+                          color: "var(--ink-2, inherit)",
+                          marginBottom: "0.75rem",
+                        }}
+                      >
+                        {p}
+                      </p>
+                    ),
+                  )}
+                  {s.bullets && (
+                    <ul
+                      style={{
+                        lineHeight: 1.7,
+                        color: "var(--ink-2, inherit)",
+                        paddingLeft: "1.25rem",
+                        margin: 0,
+                      }}
+                    >
+                      {s.bullets.map((b, i) => (
+                        <li key={i} style={{ marginBottom: "0.35rem" }}>
+                          {b}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               ))}
             </div>
