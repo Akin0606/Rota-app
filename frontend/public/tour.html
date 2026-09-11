@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rotally Walkthrough</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=IBM+Plex+Sans:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --stage:#08080a;      /* the ground, a hair below the app black */
+    --page:#0c0c0d;       /* manager / onboarding page */
+    --page-staff:#0d0d0d; /* staff PWA page (warmer) */
+    --card:#141414;
+    --card-2:#191919;
+    --ink:#f4f4f2;
+    --ink-muted:#a2a29d;
+    --ink-faint:#6e6e6a;
+    --hair:rgba(255,255,255,.10);
+    --hair-2:rgba(255,255,255,.06);
+    --mark:#ff6b00;       /* the wordmark orange — nowhere else until earned */
+    --green:#2ecc71;
+    --green-soft:rgba(46,204,113,.14);
+    --amber:#e5c100;
+    --amber-soft:rgba(229,193,0,.14);
+    --red:#e5484d;
+    --red-soft:rgba(229,72,77,.14);
+    --accent:#f4f4f2;     /* neutral accent (paper on dark) */
+    --accent-on:#0c0c0d;
+    --ease-out:cubic-bezier(.23,1,.32,1);
+    --ease-in-out:cubic-bezier(.77,0,.175,1);
+    --ease-drawer:cubic-bezier(.32,.72,0,1);
+    --ease-pop:cubic-bezier(.34,1.4,.64,1);
+    --maxcap:34rem;
+    color-scheme:dark;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--stage);color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;font-weight:400;
+    -webkit-font-smoothing:antialiased;overflow-x:hidden;
+    line-height:1.5;
+  }
+  h1,h2,h3{font-family:"Space Grotesk","IBM Plex Sans",sans-serif;font-weight:500;margin:0;text-wrap:balance}
+
+  /* ---------- ambient brand wheel behind the stage ---------- */
+  .bg-wheel{
+    position:fixed;left:50%;top:48%;width:min(120vh,120vw);aspect-ratio:1;
+    transform:translate(-50%,-50%);opacity:.045;color:var(--ink);
+    z-index:0;pointer-events:none;will-change:transform;
+  }
+  .seg{stroke:var(--mark)}   /* the one orange segment, every wheel instance */
+
+  /* ---------- top nav ---------- */
+  .nav{
+    position:sticky;top:0;z-index:50;
+    background:linear-gradient(var(--stage) 62%,rgba(8,8,10,0));
+    padding:14px 20px 20px;
+  }
+  .nav-inner{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:11px}
+  .brand-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .wordmark{font-family:"Archivo",sans-serif;font-weight:700;font-size:19px;letter-spacing:-.02em;display:inline-flex;align-items:center;gap:1px;line-height:1}
+  .wordmark .accent{color:var(--mark)}
+  .wordmark .wm-wheel{width:.82em;height:.82em;margin:0 .01em}
+  .seg-ctl{display:inline-flex;background:var(--card);border:.5px solid var(--hair);border-radius:999px;padding:3px;gap:2px}
+  .seg-ctl button{
+    font:inherit;font-size:12.5px;font-weight:500;color:var(--ink-muted);
+    background:none;border:0;border-radius:999px;padding:6px 13px;cursor:pointer;
+    transition:color .2s,background .2s;white-space:nowrap;
+  }
+  .seg-ctl button[aria-current="true"]{background:var(--accent);color:var(--accent-on)}
+  .prog{height:2px;background:var(--hair-2);border-radius:2px;overflow:hidden}
+  .prog span{display:block;height:100%;width:0;background:var(--mark);opacity:.85;transition:width .12s linear}
+
+  /* ---------- beats ---------- */
+  .beat{
+    position:relative;z-index:1;min-height:100svh;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:30px;padding:56px 22px 72px;text-align:center;
+  }
+  .cap{max-width:var(--maxcap);display:flex;flex-direction:column;align-items:center;gap:10px}
+  .scope{font-family:"Space Grotesk",sans-serif;font-size:11px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:#8f8f8a}
+  .cap h2{font-size:clamp(26px,6vw,38px);letter-spacing:-.03em;line-height:1.05}
+  .cap p{margin:0;color:var(--ink-muted);font-size:16px;max-width:30rem}
+  .cap .tick{color:var(--green)}
+
+  /* entrance — only under JS + motion; visible at rest otherwise */
+  html.js:not(.reduced) .beat:not(.active) .cap,
+  html.js:not(.reduced) .beat:not(.active) .stagewrap{opacity:0;transform:translateY(26px)}
+  .beat .cap,.beat .stagewrap{transition:opacity .7s var(--ease-out),transform .7s var(--ease-out)}
+  .beat .stagewrap{transition-delay:.08s}
+
+  /* ---------- device frame ---------- */
+  .stagewrap{position:relative}
+  .glow{position:absolute;left:50%;top:50%;width:150%;height:150%;transform:translate(-50%,-50%);
+    background:radial-gradient(closest-side,rgba(255,255,255,.05),transparent 72%);pointer-events:none;z-index:-1}
+  .phone{
+    position:relative;width:min(300px,80vw);aspect-ratio:300/640;
+    background:#000;border:1.5px solid var(--hair);border-radius:44px;
+    padding:9px;box-shadow:0 0 0 1px rgba(0,0,0,.5);
+  }
+  .phone::before{content:"";position:absolute;left:50%;top:16px;transform:translateX(-50%);
+    width:52px;height:5px;border-radius:3px;background:rgba(255,255,255,.14);z-index:5}
+  .screen{
+    position:absolute;inset:9px;border-radius:36px;overflow:hidden;
+    background:var(--page);text-align:left;
+    display:flex;flex-direction:column;
+  }
+  .screen.staff{background:var(--page-staff)}
+  .pad{padding:34px 18px 18px;display:flex;flex-direction:column;gap:13px;height:100%;overflow:hidden}
+
+  /* two-phone handoff */
+  .duo{display:flex;align-items:center;justify-content:center;gap:0;position:relative;width:min(360px,92vw)}
+  .duo .phone{width:min(230px,60vw)}
+  .duo .p-mgr{transform:translateX(28px) scale(.94);opacity:.42;transition:all .9s var(--ease-out)}
+  .duo .p-staff{transform:translateX(-40px) translateY(30px);opacity:0;transition:all .9s var(--ease-out) .12s}
+  .beat.active .duo .p-mgr{transform:translateX(-30px) scale(.9);opacity:.4}
+  .beat.active .duo .p-staff{transform:translateX(30px) translateY(0);opacity:1;z-index:3}
+
+  /* ---------- shared screen UI atoms ---------- */
+  .eyebrow{font-family:"Space Grotesk",sans-serif;font-size:9.5px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-faint)}
+  .s-h{font-size:19px;letter-spacing:-.02em;line-height:1.15}
+  .s-sub{font-size:12px;color:var(--ink-muted);margin-top:-4px}
+  .railwrap{display:flex;align-items:center;gap:8px}
+  .rail{height:4px;flex:1;background:var(--hair-2);border-radius:3px;overflow:hidden}
+  .rail i{display:block;height:100%;background:var(--accent);border-radius:3px;transition:width .5s var(--ease-out)}
+  .rail-lbl{font-size:10px;color:var(--ink-faint);font-variant-numeric:tabular-nums}
+  .field{background:var(--card);border:.5px solid var(--hair);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+  .field .fl{font-size:10px;color:var(--ink-faint)}
+  .field .fv{font-size:14px}
+  .field.locked{opacity:.95}
+  .hint{font-size:11px;display:flex;align-items:center;gap:5px;color:var(--green)}
+  .btn{background:var(--accent);color:var(--accent-on);border-radius:12px;padding:11px;text-align:center;font-weight:500;font-size:13.5px}
+  .btn.ghost{background:transparent;color:var(--ink-muted);border:.5px solid var(--hair)}
+  .card{background:var(--card);border:.5px solid var(--hair);border-radius:12px;padding:12px}
+  .chip{display:inline-flex;align-items:center;gap:5px;background:var(--card-2);border:.5px solid var(--hair);border-radius:999px;padding:5px 10px;font-size:11.5px;color:var(--ink)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .spacer{flex:1}
+  .icn{width:15px;height:15px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .wheel{display:block}
+  .wheel .seg{stroke:var(--mark)}
+
+  /* venue cards (M3) */
+  .vgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .vcard{background:var(--card);border:.5px solid var(--hair);border-radius:12px;padding:11px;display:flex;flex-direction:column;gap:5px;position:relative;transition:border-color .3s,background .3s}
+  .vcard .vt{font-size:12.5px;font-weight:500}
+  .vcard .vd{font-size:10px;color:var(--ink-faint)}
+  .vcard.sel{border-color:var(--accent);background:#1c1c1c}
+  .vck{position:absolute;top:9px;right:9px;width:16px;height:16px;border-radius:50%;background:var(--accent);color:var(--accent-on);display:flex;align-items:center;justify-content:center;transform:scale(0);transition:transform .3s var(--ease-pop)}
+  .vcard.sel .vck{transform:scale(1)}
+
+  /* cross-fade inner screens */
+  .layers{position:relative;flex:1}
+  .layer{position:absolute;inset:0;display:flex;flex-direction:column;gap:13px;opacity:0;transition:opacity .45s var(--ease-out);pointer-events:none}
+  .layer.show{opacity:1}
+
+  /* defaults checklist (M5) */
+  .chk{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:.5px solid var(--hair-2)}
+  .chk:last-child{border-bottom:0}
+  .chk .cb{width:19px;height:19px;border-radius:6px;background:var(--green-soft);color:var(--green);display:flex;align-items:center;justify-content:center;flex:none}
+  .chk .ct{font-size:12.5px}
+  .chk .cs{font-size:10px;color:var(--ink-faint)}
+  .beat.active .chk{animation:rise .5s var(--ease-out) both}
+  .beat.active .chk:nth-child(2){animation-delay:.07s}
+  .beat.active .chk:nth-child(3){animation-delay:.14s}
+  .beat.active .chk:nth-child(4){animation-delay:.21s}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  /* solve ring (M6) */
+  .ring{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;flex:1;text-align:center}
+  .ring .rw{width:118px;height:118px;position:relative}
+  .ring .rw .wheel{width:100%;height:100%}
+  .ring.spin .rw .wheel{animation:spin 1.05s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .ring .tickmark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transform:scale(.6)}
+  .ring.done .rw .wheel{opacity:0;animation:none}
+  .ring.done .tickmark{opacity:1;transform:scale(1);transition:transform .5s var(--ease-pop),opacity .3s}
+  .ring .rh{font-size:17px;letter-spacing:-.02em}
+  .setlines{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:4px}
+  .setline{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-faint);opacity:.4;transition:opacity .3s,color .3s}
+  .setline .sd{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--hair);flex:none}
+  .setline.on{opacity:1;color:var(--ink-muted)}
+  .setline.on .sd{background:var(--green);border-color:var(--green)}
+
+  /* manager home (M7) */
+  .today{display:flex;gap:6px}
+  .today .d{flex:1;background:var(--card);border:.5px solid var(--hair);border-radius:9px;padding:7px 4px;text-align:center}
+  .today .d .dl{font-size:8.5px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em}
+  .today .d .dn{font-size:13px;font-weight:500;margin-top:2px}
+  .today .d.on{background:#1c1c1c;border-color:var(--accent)}
+  .hero-card{background:var(--card);border:.5px solid var(--hair);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px}
+  .hero-card .st{font-size:15px;letter-spacing:-.01em}
+  .mini-rail{height:5px;background:var(--hair-2);border-radius:3px;overflow:hidden}
+  .mini-rail i{display:block;height:100%;width:66%;background:var(--amber)}
+
+  /* rota grid (M8) */
+  .rota-grid{display:grid;grid-template-columns:44px repeat(4,1fr);gap:3px;font-size:9px}
+  .rota-grid .hc{color:var(--ink-faint);text-align:center;padding:2px 0;font-size:8px}
+  .rota-grid .rl{color:var(--ink-muted);display:flex;align-items:center;font-size:9px}
+  .cell{height:26px;border-radius:5px;background:var(--hair-2);display:flex;align-items:center;justify-content:center;color:#0c0c0d;font-weight:500;font-size:8px;opacity:0;transform:scale(.7);transition:opacity .3s,transform .35s var(--ease-out)}
+  .filled .cell{opacity:1;transform:none}
+  .cell.g{background:var(--green)}.cell.a{background:var(--amber)}.cell.e{background:var(--red-soft);color:var(--red);border:.5px dashed var(--red)}
+  .gen-overlay{position:absolute;inset:0;background:rgba(8,8,10,.82);backdrop-filter:blur(3px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;opacity:0;pointer-events:none;transition:opacity .3s;z-index:6}
+  .gen-overlay .wheel{width:74px;height:74px;animation:spin 1.05s linear infinite}
+  .gen-overlay .gl{font-size:13px;color:var(--ink-muted)}
+  .rota.gen .gen-overlay{opacity:1}
+  .rota.published .gen-overlay{opacity:0}
+  .pub{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-top:.5px solid var(--hair);border-radius:16px 16px 0 0;padding:16px;transform:translateY(110%);transition:transform .5s var(--ease-drawer);z-index:7;display:flex;flex-direction:column;gap:9px}
+  .rota.published .pub{transform:translateY(0)}
+  .pub .ph{display:flex;align-items:center;gap:8px;font-size:14px}
+
+  /* staff entry (S1) */
+  .vbadge{width:52px;height:52px;border-radius:15px;background:var(--card-2);border:.5px solid var(--hair);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:600;font-family:"Space Grotesk",sans-serif}
+
+  /* pin boxes */
+  .pinrow{display:flex;gap:7px;justify-content:center}
+  .pinrow .pb{flex:1;aspect-ratio:1/1.15;max-width:44px;background:var(--card);border:.5px solid var(--hair);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:500;font-family:"Space Grotesk",sans-serif}
+  .codein{background:var(--card);border:.5px solid var(--hair);border-radius:12px;padding:13px;text-align:center;font-size:22px;letter-spacing:.4em;font-family:"Space Grotesk",sans-serif;color:var(--ink);text-indent:.4em}
+
+  /* pin reveal (S3) */
+  .reveal{display:flex;flex-direction:column;align-items:center;gap:14px;flex:1;justify-content:center;text-align:center}
+  .reveal .rc{width:56px;height:56px;border-radius:50%;background:var(--green-soft);color:var(--green);display:flex;align-items:center;justify-content:center}
+  .reveal .rn{font-size:19px;letter-spacing:-.02em}
+  .pincard{background:#1c1c1c;border:.5px solid var(--hair);border-radius:14px;padding:18px 22px;width:100%}
+  .pincard .pl{font-size:10px;color:var(--ink-faint);text-align:center}
+  .pincard .pv{font-size:40px;letter-spacing:.3em;text-align:center;font-family:"Space Grotesk",sans-serif;font-weight:500;text-indent:.3em;margin-top:4px}
+  .beat.active .reveal{animation:pop .5s var(--ease-pop) both}
+  @keyframes pop{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:none}}
+
+  /* availability grid (S4) */
+  .legend{display:flex;flex-wrap:wrap;gap:5px 11px}
+  .legend span{display:flex;align-items:center;gap:5px;font-size:9.5px;color:var(--ink-muted)}
+  .lg{width:11px;height:11px;border-radius:4px;flex:none;display:flex;align-items:center;justify-content:center}
+  .lg.g{background:var(--green-soft);color:var(--green)}.lg.a{background:var(--amber-soft);color:var(--amber)}
+  .lg.r{background:var(--red-soft);color:var(--red)}.lg.n{border:1px dashed var(--hair);color:var(--ink-faint)}
+  .daycard{background:var(--card);border:.5px solid var(--hair);border-radius:11px;padding:10px;display:flex;align-items:center;gap:9px}
+  .daycard .dn{font-size:12px;font-weight:500;width:34px;flex:none}
+  .slots{display:flex;gap:6px;flex:1}
+  .slot{flex:1;height:34px;border-radius:8px;border:1px dashed var(--hair);color:var(--ink-faint);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:8.5px;transition:background .18s var(--ease-out),border-color .18s,color .18s,transform .18s}
+  .slot .si{width:13px;height:13px;stroke-width:2.4}
+  .slot .sl{font-size:8px}
+  .slot.g{background:var(--green-soft);border:1px solid var(--green);color:var(--green)}
+  .slot.a{background:var(--amber-soft);border:1px solid var(--amber);color:var(--amber)}
+  .slot.r{background:var(--red-soft);border:1px solid var(--red);color:var(--red)}
+  .slot.tap{transform:scale(.95)}
+  .submitbar{margin-top:auto;background:var(--accent);color:var(--accent-on);border-radius:12px;padding:11px;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:500;font-size:13px}
+
+  /* submitted (S5) */
+  .done-scr{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:13px;flex:1;text-align:center}
+  .done-scr .dc{width:58px;height:58px;border-radius:50%;background:var(--green-soft);color:var(--green);display:flex;align-items:center;justify-content:center}
+  .beat.active .done-scr .dc{animation:rise .5s var(--ease-out) both}
+
+  /* my shifts (S6) */
+  .tl{display:flex;flex-direction:column;gap:2px;flex:1;overflow:hidden}
+  .tlrow{display:flex;gap:11px;align-items:stretch}
+  .node{width:40px;flex:none;display:flex;flex-direction:column;align-items:center}
+  .node .nb{width:40px;height:40px;border-radius:11px;background:var(--card);border:.5px solid var(--hair);display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .node .nb.work{background:rgba(255,107,0,.08);border-color:rgba(255,107,0,.3)}
+  .node .nb .nd{font-size:14px;font-weight:500;line-height:1}
+  .node .nb.work .nd{color:var(--mark)}
+  .node .nb .nm{font-size:7px;color:var(--ink-faint);text-transform:uppercase}
+  .node .line{width:1.5px;flex:1;background:var(--hair);margin:2px 0}
+  .tlrow .info{padding:5px 0 12px;min-width:0}
+  .tlrow .info .sh{font-size:12.5px;font-weight:500}
+  .tlrow .info .sm{font-size:10px;color:var(--ink-muted)}
+  .tlrow.off .info{color:var(--ink-faint)}
+  .tlrow.off .info .sh{color:var(--ink-faint);font-weight:400}
+  .statuspill{display:inline-flex;align-items:center;gap:5px;background:var(--green-soft);color:var(--green);border-radius:999px;padding:3px 9px;font-size:10px;font-weight:500}
+
+  /* drop (S7) */
+  .actiles{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+  .atile{background:var(--card);border:.5px solid var(--hair);border-radius:11px;padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;opacity:.4;transition:opacity .5s var(--ease-out),transform .3s}
+  .drop.live .atile{opacity:1}
+  .drop.live .atile:nth-child(2){transition-delay:.08s}
+  .drop.live .atile:nth-child(3){transition-delay:.16s}
+  .selshift{background:var(--card);border:.5px solid var(--hair);border-radius:11px;padding:11px;display:flex;align-items:center;gap:10px;transition:border-color .3s}
+  .drop.live .selshift{border-color:var(--accent)}
+  .seltick{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--hair);flex:none;display:flex;align-items:center;justify-content:center;color:var(--accent-on);transition:background .3s,border-color .3s}
+  .drop.live .seltick{background:var(--accent);border-color:var(--accent)}
+
+  /* time-passage marker (S6) */
+  .whenlbl{font-size:11px;color:var(--ink-faint);font-style:italic;margin-bottom:2px}
+
+  /* hero / close big wheel */
+  .bighero{display:flex;flex-direction:column;align-items:center;gap:26px}
+  .bighero .bw{width:min(140px,40vw);height:min(140px,40vw);color:var(--ink-faint)}
+  .bighero .bwm{font-family:"Archivo",sans-serif;font-weight:700;font-size:clamp(38px,12vw,62px);letter-spacing:-.03em;display:inline-flex;align-items:center;line-height:1}
+  .bighero .bwm .accent{color:var(--mark)}
+  .bighero .bwm .wm-wheel{width:.8em;height:.8em}
+  .cta{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:var(--accent-on);border-radius:999px;padding:12px 22px;font-weight:500;font-size:15px;text-decoration:none;margin-top:4px}
+
+  .foot{padding:40px 22px 60px;text-align:center;color:var(--ink-faint);font-size:12.5px;position:relative;z-index:1;border-top:.5px solid var(--hair-2);max-width:640px;margin:0 auto}
+  .foot a{color:var(--ink-muted)}
+
+  :focus-visible{outline:2px solid var(--mark);outline-offset:3px;border-radius:4px}
+
+  @media (max-width:560px){
+    .cap p{font-size:15px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.14s!important}
+    .bg-wheel{display:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- reusable seven-segment wheel -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="wheel" viewBox="0 0 220 220">
+      <g transform="rotate(-90 110 110)">
+        <circle cx="110" cy="110" r="92" fill="none" stroke="currentColor" stroke-width="12" stroke-dasharray="66 16.58" stroke-linecap="round"/>
+        <circle class="seg" cx="110" cy="110" r="92" fill="none" stroke-width="12" stroke-dasharray="66 512.05" stroke-linecap="round"/>
+      </g>
+    </symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4 10-11"/></symbol>
+    <symbol id="minus" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" d="M6 12h12"/></symbol>
+    <symbol id="cross" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" d="M7 7l10 10M17 7L7 17"/></symbol>
+  </defs>
+</svg>
+
+<svg class="bg-wheel" viewBox="0 0 220 220" aria-hidden="true"><use href="#wheel"/></svg>
+
+<header class="nav">
+  <div class="nav-inner">
+    <div class="brand-row">
+      <span class="wordmark">r<svg class="wm-wheel" viewBox="0 0 220 220" aria-hidden="true"><use href="#wheel"/></svg>ta<span class="accent">lly</span></span>
+      <div class="seg-ctl" role="tablist" aria-label="Jump to a flow">
+        <button id="tab-mgr" role="tab" aria-current="true" data-target="act1">For the manager</button>
+        <button id="tab-staff" role="tab" aria-current="false" data-target="act2">For the team</button>
+      </div>
+    </div>
+    <div class="prog" aria-hidden="true"><span></span></div>
+  </div>
+</header>
+
+<main>
+
+<!-- ================= ACT I — MANAGER ================= -->
+<span id="act1"></span>
+
+<!-- M1 -->
+<section class="beat" aria-label="Rotas that write themselves">
+  <div class="cap">
+    <div class="scope">For the manager</div>
+    <h2>Rotas that write themselves</h2>
+    <p>Availability in, rota out. Here's the whole loop, start to finish — about forty seconds.</p>
+  </div>
+  <div class="stagewrap">
+    <div class="bighero">
+      <svg class="bw" viewBox="0 0 220 220" aria-hidden="true"><use href="#wheel"/></svg>
+      <span class="bwm">r<svg class="wm-wheel" viewBox="0 0 220 220" aria-hidden="true" style="width:.8em;height:.8em"><use href="#wheel"/></svg>ta<span class="accent">lly</span></span>
+    </div>
+  </div>
+</section>
+
+<!-- M2 -->
+<section class="beat" aria-label="No password. You're already in.">
+  <div class="cap">
+    <div class="scope">For the manager</div>
+    <h2>No password. You're already in.</h2>
+    <p>Setup opens straight from your welcome email — nothing to remember.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen"><div class="pad">
+      <div class="eyebrow">Step 1 of 7</div>
+      <div class="s-h">Let's set up your venue</div>
+      <div class="s-sub">Two quick things and we're moving.</div>
+      <div class="railwrap"><div class="rail"><i style="width:14%"></i></div><span class="rail-lbl">1 / 7</span></div>
+      <div class="field"><div class="fl">Your name</div><div class="fv">Sam Okafor</div></div>
+      <div class="field locked"><div class="fl">Work email</div><div class="fv">sam@theanchor.co.uk</div>
+        <div class="hint"><svg class="icn" style="width:13px;height:13px;stroke:var(--green)"><use href="#check"/></svg> Signed in — no password needed</div></div>
+      <div class="spacer"></div>
+      <div class="btn">Continue</div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- M3 : venue auto-advance -->
+<section class="beat" data-seq="venue" aria-label="Tap your kind of place. It fills in the rest.">
+  <div class="cap">
+    <div class="scope">For the manager</div>
+    <h2>Tap your kind of place</h2>
+    <p>One tap seeds your roles, your hours and your staffing. The wizard moves for you.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen"><div class="pad">
+      <div class="layers">
+        <div class="layer l-venue show">
+          <div class="eyebrow">Step 2 of 7</div>
+          <div class="s-h">What kind of place is it?</div>
+          <div class="railwrap"><div class="rail"><i style="width:28%"></i></div><span class="rail-lbl">2 / 7</span></div>
+          <div class="vgrid">
+            <div class="vcard sel"><div class="vck"><svg class="icn" style="width:11px;height:11px;stroke:var(--accent-on)"><use href="#check"/></svg></div><div class="vt">Pub</div><div class="vd">Bar, floor, cellar</div></div>
+            <div class="vcard"><div class="vt">Bar</div><div class="vd">Bar &amp; floor</div></div>
+            <div class="vcard"><div class="vt">Restaurant</div><div class="vd">Front &amp; kitchen</div></div>
+            <div class="vcard"><div class="vt">Café</div><div class="vd">Counter &amp; kitchen</div></div>
+            <div class="vcard"><div class="vt">Hotel F&amp;B</div><div class="vd">Multi-outlet</div></div>
+            <div class="vcard"><div class="vt">Something else</div><div class="vd">Start blank</div></div>
+          </div>
+        </div>
+        <div class="layer l-roles">
+          <div class="eyebrow">Step 3 of 7</div>
+          <div class="s-h">The jobs on a shift</div>
+          <div class="s-sub">Pre-filled for a pub — tweak anything.</div>
+          <div class="railwrap"><div class="rail"><i style="width:42%"></i></div><span class="rail-lbl">3 / 7</span></div>
+          <div style="font-size:10px;color:var(--ink-faint)">Front of house</div>
+          <div class="chips"><span class="chip">Bar</span><span class="chip">Floor</span><span class="chip">+ add</span></div>
+          <div style="font-size:10px;color:var(--ink-faint);margin-top:2px">Back of house</div>
+          <div class="chips"><span class="chip">Kitchen</span><span class="chip">Cellar</span><span class="chip">+ add</span></div>
+          <div class="spacer"></div>
+          <div class="btn">Continue</div>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- M4 : wizard compressed cycle -->
+<section class="beat" data-seq="wizard" aria-label="A few questions, in the language of the trade.">
+  <div class="cap">
+    <div class="scope">For the manager</div>
+    <h2>A few questions, in the language of the trade</h2>
+    <p>Roles, opening hours, how many on at once. No spreadsheets, no jargon.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen"><div class="pad">
+      <div class="layers" data-cycle>
+        <div class="layer w1 show">
+          <div class="eyebrow">Step 4 of 7</div>
+          <div class="s-h">When are you open?</div>
+          <div class="railwrap"><div class="rail"><i style="width:56%"></i></div><span class="rail-lbl">4 / 7</span></div>
+          <div class="card"><div style="display:flex;justify-content:space-between;font-size:12px"><span>Mon–Thu</span><span style="color:var(--ink-muted)">4pm – 11pm</span></div></div>
+          <div class="card"><div style="display:flex;justify-content:space-between;font-size:12px"><span>Fri–Sat</span><span style="color:var(--ink-muted)">12pm – 1am</span></div></div>
+          <div class="card"><div style="display:flex;justify-content:space-between;font-size:12px"><span>Sunday</span><span style="color:var(--ink-muted)">12pm – 10pm</span></div></div>
+        </div>
+        <div class="layer w2">
+          <div class="eyebrow">Step 5 of 7</div>
+          <div class="s-h">How many on at once?</div>
+          <div class="railwrap"><div class="rail"><i style="width:70%"></i></div><span class="rail-lbl">5 / 7</span></div>
+          <div class="card"><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px">On an evening</span><div style="display:flex;align-items:center;gap:12px"><span style="color:var(--ink-faint)">–</span><b style="font-size:16px">3</b><span style="color:var(--ink-faint)">+</span></div></div></div>
+          <div class="card"><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px">On a daytime</span><div style="display:flex;align-items:center;gap:12px"><span style="color:var(--ink-faint)">–</span><b style="font-size:16px">2</b><span style="color:var(--ink-faint)">+</span></div></div></div>
+        </div>
+        <div class="layer w3">
+          <div class="eyebrow">Step 6 of 7</div>
+          <div class="s-h">Bring in your crew</div>
+          <div class="railwrap"><div class="rail"><i style="width:84%"></i></div><span class="rail-lbl">6 / 7</span></div>
+          <div class="card"><div style="font-size:12px">Add people now, or share a join link later.</div></div>
+          <div class="chips"><span class="chip">Priya · Bar</span><span class="chip">Tom · Kitchen</span><span class="chip">Mel · Floor</span></div>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- M5 : safe defaults -->
+<section class="beat" aria-label="UK working rules, applied for you.">
+  <div class="cap">
+    <div class="scope">For the manager</div>
+    <h2>UK working rules, applied for you</h2>
+    <p>Compliance is handled before you ever build a shift — not a box you tick.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen"><div class="pad">
+      <div class="eyebrow">Step 7 of 7</div>
+      <div class="s-h">We've set safe defaults</div>
+      <div class="railwrap"><div class="rail"><i style="width:100%"></i></div><span class="rail-lbl">7 / 7</span></div>
+      <div class="card" style="padding:4px 12px">
+        <div class="chk"><span class="cb"><svg class="icn" style="width:12px;height:12px;stroke:var(--green)"><use href="#check"/></svg></span><div><div class="ct">11 hours rest between shifts</div><div class="cs">Working Time Regulations</div></div></div>
+        <div class="chk"><span class="cb"><svg class="icn" style="width:12px;height:12px;stroke:var(--green)"><use href="#check"/></svg></span><div><div class="ct">Max 10-hour shifts</div><div class="cs">A sensible ceiling</div></div></div>
+        <div class="chk"><span class="cb"><svg class="icn" style="width:12px;height:12px;stroke:var(--green)"><use href="#check"/></svg></span><div><div class="ct">72 hours notice</div><div class="cs">Employment Rights Act 2025</div></div></div>
+        <div class="chk"><span class="cb"><svg class="icn" style="width:12px;height:12px;stroke:var(--green)"><use href="#check"/></svg></span><div><div class="ct">Young-worker rules — locked on</div><div class="cs">Under-18 hours &amp; nights</div></div></div>
+      </div>
+      <div class="spacer"></div>
+      <div class="btn">Build my first rota</div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- M6 : the solve -->
+<section class="beat" data-seq="solve" aria-label="Then it does the work.">
+  <div class="cap">
+    <div class="scope">For the manager</div>
+    <h2 data-solve-h>Then it does the work</h2>
+    <p>The wheel spins while it fits everyone to the week. No spinner, no waiting screen — the mark itself.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen"><div class="pad">
+      <div class="ring">
+        <div class="rw">
+          <svg class="wheel" viewBox="0 0 220 220" style="color:var(--ink-faint)" aria-hidden="true"><use href="#wheel"/></svg>
+          <div class="tickmark"><svg width="52" height="52" viewBox="0 0 24 24" style="color:var(--green)" aria-hidden="true"><use href="#check"/></svg></div>
+        </div>
+        <div class="rh" data-ring-h>Setting up your venue…</div>
+        <div class="setlines">
+          <div class="setline s1"><span class="sd"></span> Saving your roles &amp; shifts</div>
+          <div class="setline s2"><span class="sd"></span> Applying working rules</div>
+          <div class="setline s3"><span class="sd"></span> Fitting people to the week</div>
+          <div class="setline s4"><span class="sd"></span> Preparing your venue</div>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- M7 : manager home -->
+<section class="beat" aria-label="This is your week, the moment you open it.">
+  <div class="cap">
+    <div class="scope">For the manager</div>
+    <h2>This is your week, the moment you open it</h2>
+    <p>Not a dashboard to learn — the next thing that needs you, stated plainly.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen"><div class="pad">
+      <div class="eyebrow">The Anchor · Thursday, 11 Sept</div>
+      <div class="today">
+        <div class="d"><div class="dl">Wed</div><div class="dn">10</div></div>
+        <div class="d on"><div class="dl">Thu</div><div class="dn">11</div></div>
+        <div class="d"><div class="dl">Fri</div><div class="dn">12</div></div>
+        <div class="d"><div class="dl">Sat</div><div class="dn">13</div></div>
+        <div class="d"><div class="dl">Sun</div><div class="dn">14</div></div>
+      </div>
+      <div class="hero-card">
+        <div class="eyebrow">Next week</div>
+        <div class="st">Ready to build — 4 of 6 sent availability</div>
+        <div class="mini-rail"><i></i></div>
+        <div style="display:flex;gap:7px;margin-top:2px"><div class="btn" style="flex:1;padding:9px">Remind</div><div class="btn" style="flex:1;padding:9px;background:var(--card-2);color:var(--ink);border:.5px solid var(--hair)">Open</div></div>
+      </div>
+      <div class="card" style="display:flex;align-items:center;justify-content:space-between">
+        <div><div style="font-size:12.5px;font-weight:500">This week</div><div style="font-size:10px;color:var(--ink-muted)">Published · everyone knows their shifts</div></div>
+        <span class="statuspill"><svg class="icn" style="width:11px;height:11px;stroke:var(--green)"><use href="#check"/></svg>Live</span>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- M8 : generate + publish -->
+<section class="beat" data-seq="rota" aria-label="Build the week in a tap. Send it in another.">
+  <div class="cap">
+    <div class="scope">For the manager</div>
+    <h2>Build the week in a tap. Send it in another.</h2>
+    <p>The solver fills coverage; you glance, then publish. Everyone gets their week at once.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen"><div class="pad rota">
+      <div class="eyebrow">Rota · w/c 15 Sept</div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div class="s-h" style="font-size:16px">Week of 15 Sept</div>
+        <span class="chip" style="font-size:10px">Generate ›</span>
+      </div>
+      <div class="rota-grid">
+        <div class="hc"></div><div class="hc">Thu</div><div class="hc">Fri</div><div class="hc">Sat</div><div class="hc">Sun</div>
+        <div class="rl">Priya</div><div class="cell g">Bar</div><div class="cell g">Bar</div><div class="cell g">Bar</div><div class="cell a">Bar</div>
+        <div class="rl">Tom</div><div class="cell g">Kit</div><div class="cell g">Kit</div><div class="cell g">Kit</div><div class="cell g">Kit</div>
+        <div class="rl">Mel</div><div class="cell g">Flr</div><div class="cell g">Flr</div><div class="cell g">Flr</div><div class="cell e">—</div>
+        <div class="rl">Jodie</div><div class="cell a">Bar</div><div class="cell g">Bar</div><div class="cell g">Bar</div><div class="cell g">Bar</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="gen-overlay">
+        <svg class="wheel" viewBox="0 0 220 220" style="color:var(--ink-faint)" aria-hidden="true"><use href="#wheel"/></svg>
+        <div class="gl">Building the week…</div>
+      </div>
+      <div class="pub">
+        <div class="ph"><svg class="icn" style="width:16px;height:16px;stroke:var(--green)"><use href="#check"/></svg> Published to 6 people</div>
+        <div style="font-size:11px;color:var(--ink-muted)">Everyone's shifts are in their app and their inbox.</div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- M9 : the hand-off -->
+<section class="beat" data-seq="handoff" aria-label="Share one link. Now it's over to them.">
+  <div class="cap">
+    <div class="scope" data-scope>For the manager</div>
+    <h2>Share one link. Now it's over to them.</h2>
+    <p>Copy the link and PIN into your group chat. Every staffer opens the same door.</p>
+  </div>
+  <div class="stagewrap">
+    <div class="duo">
+      <div class="phone p-mgr"><div class="screen"><div class="pad">
+        <div class="eyebrow">The Anchor</div>
+        <div class="s-h">Bring in your crew</div>
+        <div class="s-sub">Share this so your team can join.</div>
+        <div class="card" style="display:flex;flex-direction:column;gap:9px">
+          <div style="font-size:10px;color:var(--ink-faint)">Venue PIN</div>
+          <div class="pinrow"><span class="pb">4</span><span class="pb">9</span><span class="pb">1</span><span class="pb">7</span></div>
+          <div style="font-size:10px;color:var(--ink-faint);margin-top:3px">Join link</div>
+          <div class="field" style="padding:8px 10px"><div class="fv" style="font-size:11px;color:var(--ink-muted)">rotally.co.uk/j/the-anchor</div></div>
+        </div>
+        <div class="spacer"></div>
+        <div class="btn">Copy link &amp; PIN</div>
+      </div></div></div>
+      <div class="phone p-staff"><div class="screen staff"><div class="pad">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:16px">
+          <div class="vbadge">A</div>
+          <div class="s-h" style="text-align:center">The Anchor</div>
+          <div class="s-sub" style="text-align:center">Your team's shifts and availability, in one place.</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="btn">First time? Register</div>
+        <div class="btn ghost">I already have a PIN</div>
+      </div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ACT II — STAFF ================= -->
+<span id="act2"></span>
+
+<!-- S1 -->
+<section class="beat" aria-label="Your manager sent you a link.">
+  <div class="cap">
+    <div class="scope">For the team</div>
+    <h2>Your manager sent you a link</h2>
+    <p>No app store, no account to create. Tap the link, and you're at the door.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen staff"><div class="pad">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:11px;margin-top:22px">
+        <div class="vbadge">A</div>
+        <div class="s-h" style="text-align:center">The Anchor</div>
+        <div class="s-sub" style="text-align:center">Your team's shifts and availability, in one place.</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="btn">First time? Register</div>
+      <div class="btn ghost">I already have a PIN</div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- S2 -->
+<section class="beat" aria-label="Your code, your name. That's it.">
+  <div class="cap">
+    <div class="scope">For the team</div>
+    <h2>Your code, your name. That's it.</h2>
+    <p>The venue PIN your manager shared, and what to call you. Registration done.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen staff"><div class="pad">
+      <div class="eyebrow">Join the team</div>
+      <div class="s-h">Join The Anchor</div>
+      <div class="s-sub">Enter the code from your manager.</div>
+      <div style="margin-top:6px;font-size:10px;color:var(--ink-faint)">Venue code</div>
+      <div class="codein">4917</div>
+      <div style="margin-top:2px;font-size:10px;color:var(--ink-faint)">Your name</div>
+      <div class="field"><div class="fv">Priya Sharma</div></div>
+      <div class="spacer"></div>
+      <div class="btn">Join the team</div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- S3 : PIN reveal -->
+<section class="beat" aria-label="You're in. Here's your PIN — keep it.">
+  <div class="cap">
+    <div class="scope">For the team</div>
+    <h2>You're in. Here's your PIN — keep it.</h2>
+    <p>Four digits, yours alone. It's how you get back in — no password, ever.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen staff"><div class="pad">
+      <div class="reveal">
+        <div class="rc"><svg width="30" height="30" viewBox="0 0 24 24" style="color:var(--green)" aria-hidden="true"><use href="#check"/></svg></div>
+        <div class="rn">You're in, Priya.</div>
+        <div class="pincard"><div class="pl">Your PIN</div><div class="pv">8&#8202;1&#8202;7&#8202;4</div></div>
+        <div style="font-size:11px;color:var(--ink-muted)">Keep it somewhere safe.</div>
+      </div>
+      <div class="btn">Continue to availability</div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- S4 : four-state grid -->
+<section class="beat" data-seq="avail" aria-label="Tap the shifts you can work.">
+  <div class="cap">
+    <div class="scope">For the team</div>
+    <h2>Tap the shifts you can work</h2>
+    <p>Green for yes, amber for if-needed, red for no. This is the whole job — under a minute.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen staff"><div class="pad">
+      <div class="eyebrow">Availability</div>
+      <div class="s-h" style="font-size:16px">Week of 15 Sept</div>
+      <div class="s-sub">Closes Fri 12 Sept, 5am</div>
+      <div class="legend">
+        <span><span class="lg g"><svg class="icn" style="width:8px;height:8px;stroke:var(--green)"><use href="#check"/></svg></span>Available</span>
+        <span><span class="lg a"><svg class="icn" style="width:8px;height:8px;stroke:var(--amber)"><use href="#minus"/></svg></span>If needed</span>
+        <span><span class="lg r"><svg class="icn" style="width:8px;height:8px;stroke:var(--red)"><use href="#cross"/></svg></span>Can't work</span>
+        <span><span class="lg n"></span>No answer yet</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:7px;margin-top:2px">
+        <div class="daycard"><div class="dn">Thu</div><div class="slots"><div class="slot g" data-s><svg class="icn si" style="stroke:var(--green)"><use href="#check"/></svg><span class="sl">Day</span></div><div class="slot g" data-s><svg class="icn si" style="stroke:var(--green)"><use href="#check"/></svg><span class="sl">Eve</span></div></div></div>
+        <div class="daycard"><div class="dn">Fri</div><div class="slots"><div class="slot" data-s data-target="a"><span class="sl">Day</span></div><div class="slot g" data-s><svg class="icn si" style="stroke:var(--green)"><use href="#check"/></svg><span class="sl">Eve</span></div></div></div>
+        <div class="daycard"><div class="dn">Sat</div><div class="slots"><div class="slot" data-s data-target="g"><span class="sl">Day</span></div><div class="slot" data-s data-target="g"><span class="sl">Eve</span></div></div></div>
+        <div class="daycard"><div class="dn">Sun</div><div class="slots"><div class="slot r" data-s><svg class="icn si" style="stroke:var(--red)"><use href="#cross"/></svg><span class="sl">Day</span></div><div class="slot" data-s><span class="sl">Eve</span></div></div></div>
+      </div>
+      <div class="submitbar"><span data-avail-count>5 of 8 answered</span></div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- S5 : submitted -->
+<section class="beat" aria-label="Hit send. Your week's with the manager.">
+  <div class="cap">
+    <div class="scope">For the team</div>
+    <h2>Hit send. Your week's with the manager.</h2>
+    <p>That's you done. No group chat to chase, no diary to check.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen staff"><div class="pad">
+      <div class="done-scr">
+        <div class="dc"><svg width="30" height="30" viewBox="0 0 24 24" style="color:var(--green)" aria-hidden="true"><use href="#check"/></svg></div>
+        <div class="rn" style="font-size:18px">Availability sent</div>
+        <div style="font-size:12px;color:var(--ink-muted);max-width:14rem">We'll let you know the moment your shifts are ready.</div>
+      </div>
+      <div class="btn ghost">Back to home</div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- S6 : my shifts -->
+<section class="beat" aria-label="Your rota lands here.">
+  <div class="cap">
+    <div class="scope">For the team</div>
+    <div class="whenlbl">a few days later…</div>
+    <h2>Your rota lands here</h2>
+    <p>No group chat, no paper diary. Your week, and who you're on with.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen staff"><div class="pad">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div><div class="eyebrow">My shifts</div><div class="s-h" style="font-size:16px">This week</div></div>
+        <div style="text-align:right"><span class="statuspill"><svg class="icn" style="width:10px;height:10px;stroke:var(--green)"><use href="#check"/></svg>Confirmed</span><div style="font-size:10px;color:var(--ink-muted);margin-top:3px">18h</div></div>
+      </div>
+      <div class="tl">
+        <div class="tlrow"><div class="node"><div class="nb work"><div class="nd">11</div><div class="nm">Thu</div></div><div class="line"></div></div><div class="info"><div class="sh">Bar · 6pm – 11pm</div><div class="sm">· with Tom, Mel</div></div></div>
+        <div class="tlrow off"><div class="node"><div class="nb"><div class="nd">12</div><div class="nm">Fri</div></div><div class="line"></div></div><div class="info"><div class="sh">Off</div></div></div>
+        <div class="tlrow"><div class="node"><div class="nb work"><div class="nd">13</div><div class="nm">Sat</div></div><div class="line"></div></div><div class="info"><div class="sh">Bar · 12pm – 8pm</div><div class="sm">· with Jodie</div></div></div>
+        <div class="tlrow"><div class="node"><div class="nb work"><div class="nd">14</div><div class="nm">Sun</div></div></div><div class="info"><div class="sh">Floor · 12pm – 5pm</div><div class="sm">· with Mel</div></div></div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- S7 : drop / give / swap -->
+<section class="beat" data-seq="drop" aria-label="Can't make it? Drop, give or swap.">
+  <div class="cap">
+    <div class="scope">For the team</div>
+    <h2>Can't make it? Drop, give or swap</h2>
+    <p>Tap the shift, pick what to do. Like-for-like cover clears itself — no chasing the manager.</p>
+  </div>
+  <div class="stagewrap"><div class="glow"></div>
+    <div class="phone"><div class="screen staff"><div class="pad drop">
+      <div class="eyebrow">Change a shift</div>
+      <div class="s-h" style="font-size:16px">Pick a shift</div>
+      <div class="s-sub">Tap a shift to drop, give or swap it.</div>
+      <div class="selshift"><span class="seltick"><svg class="icn" style="width:12px;height:12px;stroke:var(--accent-on)"><use href="#check"/></svg></span><div><div style="font-size:12.5px;font-weight:500">Sat 13 · Bar</div><div style="font-size:10px;color:var(--ink-muted)">12pm – 8pm</div></div></div>
+      <div style="font-size:10px;color:var(--ink-faint);margin-top:4px">What would you like to do?</div>
+      <div class="actiles">
+        <div class="atile"><svg class="icn" style="width:18px;height:18px"><use href="#minus"/></svg>Drop</div>
+        <div class="atile"><svg class="icn" style="width:18px;height:18px"><use href="#check"/></svg>Give</div>
+        <div class="atile"><svg class="icn" style="width:18px;height:18px" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 8h13l-3-3M20 16H7l3 3"/></svg>Swap</div>
+      </div>
+      <div class="spacer"></div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- S8 : close -->
+<section class="beat" aria-label="Availability in. Rota out. Everyone knows their week.">
+  <div class="cap">
+    <div class="scope">The whole loop</div>
+    <h2>Availability in. Rota out.</h2>
+    <p>Everyone knows their week — no group chat, no paper diary, no Sunday-night guesswork.</p>
+  </div>
+  <div class="stagewrap">
+    <div class="bighero">
+      <svg class="bw" viewBox="0 0 220 220" aria-hidden="true"><use href="#wheel"/></svg>
+      <span class="bwm">r<svg class="wm-wheel" viewBox="0 0 220 220" aria-hidden="true" style="width:.8em;height:.8em"><use href="#wheel"/></svg>ta<span class="accent">lly</span></span>
+      <a class="cta" href="#" data-cta>Claim a pilot place →</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  Built for small independent UK pubs &amp; restaurants. <a href="#act1">Watch again ↑</a>
+</footer>
+
+<script>
+(function(){
+  var root=document.documentElement;
+  root.classList.add('js');
+  var reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  if(reduced) root.classList.add('reduced');
+
+  var beats=[].slice.call(document.querySelectorAll('.beat'));
+  var seen={};
+
+  function runSeq(b){
+    var key=b.getAttribute('data-seq'); if(!key||seen[key]) return; seen[key]=true;
+    var delay=function(fn,ms){ setTimeout(fn, reduced?0:ms); };
+
+    if(key==='venue'){
+      var venue=b.querySelector('.l-venue'), roles=b.querySelector('.l-roles');
+      delay(function(){ venue.classList.remove('show'); roles.classList.add('show'); }, 1300);
+    }
+    else if(key==='wizard'){
+      var layers=[].slice.call(b.querySelectorAll('[data-cycle] .layer'));
+      if(reduced) return;
+      var i=0;
+      setInterval(function(){
+        if(!b.classList.contains('active')) return;
+        layers[i].classList.remove('show');
+        i=(i+1)%layers.length;
+        layers[i].classList.add('show');
+      },1500);
+    }
+    else if(key==='solve'){
+      var ring=b.querySelector('.ring'), h=b.querySelector('[data-ring-h]'), capH=b.querySelector('[data-solve-h]');
+      var lines=[].slice.call(b.querySelectorAll('.setline'));
+      if(reduced){ ring.classList.add('done'); h.textContent='Your venue’s ready.'; capH.textContent='Your venue’s ready'; lines.forEach(function(l){l.classList.add('on');}); return; }
+      ring.classList.add('spin');
+      lines.forEach(function(l,idx){ delay(function(){ l.classList.add('on'); }, 380+idx*520); });
+      delay(function(){
+        ring.classList.remove('spin'); ring.classList.add('done');
+        h.textContent='Your venue’s ready.'; capH.textContent='Your venue’s ready';
+      }, 2500);
+    }
+    else if(key==='rota'){
+      var rota=b.querySelector('.rota');
+      if(reduced){ rota.classList.add('filled','published'); return; }
+      rota.classList.add('gen');
+      delay(function(){ rota.classList.add('filled'); }, 1500);
+      delay(function(){ rota.classList.add('published'); }, 2600);
+    }
+    else if(key==='avail'){
+      if(reduced) return;
+      var slots=[].slice.call(b.querySelectorAll('.slot[data-target]'));
+      var counter=b.querySelector('[data-avail-count]');
+      var order=['g','a','r'];
+      var n=5;
+      slots.forEach(function(sl,idx){
+        delay(function(){
+          if(!b.classList.contains('active')) return;
+          sl.classList.add('tap');
+          setTimeout(function(){
+            sl.classList.remove('tap');
+            var t=sl.getAttribute('data-target'); sl.classList.add(t);
+            var glyph=t==='g'?'check':t==='a'?'minus':'cross';
+            var col=t==='g'?'var(--green)':t==='a'?'var(--amber)':'var(--red)';
+            sl.insertAdjacentHTML('afterbegin','<svg class="icn si" style="stroke:'+col+'"><use href="#'+glyph+'"/></svg>');
+            n++; if(counter) counter.textContent=(n>=8?'8 of 8 answered · ready to send':n+' of 8 answered');
+          },160);
+        }, 700+idx*750);
+      });
+    }
+    else if(key==='handoff'){
+      var scope=b.querySelector('[data-scope]');
+      delay(function(){ if(scope) scope.textContent='For the team'; }, 900);
+    }
+  }
+
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(e){
+      if(e.isIntersecting){ e.target.classList.add('active'); runSeq(e.target); }
+    });
+  },{threshold:0.35});
+  beats.forEach(function(b){ io.observe(b); });
+  beats[0].classList.add('active');
+
+  /* progress + ambient wheel + nav sync */
+  var prog=document.querySelector('.prog span');
+  var bg=document.querySelector('.bg-wheel');
+  var tabMgr=document.getElementById('tab-mgr'), tabStaff=document.getElementById('tab-staff');
+  var act2=document.getElementById('act2');
+  function onScroll(){
+    var h=document.body.scrollHeight-innerHeight;
+    var p=h>0?Math.min(1,Math.max(0,scrollY/h)):0;
+    prog.style.width=(p*100)+'%';
+    if(bg&&!reduced) bg.style.transform='translate(-50%,-50%) rotate('+(p*90)+'deg)';
+    var inStaff=act2.getBoundingClientRect().top < innerHeight*0.5;
+    tabMgr.setAttribute('aria-current', inStaff?'false':'true');
+    tabStaff.setAttribute('aria-current', inStaff?'true':'false');
+  }
+  addEventListener('scroll',onScroll,{passive:true}); onScroll();
+
+  document.querySelectorAll('.seg-ctl button').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var el=document.getElementById(btn.getAttribute('data-target'));
+      if(el) el.scrollIntoView({behavior:reduced?'auto':'smooth',block:'start'});
+    });
+  });
+  var cta=document.querySelector('[data-cta]');
+  if(cta) cta.addEventListener('click',function(e){ e.preventDefault(); document.getElementById('act1').scrollIntoView({behavior:reduced?'auto':'smooth'}); });
+})();
+</script>
+</body>
+</html>
