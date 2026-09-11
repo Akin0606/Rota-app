@@ -94,31 +94,31 @@ actively misleading; trust the tokens, not memory):
 - Every design decision should feel intentional, not templated
 
 ## Current state (living — keep accurate)
-**`staging` is the working branch, 50 commits ahead of `main`.** `FIX_PLAN.md`
-is **fully built — batches 0 through 10** (`ee18af0`, `57fc701`, `a396ee5`,
-`55ec56e`, then `389216a` … `c1e8ab9`). Batches 4–10 were run in one pass on the
-user's "batch 4-10 nonstop" instruction and pushed at the end of it. Nothing is
-merged to `main`, so prod is untouched **by this work** and migration `028`
-still has not run there. (Prod is not untouched in general — the billing session
-applied `029` to it directly; see Migration state below.)
+**WENT LIVE 2026-09-11. `staging` was merged to `main` (fast-forward, `ba79c97`)
+and is deployed to prod.** `main` and `staging` now point at the same commit.
+`FIX_PLAN.md` is **fully built — batches 0 through 10** (`ee18af0`, `57fc701`,
+`a396ee5`, `55ec56e`, then `389216a` … `c1e8ab9`). The go-live merge carried the
+full rebrand, marketing v2/v3, the rota redesign, the per-day shift model,
+batches 0–10, the admin comp control, and the Stripe billing feature to
+`rotally.co.uk` in one release (see the top Learnings entry). **Prod is no
+longer untouched** — it is the live release.
 
-**One migration in the whole plan: `030_works_past_10pm.sql`** (batch 8) adds
-`staff_members.works_past_10pm`. `029` was taken by the concurrent billing
-session. **It is applied to STAGING** (2026-09-06 22:18 UTC, on the deploy of
-`2d8414e`) and **not to prod** — it runs there the moment `staging` merges to
-`main`. Until it runs, every under-18 reads as `works_past_10pm = false`, i.e.
-the 22:00–06:00 restricted period — the *stricter* of the two windows, so an
-unmigrated database is conservative rather than unsafe.
+**Migrations on prod are now fully applied: `/health` reports
+`{"applied":31,"pending":[]}`.** The go-live deploy applied `028`, `030` and
+`031` on boot (the filename-set-diff runner skipped the already-present `029`),
+so every under-18 now reads its real `works_past_10pm` value rather than
+defaulting to the stricter 22:00–06:00 window. Prod CORS now accepts
+`rotally.co.uk` (200, was 400) — the merge fixed it with no env change, as the
+`main.py` default-origin note predicted.
 
-**Uncommitted and NOT from this work — leave alone:** a Stripe billing feature
-(`routers/billing.py`, `scripts/setup_stripe.py`, `(manager)/billing/page.tsx`,
-plus edits to `config.py`, `main.py`, `middleware.ts`, `nav.tsx`,
-`(manager)/layout.tsx`, `package.json`, and additions inside `schemas.py` and
-`lib/api.ts`). It appeared mid-session from a concurrent session. A `git add -A`
-swept it into the batch 2 commit once; that was undone and the two *mixed* files
-were reconstructed from their committed base so batch 2 carries only its own
-changes. **Stage explicitly by path, never `git add -A`, while that work is in
-flight.**
+**The Stripe billing feature is now COMMITTED and SHIPPED to prod** (it was
+committed on `staging` as `99ed3ba`…, and rode the go-live merge). It was
+authored by a concurrent session; the user made an explicit go/no-go and chose
+to ship it. The old "uncommitted, leave alone, never `git add -A`" warning is
+retired — there is no concurrent in-flight work as of go-live. Its files:
+`routers/billing.py`, `scripts/setup_stripe.py`, `(manager)/billing/page.tsx`,
+plus `config.py`, `main.py`, `middleware.ts`, `nav.tsx`, `(manager)/layout.tsx`,
+`package.json`, `schemas.py`, `lib/api.ts`.
 
 **This section was badly wrong until 2026-08-30 and the failure mode is worth
 naming: it listed six separate batches as "uncommitted, not pushed" that were in
@@ -137,28 +137,28 @@ rebuild, the staff-UX overhaul
 redesign, the availability per-day sync, and marketing site v1→v3.
 `staff-ui-rebuild` is a **stale branch**; `main` is ahead of it.
 
-**Migration state (re-read from both databases 2026-09-07, this section had it
-wrong): prod is at 28 rows, with a hole.** Prod has `…026, 027, 029` — the
-billing session applied `029_subscriptions.sql` straight to prod on 2026-09-01,
-skipping `028_suggestions.sql`, which is on `staging` only. Staging now has
-`027, 028, 029, 030, 031` (31 rows; `031_billing_exempt.sql` — the comp +
-`admin_audit` migration — applied on the 2026-09-10 deploy of `805e9ed`). **The
-out-of-order gap is safe**: `scripts/migrate.py` computes `pending` as a
-*filename-set difference* and applies in `sorted()` order, so the `staging` →
-`main` merge applies `028`, `030` **and `031`** and skips the already-present
-`029`; the three pending files are independent (a new `suggestions` table, a new
-`staff_members` column, new `venues` comp columns + a standalone `admin_audit`
-table). **The blast radius is now
-closed in code** — the entrypoint no longer gates the boot on migrate (see
-Learnings) — but the Render **pre-deploy field is paid-plan only and staging is
-on Free**, so the dashboard half is unfinished on both services.
+**Migration state (as of go-live, 2026-09-11): both databases are now at 31,
+no pending.** The out-of-order history resolved exactly as planned: prod was at
+28 with a hole (`…026, 027, 029` — the billing session applied
+`029_subscriptions.sql` straight to prod on 2026-09-01, skipping
+`028_suggestions.sql`), and the go-live deploy's boot migrate — a *filename-set
+difference* in `sorted()` order — applied `028`, `030` and `031` and skipped the
+already-present `029`. Prod `/health` confirms `{"applied":31,"pending":[]}`.
+The three files were independent (a `suggestions` table, the
+`staff_members.works_past_10pm` column, and `venues` comp columns + a standalone
+`admin_audit` table), so order never mattered. **The blast radius was closed in
+code** (the entrypoint runs migrate non-blocking, not as a boot gate — see
+Learnings), which is why the release applied three migrations on boot without
+risk. The Render **pre-deploy field remains paid-plan-only** (staging is on
+Free, prod unconfirmed) — still the one unfinished go-live hygiene item, but
+non-blocking now that boot-migrate is non-fatal.
 
-**Uncommitted now:** only the concurrent session's Stripe billing work
-(`routers/billing.py`, `(manager)/billing/page.tsx`) and assorted untracked
-design artefacts (`*_MOCKUPS.html`, build prompts, `logos/`, agent + skill
-definitions). **`(manager)/billing/page.tsx:63` fails `next lint`
-(`Unexpected any`) and therefore blocks `next build`.** It is not ours; every
-lint run through batches 4–10 was clean apart from that one line.
+**Uncommitted now:** nothing code-bearing. Only untracked design artefacts
+(`*_MOCKUPS.html`, build prompts, `logos/`, `GO_LIVE_TEST_REPORT.md`, agent +
+skill definitions, `.codex/`, `AGENTS.md`, `skills-lock.json`) remain on disk,
+deliberately not committed. The old `(manager)/billing/page.tsx:63`
+`Unexpected any` lint error **is fixed** (line 63 is now a typed `Record`) — the
+tree is lint/build-clean.
 
 **The Home/Rota refresh is built** (`APP_BUILD_PLAN.md` + `HOME_ROTA_BUILD_PLAN.md`,
 both corrected in place where they were wrong): Phase 0 brand currency, the four
@@ -269,12 +269,12 @@ Running list. Grouped by what it blocks. Resolved items move to Learnings.
   overlap + remaining-allowance block on the leave queue are typechecked,
   lint-clean and unit-tested at the router, but never clicked, because OTP login
   is off-limits. First real manager session should exercise them.
-- **Migration `030_works_past_10pm.sql` is applied to staging, not to prod.**
-  Batch 8 built the whole WTR reg 6A second-window path on top of it — solver,
-  manual-add gate, availability notes, the staff grid's locked slots and the
-  Team toggle. On prod, until it runs, `works_past_10pm` is absent, every
-  under-18 falls to the stricter 22:00–06:00 window, and the Team switch will
-  400 on save. It goes in with the `staging` → `main` merge.
+- ~~**Migration `030_works_past_10pm.sql` is applied to staging, not to prod.**~~
+  **RESOLVED at go-live (2026-09-11)** — `030` (and `028`, `031`) applied on the
+  release deploy; prod `/health` is `{"applied":31,"pending":[]}`. The WTR reg 6A
+  second-window path (solver, manual-add gate, availability notes, locked staff
+  slots, Team toggle) is now fully live on prod with real `works_past_10pm`
+  values. The Team switch no longer 400s.
 
 (Three items once flagged here — staff-nav full-loads, the availability-grid
 colour/vocabulary swap, and calendar-day leave allowance — are **resolved**;
@@ -440,6 +440,7 @@ Sound where it counts, with two known-weak areas flagged in-code:
 - **Never touch the OTP / PIN auth flow without flagging first** (working rule).
 
 ## Learnings (append after each session — most recent first)
+- **WENT LIVE: `staging` → `main`, deployed to prod (2026-09-11, `ba79c97`).** The user asked "are we ready to go live"; the answer was "one small punch-list away," and after clearing it we shipped. **The decisive pre-merge facts, each verified rather than trusted from this doc:** (1) `git merge-base --is-ancestor origin/main staging` → clean fast-forward, zero divergence, so the merge was `git push origin staging:main` (no local checkout dance, no merge commit, safe alongside another session's dev server and the untracked files on disk). (2) The old build-blocker — `(manager)/billing/page.tsx:63` `Unexpected any` — was already fixed (line 63 is a typed `Record`); billing had been committed on `staging` (`99ed3ba`), so the merge shipped it to prod by design, on the user's explicit go/no-go. (3) The Terms/Privacy pages were **committed but placeholder-draft**, and the real copy was **uncommitted and still carried `[operator legal name and registered address]`** — a genuine GDPR blocker the login footer links to. Fixed by filling `OPERATOR` in both `(marketing)/privacy/page.tsx` and `terms/page.tsx` with the real controller identity (Pycroft Solutions / Oluwaseun Akinshilo, SO16 7HN) and committing (`ba79c97`). **The go-live itself needed no orchestration beyond the push** — Vercel (main→prod) and Render (main→prod, auto-deploy) both watch `main`. **Verified on prod within ~2 min, the same checks that would have been the pre-merge blockers:** backend `/health` → `{"applied":31,"pending":[]}` (028+030+031 applied on boot by the non-blocking filename-set-diff runner, 029 correctly skipped — the migrations field doubling as the new-code marker, since prod was at 28); CORS from `rotally.co.uk` flipped 400→200 with **no env change** (the merge carried the fixed default-origin list in `main.py`, exactly as this doc predicted); `/terms` + `/privacy` both 200 with "Pycroft Solutions" rendering live; frontend `<title>` is "Rotally …". **The first `/health` poll came back empty — a Render cold-start blip, not a failure;** the immediate retry was correct. **Two human gates deliberately left to the user, neither blocking the merge:** a real prod email proof-send to a non-owner inbox before onboarding any real client (prod config is correct — `Rotally <noreply@rotally.co.uk>` on the verified domain, allowlist bypassed — but never fired end-to-end), and a professional legal review of the now-complete Terms/Privacy (open question: is Pycroft Solutions a registered Ltd needing a company number, or a sole trader, in which case the current text is fine). **Prior session's `GO_LIVE_TEST_REPORT.md` (2026-09-09/10) did the heavy lifting** — it drove the whole core loop live on staging with a real 5-person roster including a genuine under-18 and confirmed the WTR night-shift block; this session's job was to reconcile its "conditional GO" against the 7 commits that landed after it, clear the legal gate, and pull the trigger.
 - **Admin comp control + server-side entitlement enforcement built and shipped to staging (`805e9ed`).** The ask: an admin control for who gets a free pass vs who gets billed, plus governance essentials, plus real enforcement. **The load-bearing design call is that a comp is its own boolean (`billing_exempt`), never a `subscription_status` value** — because the concurrent Stripe session's webhook `_sync_subscription` overwrites `subscription_status`, so a comp encoded there would be silently wiped on the venue's next Stripe event. `services/entitlement.py` (`is_comped` / `effective_status` / `venue_is_entitled`) checks comp **first and independently of Stripe**, imports nothing from `routers/` (services must not depend on routers — ~10 lines of `_effective_status` are duplicated from `billing.py` on purpose), and duplicates none of Stripe's logic beyond that read. Entitlement = comped OR status in {trialing, active, past_due}; `past_due` deliberately keeps grace, {cancelled, expired} + not-comped is the only locked-out state. **The one non-obvious predicate: `venue_is_entitled` guards `if venue is None`, NOT `if not venue`** — an empty dict `{}` is falsy but must read as trialing/entitled (a brand-new venue with no billing row is on trial, not locked out); a test pins `venue_is_entitled({}) is True`. **Enforcement sits next to the effect, not on the caller** (the same discipline as the batch-8/9 guards and the `run_solver_for_period` status gate): cron functions `return None` for a non-entitled venue right beside the send, and manager generate/publish raise 402 right after `get_manager_venue` — so a new send path or a new manager mutation can't bypass it by forgetting a wrapper. **`admin_audit` is deliberately OUTSIDE the venue cascade** — `target_venue_id` is a plain uuid, not an FK, and the row copies the venue name/email onto itself — so the accountability trail *survives* a venue delete (the delete is logged, then the venue vanishes, and the log row remains). It's the only accountability under a single shared `ADMIN_SECRET`; it records what was done to which venue, not which admin. `require_admin` also moved to `hmac.compare_digest` (constant-time) in passing. **The comp PATCH can't be used to poke `subscription_status`** because the Pydantic request model declares only the comp/trial fields and `exclude_unset` drops everything else — a field that isn't in the model can't be smuggled through. 16 entitlement tests, 216 backend total (was 200). **Migration 031 applied to staging on the redeploy** and its `/health` `migrations.applied` bumped 30→31 — which (per the entry below about the `migrations` field being a cheaper new-code marker than an OpenAPI diff) is itself the proof the pushed code is live, since this change adds no routes to diff. **Prod is deliberately NOT migrated:** the migrate runner is a filename-set difference, so running it against prod (still at 28, with 028+030 pending) would drag in the two unrelated staging-only migrations — 031 rides the eventual `staging`→`main` merge like everything else. **The comp/lockout UI and the 402 paths are typecheck/test-clean but never clicked** (admin + manager are secret/OTP-gated) — first real admin session on staging should exercise the toggle, the lockout warning, and a lapsed-venue generate.
 - **Device Lab grew full staff + manager previews, and building them surfaced a real dev-only bug in the settings page.** The in-pane phone harness (`app/devlab/device-lab.tsx`) now has grouped Public/Staff/Manager quick-routes. **Staff previews are the REAL `/v/demo/*` pages** — a new dev-only `app/v/[venue_token]/layout.tsx` mounts `DemoStubGate` (a client component that `installStub()`s in the render phase *and* at module load) only for token `demo` in non-prod; for every real token it's a pure `<>{children}</>` pass-through. The gate plants the demo PIN in `sessionStorage[rota_pin_demo]` and monkeypatches `window.fetch`, so the real bottom nav, PIN auth and per-day availability grid all work with no backend. **Manager previews can't use real paths** (the `(manager)` layout is a server auth gate that redirects before any client stub runs), so they're hosted at `app/devlab/manager/[page]/` — a client wrapper that imports the real dashboard/rota/scheduler/team/settings/leave page components and renders them inside a replica of the manager layout's `.cp-manager` chrome with the stub installed. **One shared stub** (`app/devlab/_stub/data.ts` + `install.ts`, `_`-prefixed so Next never routes it) covers every endpoint in `lib/api.ts` off one coherent fake venue ("The Anchor Demo"): 2 shifts with a closed Monday and a Fri/Sat 1am close, 6 staff incl. an under-18 and a pending self-registrant, a `generated` draft period with assignments (an uncovered Sun evening + two short evenings + a U18 legal warning), leave/claims/scheduler/roles. Verified all 12 screens render with zero console errors. **The bug: `(manager)/settings/page.tsx`'s `load()` gated `setLoading(false)` on `isFirst`, which never clears under React's dev StrictMode double-invoke** — the first effect run sets `firstLoad.current=false` then is cancelled, so the run that *completes* sees `isFirst=false` and leaves the page stuck on "Loading settings…" forever. Production single-invokes so it's fine there, which is why it was never caught — but it hangs the page in local dev (and hung the preview). Fixed to `if (!cancelled) setLoading(false)` (a no-op on a background reload, since loading is already false). **The pattern worth keeping: an `isFirst`-gated cleanup is StrictMode-fragile whenever a ref is flipped before the first `await`; clear the terminal state on any uncancelled run, not only the one that observed the first-mount flag.**
 - **Staging's Render health check path is now `/health` (it was empty), and the
