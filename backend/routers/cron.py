@@ -1,3 +1,4 @@
+import hmac
 from datetime import date, timedelta
 from typing import Optional
 
@@ -16,7 +17,11 @@ router = APIRouter(prefix="/api/cron", tags=["cron"])
 
 def require_cron(x_cron_secret: str = Header(default="")) -> None:
     settings = get_settings()
-    if not settings.cron_secret or x_cron_secret != settings.cron_secret:
+    # Constant-time compare so a wrong secret can't be recovered by timing the
+    # response. hmac.compare_digest short-circuits only on differing length.
+    if not settings.cron_secret or not hmac.compare_digest(
+        x_cron_secret, settings.cron_secret
+    ):
         raise HTTPException(status_code=401, detail="Invalid cron secret")
 
 
