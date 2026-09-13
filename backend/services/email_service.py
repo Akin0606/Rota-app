@@ -1,6 +1,7 @@
 """Transactional email sending via Resend, matching the app's visual branding
 (system-ui font, #FF4D00 orange accent, 16px card radius, subtle borders)."""
 
+import html
 from typing import Optional
 
 import resend
@@ -10,7 +11,31 @@ from config import get_settings
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
+def _esc(value) -> str:
+    """HTML-escape a dynamic value before it goes into an email template.
+
+    Every one of these templates interpolates caller-supplied strings — staff and
+    venue names, shift labels, the free-text `detail`/`headline` sentences — into
+    an HTML f-string. Some of those values are attacker-influenced: a staff name
+    is set through the public self-registration join flow, and shift/venue names
+    are venue-configured. Unescaped, a name like `<a href="…">` or `<img src=x>`
+    injects markup into the recipient's email — a phishing primitive even though
+    email clients don't run JavaScript.
+
+    Applied to the dynamic value at each interpolation point, exactly once. The
+    static template markup is never passed through it, and email *subjects* aren't
+    either — a subject is plain text, not HTML, so escaping it would render
+    `&amp;` literally in the subject line. `quote=True` also escapes quotes, which
+    is what makes it safe inside an `href="…"` attribute as well as in text.
+    """
+    return html.escape("" if value is None else str(value), quote=True)
+
+
 def _shell(preheader: str, footer_note: str, body_html: str) -> str:
+    # preheader and footer_note are plain-text strings the callers build from
+    # dynamic values (e.g. the venue name), so they are escaped here. body_html is
+    # real markup assembled by the caller (already escaped at its own sites) and
+    # must NOT be escaped.
     return f"""<!doctype html>
 <html>
 <head>
@@ -18,7 +43,7 @@ def _shell(preheader: str, footer_note: str, body_html: str) -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body style="margin:0;padding:0;background-color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<span style="display:none;font-size:1px;color:#f3f4f6;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">{preheader}</span>
+<span style="display:none;font-size:1px;color:#f3f4f6;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">{_esc(preheader)}</span>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 16px;">
 <tr><td align="center">
 <table role="presentation" width="100%" style="max-width:480px;background:#ffffff;border-radius:16px;border:1px solid rgba(0,0,0,0.04);overflow:hidden;" cellpadding="0" cellspacing="0">
@@ -29,7 +54,7 @@ def _shell(preheader: str, footer_note: str, body_html: str) -> str:
 {body_html}
 </td></tr>
 <tr><td style="padding:20px 32px;background:#f9fafb;border-top:1px solid rgba(0,0,0,0.04);">
-<p style="margin:0;font-size:12px;color:#9ca3af;">{footer_note}</p>
+<p style="margin:0;font-size:12px;color:#9ca3af;">{_esc(footer_note)}</p>
 </td></tr>
 </table>
 </td></tr>
@@ -39,10 +64,12 @@ def _shell(preheader: str, footer_note: str, body_html: str) -> str:
 
 
 def _button(text: str, url: str) -> str:
+    # text is rendered as content, url goes into the href attribute — both are
+    # caller-supplied (button labels embed the venue name), so escape both here.
     return (
-        f'<a href="{url}" style="display:inline-block;background:#FF4D00;color:#ffffff;'
+        f'<a href="{_esc(url)}" style="display:inline-block;background:#FF4D00;color:#ffffff;'
         f"text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;"
-        f'border-radius:10px;margin-top:8px;">{text}</a>'
+        f'border-radius:10px;margin-top:8px;">{_esc(text)}</a>'
     )
 
 
@@ -50,7 +77,7 @@ def _pin_badge(pin: str) -> str:
     return (
         '<div style="margin:24px 0;text-align:center;">'
         '<span style="display:inline-block;background:#fff1eb;color:#FF4D00;font-size:32px;'
-        f'font-weight:700;letter-spacing:0.15em;padding:16px 32px;border-radius:12px;">{pin}</span>'
+        f'font-weight:700;letter-spacing:0.15em;padding:16px 32px;border-radius:12px;">{_esc(pin)}</span>'
         "</div>"
     )
 
@@ -148,7 +175,7 @@ def pdf_attachment(filename: str, content: bytes) -> dict:
 def send_magic_link_email(to_email: str, venue_name: str, magic_link_url: str) -> dict:
     subject = f"Your login link for {venue_name}"
     body = f"""
-<p style="margin:0 0 16px;">Here's your login link for <strong>{venue_name}</strong>.</p>
+<p style="margin:0 0 16px;">Here's your login link for <strong>{_esc(venue_name)}</strong>.</p>
 {_button("Log in", magic_link_url)}
 <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">This link expires shortly and can only be used once. If you didn't request it, you can ignore this email.</p>
 """
@@ -164,7 +191,7 @@ def send_activation_email(to_email: str, activation_url: str) -> dict:
     body = f"""
 <p style="margin:0 0 16px;">You're in. Set up your venue in about 3 minutes — no password to create, this link signs you in.</p>
 {_button("Set up my venue", activation_url)}
-<p style="margin:20px 0 0;font-size:14px;color:#374151;">New to Rotally? <a href="{tour_url}" style="color:#B04D0B;font-weight:600;text-decoration:none;">Take the 2-minute tour</a> to see how the whole week comes together first.</p>
+<p style="margin:20px 0 0;font-size:14px;color:#374151;">New to Rotally? <a href="{_esc(tour_url)}" style="color:#B04D0B;font-weight:600;text-decoration:none;">Take the 2-minute tour</a> to see how the whole week comes together first.</p>
 <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">This link works for 7 days and signs you in once. If you didn't request it, you can ignore this email.</p>
 """
     html = _shell("You're in — set up your venue", "Your Rotally invite is ready — set up your venue in about 3 minutes.", body)
@@ -176,8 +203,8 @@ def send_activation_email(to_email: str, activation_url: str) -> dict:
 def send_staff_welcome_email(to_email: str, name: str, venue_name: str, pin: str, venue_link_url: str) -> dict:
     subject = f"You're on the rota for {venue_name}"
     body = f"""
-<p style="margin:0 0 8px;">Hi {name},</p>
-<p style="margin:0 0 16px;">You've been added to <strong>{venue_name}</strong>'s rota. Your personal PIN is below — use it to submit your availability each week.</p>
+<p style="margin:0 0 8px;">Hi {_esc(name)},</p>
+<p style="margin:0 0 16px;">You've been added to <strong>{_esc(venue_name)}</strong>'s rota. Your personal PIN is below — use it to submit your availability each week.</p>
 {_pin_badge(pin)}
 {_button("Go to " + venue_name, venue_link_url)}
 <p style="margin:20px 0 0;font-size:13px;color:#6b7280;">Keep this PIN private — it's how the rota identifies you.</p>
@@ -191,13 +218,13 @@ def send_staff_welcome_email(to_email: str, name: str, venue_name: str, pin: str
 def _pin_email_html(name: str, venue_name: str, pin: str, venue_link_url: str, *, reset: bool) -> tuple[str, str]:
     if reset:
         subject = f"Your PIN for {venue_name} has been reset"
-        lede = "your PIN for <strong>%s</strong> has been reset. Your new PIN is below." % venue_name
+        lede = "your PIN for <strong>%s</strong> has been reset. Your new PIN is below." % _esc(venue_name)
     else:
         subject = f"Your PIN for {venue_name}"
-        lede = "here's your PIN for <strong>%s</strong>, as requested." % venue_name
+        lede = "here's your PIN for <strong>%s</strong>, as requested." % _esc(venue_name)
 
     body = f"""
-<p style="margin:0 0 8px;">Hi {name},</p>
+<p style="margin:0 0 8px;">Hi {_esc(name)},</p>
 <p style="margin:0 0 16px;">{lede}</p>
 {_pin_badge(pin)}
 {_button("Go to " + venue_name, venue_link_url)}
@@ -246,10 +273,10 @@ def send_availability_reminder_email(
 ) -> dict:
     subject = f"Please submit your availability for {week_label}"
     body = f"""
-<p style="margin:0 0 8px;">Hi {name},</p>
-<p style="margin:0 0 16px;">Please submit your availability for <strong>{week_label}</strong> at {venue_name}. Use your PIN below at your venue link.</p>
+<p style="margin:0 0 8px;">Hi {_esc(name)},</p>
+<p style="margin:0 0 16px;">Please submit your availability for <strong>{_esc(week_label)}</strong> at {_esc(venue_name)}. Use your PIN below at your venue link.</p>
 {_pin_badge(pin)}
-<p style="margin:0 0 16px;font-size:13px;color:#6b7280;">Deadline: <strong>{deadline_label}</strong></p>
+<p style="margin:0 0 16px;font-size:13px;color:#6b7280;">Deadline: <strong>{_esc(deadline_label)}</strong></p>
 {_button("Submit availability", venue_link_url)}
 """
     html = _shell(f"Availability needed for {week_label}", f"Sent because you're part of the {venue_name} team on Rotally.", body)
@@ -269,8 +296,8 @@ def send_auto_submit_email(
 ) -> dict:
     subject = f"We submitted your usual availability for {week_label}"
     body = f"""
-<p style="margin:0 0 8px;">Hi {name},</p>
-<p style="margin:0 0 16px;">You&apos;re set to auto-submit, so we sent your usual availability for <strong>{week_label}</strong> at {venue_name} — no need to do anything if it still fits.</p>
+<p style="margin:0 0 8px;">Hi {_esc(name)},</p>
+<p style="margin:0 0 16px;">You&apos;re set to auto-submit, so we sent your usual availability for <strong>{_esc(week_label)}</strong> at {_esc(venue_name)} — no need to do anything if it still fits.</p>
 <p style="margin:0 0 16px;">If this week is different, tap below to change it before the deadline.</p>
 {_pin_badge(pin) if pin else ""}
 {_button("Change my availability", venue_link_url)}
@@ -292,10 +319,10 @@ def send_availability_open_email(
 ) -> dict:
     subject = f"Availability is now open for {week_label}"
     body = f"""
-<p style="margin:0 0 8px;">Hi {name},</p>
-<p style="margin:0 0 16px;">Availability is now open for <strong>{week_label}</strong> at {venue_name}. Log yours using your PIN below.</p>
+<p style="margin:0 0 8px;">Hi {_esc(name)},</p>
+<p style="margin:0 0 16px;">Availability is now open for <strong>{_esc(week_label)}</strong> at {_esc(venue_name)}. Log yours using your PIN below.</p>
 {_pin_badge(pin)}
-<p style="margin:0 0 16px;font-size:13px;color:#6b7280;">Please submit by <strong>{deadline_label}</strong>.</p>
+<p style="margin:0 0 16px;font-size:13px;color:#6b7280;">Please submit by <strong>{_esc(deadline_label)}</strong>.</p>
 {_button("Log your availability", venue_link_url)}
 """
     html = _shell(f"Availability open for {week_label}", f"Sent because you're part of the {venue_name} team on Rotally.", body)
@@ -313,8 +340,8 @@ def send_availability_closed_email(
 ) -> dict:
     subject = f"The rota for {week_label} is now locked"
     body = f"""
-<p style="margin:0 0 8px;">Hi {name},</p>
-<p style="margin:0 0 16px;">Availability for <strong>{week_label}</strong> at {venue_name} has closed and the rota is now locked. You'll be notified once it's published.</p>
+<p style="margin:0 0 8px;">Hi {_esc(name)},</p>
+<p style="margin:0 0 16px;">Availability for <strong>{_esc(week_label)}</strong> at {_esc(venue_name)} has closed and the rota is now locked. You'll be notified once it's published.</p>
 {_button("View the rota", rota_link_url)}
 """
     html = _shell(f"Availability closed for {week_label}", f"Sent because you're part of the {venue_name} team on Rotally.", body)
@@ -340,8 +367,8 @@ def send_manager_review_email(
         else ""
     )
     body = f"""
-<p style="margin:0 0 8px;">Hi {manager_name},</p>
-<p style="margin:0 0 16px;">Your rota for <strong>{week_label}</strong> at {venue_name} is ready to review.</p>
+<p style="margin:0 0 8px;">Hi {_esc(manager_name)},</p>
+<p style="margin:0 0 16px;">Your rota for <strong>{_esc(week_label)}</strong> at {_esc(venue_name)} is ready to review.</p>
 <p style="margin:0 0 16px;font-size:13px;color:#6b7280;">{submitted_count}/{total_count} staff submitted availability.</p>
 {conflicts_line}
 {_button("Review rota", review_link_url)}
@@ -366,16 +393,16 @@ def send_published_rota_email(
     rows = "".join(
         f"""<tr>
 <td style="padding:10px 0;border-bottom:1px solid rgba(0,0,0,0.04);font-size:14px;color:#111827;">
-<strong>{s['day_label']}</strong><br>
-<span style="color:#6b7280;">{s['shift_name']} · {s['start_time']}–{s['end_time']}</span>
+<strong>{_esc(s['day_label'])}</strong><br>
+<span style="color:#6b7280;">{_esc(s['shift_name'])} · {_esc(s['start_time'])}–{_esc(s['end_time'])}</span>
 </td>
 </tr>"""
         for s in shifts
     )
 
     body = f"""
-<p style="margin:0 0 8px;">Hi {name},</p>
-<p style="margin:0 0 16px;">Here's your rota for <strong>{week_label}</strong> at {venue_name}. You're working:</p>
+<p style="margin:0 0 8px;">Hi {_esc(name)},</p>
+<p style="margin:0 0 16px;">Here's your rota for <strong>{_esc(week_label)}</strong> at {_esc(venue_name)}. You're working:</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">
 {rows}
 </table>
@@ -397,7 +424,7 @@ def send_manager_rota_email(
     (triggered from the publish options panel)."""
     subject = f"Rota for {week_label} — {venue_name}"
     body = f"""
-<p style="margin:0 0 16px;">Here's the published rota for <strong>{week_label}</strong> at {venue_name}.</p>
+<p style="margin:0 0 16px;">Here's the published rota for <strong>{_esc(week_label)}</strong> at {_esc(venue_name)}.</p>
 <p style="margin:0 0 16px;font-size:13px;color:#6b7280;">{total_shifts} shift{"s" if total_shifts != 1 else ""} assigned. The full rota is attached as a PDF.</p>
 {_button("Open in Rotally", dashboard_link_url)}
 """
@@ -417,8 +444,8 @@ def send_shift_give_email(
 ) -> dict:
     subject = f"{giver_name} wants to give you a shift"
     body = f"""
-<p style="margin:0 0 8px;">Hi {name},</p>
-<p style="margin:0 0 16px;"><strong>{giver_name}</strong> has offered you their <strong>{shift_label}</strong> shift at {venue_name}. Open your hub to accept or decline.</p>
+<p style="margin:0 0 8px;">Hi {_esc(name)},</p>
+<p style="margin:0 0 16px;"><strong>{_esc(giver_name)}</strong> has offered you their <strong>{_esc(shift_label)}</strong> shift at {_esc(venue_name)}. Open your hub to accept or decline.</p>
 {_button("Open your hub", venue_link_url)}
 """
     html = _shell(f"{giver_name} wants to give you a shift", f"Sent because you're part of the {venue_name} team on Rotally.", body)
@@ -438,8 +465,8 @@ def send_shift_swap_email(
 ) -> dict:
     subject = f"{initiator_name} wants to swap shifts with you"
     body = f"""
-<p style="margin:0 0 8px;">Hi {name},</p>
-<p style="margin:0 0 16px;"><strong>{initiator_name}</strong> wants to swap their <strong>{their_shift_label}</strong> shift for your <strong>{my_shift_label}</strong> shift at {venue_name}. Open your hub to accept or decline.</p>
+<p style="margin:0 0 8px;">Hi {_esc(name)},</p>
+<p style="margin:0 0 16px;"><strong>{_esc(initiator_name)}</strong> wants to swap their <strong>{_esc(their_shift_label)}</strong> shift for your <strong>{_esc(my_shift_label)}</strong> shift at {_esc(venue_name)}. Open your hub to accept or decline.</p>
 {_button("Open your hub", venue_link_url)}
 """
     html = _shell(f"{initiator_name} wants to swap shifts with you", f"Sent because you're part of the {venue_name} team on Rotally.", body)
@@ -456,7 +483,7 @@ def send_bulk_reminder_email(
 ) -> dict:
     subject = f"{pending_count} staff haven't submitted availability"
     body = f"""
-<p style="margin:0 0 8px;">Hi {manager_name},</p>
+<p style="margin:0 0 8px;">Hi {_esc(manager_name)},</p>
 <p style="margin:0 0 16px;">Reminder: <strong>{pending_count}</strong> staff haven't submitted their availability yet.</p>
 {_button("Go to dashboard", dashboard_link_url)}
 """
@@ -485,8 +512,8 @@ def send_manager_action_email(
     sentence, and six near-identical templates drift.
     """
     body = f"""
-<p style="margin:0 0 8px;">Hi {manager_name},</p>
-<p style="margin:0 0 16px;">{detail}</p>
+<p style="margin:0 0 8px;">Hi {_esc(manager_name)},</p>
+<p style="margin:0 0 16px;">{_esc(detail)}</p>
 {_button(cta, dashboard_link_url)}
 """
     html = _shell(headline, "Sent because you manage a venue on Rotally.", body)
@@ -506,8 +533,8 @@ def send_request_decision_email(
     """The other half of the same gap: staff who asked for something found out
     only by reopening the app. Covers claim / give / swap / leave outcomes."""
     body = f"""
-<p style="margin:0 0 8px;">Hi {name},</p>
-<p style="margin:0 0 16px;">{detail}</p>
+<p style="margin:0 0 8px;">Hi {_esc(name)},</p>
+<p style="margin:0 0 16px;">{_esc(detail)}</p>
 {_button("Open your hub", venue_link_url)}
 """
     html = _shell(headline, f"Sent because you're part of the {venue_name} team on Rotally.", body)
