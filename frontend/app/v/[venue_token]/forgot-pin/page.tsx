@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 
 import Toast from "@/components/toast";
 import { ApiError, forgotPin } from "@/lib/api";
 import Waiting from "@/components/waiting";
 
-export default function ForgotPinPage({ params }: { params: { venue_token: string } }) {
-  const { venue_token } = params;
+export default function ForgotPinPage({ params }: { params: Promise<{ venue_token: string }> }) {
+  const { venue_token } = use(params);
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);

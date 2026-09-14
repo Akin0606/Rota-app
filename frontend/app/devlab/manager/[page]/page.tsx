@@ -8,7 +8,8 @@ import ManagerPreview from "./manager-preview";
 // reached from the Device Lab's Manager quick-routes.
 export const dynamic = "force-dynamic";
 
-export default function DevLabManagerPage({ params }: { params: { page: string } }) {
+export default async function DevLabManagerPage({ params }: { params: Promise<{ page: string }> }) {
   if (process.env.NODE_ENV === "production") notFound();
-  return <ManagerPreview page={params.page} />;
+  const { page } = await params;
+  return <ManagerPreview page={page} />;
 }

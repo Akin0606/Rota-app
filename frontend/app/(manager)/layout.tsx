@@ -33,7 +33,7 @@ async function getVenueServer(accessToken: string): Promise<VenueFetch> {
 }
 
 export default async function ManagerLayout({ children }: { children: React.ReactNode }) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -80,7 +80,7 @@ export default async function ManagerLayout({ children }: { children: React.Reac
   // Subscription gate: expired trials and cancelled subscriptions are
   // redirected to /billing so the manager can subscribe. The billing page
   // itself is exempt — otherwise it'd be an infinite redirect.
-  const reqHeaders = headers();
+  const reqHeaders = await headers();
   const pathname = reqHeaders.get("x-pathname") ?? "";
   const isBillingPage = pathname === "/billing" || pathname.startsWith("/billing/");
 
