@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type JSX } from "react";
 
 import { SuggestionBox, WaitlistForm } from "./forms";
 import { SiteFooter, SiteNav } from "./site-chrome";
 import { StillManagerReview, StillStaffShifts } from "./walkthrough-frames";
 
-function useReveal(root: React.RefObject<HTMLElement>) {
+function useReveal(root: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
     const els = root.current?.querySelectorAll(".reveal") ?? [];
     const io = new IntersectionObserver(

@@ -107,7 +107,7 @@ export default function TimeWheel({
     return () => clearTimeout(t);
   }, [open, value]);
 
-  function readCol(ref: React.RefObject<HTMLDivElement>, arr: readonly (number | string)[], fallback: number | string) {
+  function readCol(ref: React.RefObject<HTMLDivElement | null>, arr: readonly (number | string)[], fallback: number | string) {
     const idx = Math.round((ref.current?.scrollTop || 0) / ITEM);
     return arr[Math.max(0, Math.min(arr.length - 1, idx))] ?? fallback;
   }
@@ -160,7 +160,7 @@ export default function TimeWheel({
   }, [open]);
 
   const column = (
-    ref: React.RefObject<HTMLDivElement>,
+    ref: React.RefObject<HTMLDivElement | null>,
     values: readonly (number | string)[],
     selVal: number | string,
     fmt: (v: number | string) => string,

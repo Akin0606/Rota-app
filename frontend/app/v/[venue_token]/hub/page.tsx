@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -43,8 +43,8 @@ function greeting(): string {
   return "Good evening";
 }
 
-export default function StaffHubPage({ params }: { params: { venue_token: string } }) {
-  const { venue_token } = params;
+export default function StaffHubPage({ params }: { params: Promise<{ venue_token: string }> }) {
+  const { venue_token } = use(params);
   const router = useRouter();
 
   const [pin, setPin] = useState<string | null>(null);

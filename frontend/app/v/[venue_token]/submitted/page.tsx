@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { formatWeekRange } from "@/lib/utils";
 
-export default function SubmittedPage({ params }: { params: { venue_token: string } }) {
-  const { venue_token } = params;
+export default function SubmittedPage({ params }: { params: Promise<{ venue_token: string }> }) {
+  const { venue_token } = use(params);
   // A6 — the week comes from the submit that got us here. This used to re-fetch
   // /auth purely to name it, which named the server's *current* period instead:
   // submit the "Next week" tab and the confirmation congratulated you on this

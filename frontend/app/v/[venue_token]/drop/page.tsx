@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Modal from "@/components/modal";
@@ -34,8 +34,8 @@ const ACTIONS: { key: ActionKey; icon: IconName; title: string; desc: string }[]
   { key: "swap", icon: "arrows-exchange", title: "Swap", desc: "Trade for one of theirs" },
 ];
 
-export default function DropShiftPage({ params }: { params: { venue_token: string } }) {
-  const { venue_token } = params;
+export default function DropShiftPage({ params }: { params: Promise<{ venue_token: string }> }) {
+  const { venue_token } = use(params);
   const router = useRouter();
 
   const [pin, setPin] = useState<string | null>(null);

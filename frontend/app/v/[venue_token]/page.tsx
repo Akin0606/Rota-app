@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, use, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -420,10 +420,11 @@ function safeNext(raw: string | null, venue_token: string): string | null {
   return raw.startsWith(`/v/${venue_token}/`) ? raw : null;
 }
 
-export default function PinEntryPage({ params }: { params: { venue_token: string } }) {
+export default function PinEntryPage({ params }: { params: Promise<{ venue_token: string }> }) {
+  const { venue_token } = use(params);
   return (
     <Suspense fallback={<StaffLoading />}>
-      <PinEntryContent venue_token={params.venue_token} />
+      <PinEntryContent venue_token={venue_token} />
     </Suspense>
   );
 }

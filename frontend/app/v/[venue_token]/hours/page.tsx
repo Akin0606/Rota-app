@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Modal from "@/components/modal";
@@ -46,8 +46,8 @@ function readNumber(key: string): number | null {
   }
 }
 
-export default function StaffHoursPage({ params }: { params: { venue_token: string } }) {
-  const { venue_token } = params;
+export default function StaffHoursPage({ params }: { params: Promise<{ venue_token: string }> }) {
+  const { venue_token } = use(params);
   const router = useRouter();
 
   const [data, setData] = useState<StaffRota | null>(null);

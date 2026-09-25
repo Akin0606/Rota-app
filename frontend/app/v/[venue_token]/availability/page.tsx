@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Icon from "@/components/staff/icon";
@@ -131,8 +131,8 @@ const WEEK_OPTIONS = [0, 1, 2, 3].map((offset) => ({
   label: offset === 0 ? "This week" : offset === 1 ? "Next week" : `w/c ${formatWeekOf(mondayISO(offset))}`,
 }));
 
-export default function StaffAvailabilityPage({ params }: { params: { venue_token: string } }) {
-  const { venue_token } = params;
+export default function StaffAvailabilityPage({ params }: { params: Promise<{ venue_token: string }> }) {
+  const { venue_token } = use(params);
   const router = useRouter();
 
   const [pin, setPin] = useState<string | null>(null);
