@@ -1,4 +1,4 @@
-# Crewplan — Agent Guide
+# Rotally (formerly Crewplan) — Agent Guide
 
 Rota scheduling web app for small independent UK pubs & restaurants.
 Core loop: staff submit availability via PIN → solver auto-generates rota
@@ -6,13 +6,17 @@ Core loop: staff submit availability via PIN → solver auto-generates rota
 the product. We are NOT competing with Deputy/Rotaready.
 
 ## Stack
-- Frontend: Next.js 14 (App Router) + Tailwind → Vercel
-- Backend: FastAPI + APScheduler → Render
-- DB/Auth: Supabase Postgres. Managers = OTP login, staff = 4-digit PIN
+- Frontend: Next.js 15.5 (App Router) + React 19 + Tailwind → Vercel
+- Backend: FastAPI + APScheduler → Render (**Free plan**, both services)
+- DB/Auth: Supabase Postgres (**Free plan**, both projects: Supabase keeps no
+  backups and offers no PITR). Managers = OTP login, staff = 4-digit PIN
 - Solver: Google OR-Tools CP-SAT
-- Email: Resend
+- Email: Resend. App mail goes from the backend; manager sign-in codes go
+  through Supabase's custom SMTP, which is also Resend
 - Admin: /admin, gated by ADMIN_SECRET header
-- Repo: github.com/Akin0606/Rota-app
+- Billing: Stripe, built but **not configured on prod** (see Known bugs)
+- Repo: github.com/Akin0606/Rota-app, which is **public**. Database backups live
+  in the private repo `Akin0606/rotally-db-backups` (see Backups)
 
 ### Two full environments — they share NOTHING but the repo
 This file used to describe one backend and one Supabase project. There are two
@@ -23,10 +27,13 @@ of each, and conflating them has already cost a debugging session:
 | Frontend | `rotally.co.uk` + `rota-app-mu.vercel.app` | `staging.rotally.co.uk` |
 | Backend | `rota-app-ugee.onrender.com` | `rota-app-staging.onrender.com` |
 | Supabase | `ymmquszendtaflcslarf` | `drgktpkctqoarxxjkezf` |
+| Render service | `Rota-app` (My project → Production) | `rota-app-staging` |
+| Backups | nightly (see Backups) | none, and never restore prod data here |
 
 **The Supabase MCP in this environment is bound to the PRODUCTION project** —
 `get_project_url` returns `ymmquszendtaflcslarf`. Any SQL you run through it hits
-prod, and the staging project is unreachable from here. Confirm which stack a
+prod. It cannot see staging, but the Management API can reach both projects,
+using `SUPABASE_ACCESS_TOKEN` from the gitignored root `.env`. Confirm which stack a
 symptom belongs to *before* debugging: read the deployed bundle
 (`fetch` each `<script src>` and grep for `onrender.com` / `supabase.co`), don't
 assume from this file.
@@ -35,16 +42,19 @@ assume from this file.
 in the repo, so Site URL, redirect allow list, email templates, OTP length and
 the signup toggle are per-project settings that live nowhere in version control
 and do **not** propagate from prod to staging. Every new environment starts on
-Supabase's defaults and must be configured by hand (see Before go-live).
+Supabase's defaults and must be configured by hand (see Launch gaps & ops).
 
 ## Working rules
 - Build ONE priority batch at a time. Verify before moving on.
 - Sequential, verified increments — never generate everything at once.
 - Never touch the auth flow (OTP / PIN) without flagging it first.
+- **This file is public** because the repo is. Never write a secret here, and
+  keep new attack detail about unfixed weaknesses out of it. Name the weakness
+  and point to the fix; don't write the recipe.
 - Format Claude Code prompts in markdown (headers, code blocks, hr).
 - Explain alongside implementation — this is a learning project.
 - **Keep this file honest (self-maintenance).** At the end of every batch,
-  reconcile the living sections (Current state, Near-term, Before go-live,
+  reconcile the living sections (Current state, Near-term, Launch gaps & ops,
   Security) with what actually changed, and append one Learnings entry. A
   resolved issue moves to Learnings — it does not linger as an open item.
   Verify any claim against the code before trusting it here; this doc has been
@@ -94,39 +104,25 @@ actively misleading; trust the tokens, not memory):
 - Every design decision should feel intentional, not templated
 
 ## Current state (living — keep accurate)
-**WENT LIVE 2026-09-11. `staging` was merged to `main` (fast-forward, `ba79c97`)
-and is deployed to prod.** `main` and `staging` now point at the same commit.
-`FIX_PLAN.md` is **fully built — batches 0 through 10** (`ee18af0`, `57fc701`,
-`a396ee5`, `55ec56e`, then `389216a` … `c1e8ab9`). The go-live merge carried the
-full rebrand, marketing v2/v3, the rota redesign, the per-day shift model,
-batches 0–10, the admin comp control, and the Stripe billing feature to
-`rotally.co.uk` in one release (see the top Learnings entry). **Prod is no
-longer untouched** — it is the live release.
+**Live since 2026-09-11** (`staging` → `main` fast-forward, `ba79c97`). That one
+release carried the rebrand, marketing v2/v3, the rota redesign, the per-day
+shift model, `FIX_PLAN.md` batches 0–10, the admin comp control and Stripe
+billing. Since then:
+- **2026-09-13, security remediation** (PRs #1–#3): RLS on the last 7 public
+  tables (migration `032`), HTML-escaped email templates and a constant-time
+  cron secret. See Security posture.
+- **2026-09-25, Wave A of the `AUDIT.md` launch backlog** (PR #4, merge
+  `bcc7d64`): Next 14.2.35 → **15.5.25**, React 18 → **19**, and security
+  response headers. Staging was fast-forwarded to the same commit.
+- **2026-09-25, nightly encrypted backups of the prod database**, with a weekly
+  restore drill that passes (see Backups).
 
-**Migrations on prod are now fully applied: `/health` reports
-`{"applied":31,"pending":[]}`.** The go-live deploy applied `028`, `030` and
-`031` on boot (the filename-set-diff runner skipped the already-present `029`),
-so every under-18 now reads its real `works_past_10pm` value rather than
-defaulting to the stricter 22:00–06:00 window. Prod CORS now accepts
-`rotally.co.uk` (200, was 400) — the merge fixed it with no env change, as the
-`main.py` default-origin note predicted.
-
-**The Stripe billing feature is now COMMITTED and SHIPPED to prod** (it was
-committed on `staging` as `99ed3ba`…, and rode the go-live merge). It was
-authored by a concurrent session; the user made an explicit go/no-go and chose
-to ship it. The old "uncommitted, leave alone, never `git add -A`" warning is
-retired — there is no concurrent in-flight work as of go-live. Its files:
-`routers/billing.py`, `scripts/setup_stripe.py`, `(manager)/billing/page.tsx`,
-plus `config.py`, `main.py`, `middleware.ts`, `nav.tsx`, `(manager)/layout.tsx`,
-`package.json`, `schemas.py`, `lib/api.ts`.
-
-**This section was badly wrong until 2026-08-30 and the failure mode is worth
-naming: it listed six separate batches as "uncommitted, not pushed" that were in
-fact all committed and pushed** (rota page redesign B1–B7, availability per-day
-sync A–C, staff motion pass, manager-consistency + one-team-link, marketing v2
-and v3). Each session appended a fresh "uncommitted now" note and none removed
-the previous one. **Check `git status` and `git log origin/main..staging` before
-believing any claim here about what is or isn't shipped.**
+**As of 2026-09-25, `main` and `staging` both point at `bcc7d64`, and both
+backends report `{"applied":32,"pending":[]}` on `/health`.** Check
+`git status` and `git log origin/main..origin/staging` before believing any
+claim here about what is or isn't shipped. Until 2026-08-30 this section listed
+six batches as "uncommitted" that had long been pushed, because each session
+appended a fresh "uncommitted now" note and none removed the previous one.
 
 Built, merged and deployed: staff PWA, manager app, admin console, the drop /
 give / swap / leave systems, the 7-step onboarding wizard (runs as "Step X of
@@ -134,111 +130,63 @@ give / swap / leave systems, the 7-step onboarding wizard (runs as "Step X of
 solve screen; activation token → wizard → live venue), the six-batch staff UI
 rebuild, the staff-UX overhaul
 (a11y → bottom nav → shared-primitive a11y → motion/tactility), the rota page
-redesign, the availability per-day sync, and marketing site v1→v3.
+redesign, the availability per-day sync, the Home/Rota refresh
+(`APP_BUILD_PLAN.md` + `HOME_ROTA_BUILD_PLAN.md`, `66ca716`…`fa68e07`), Stripe
+billing with trials and an admin comp switch, and marketing site v1→v3.
 `staff-ui-rebuild` is a **stale branch**; `main` is ahead of it.
 
-**Migration state (as of go-live, 2026-09-11): both databases are now at 31,
-no pending.** The out-of-order history resolved exactly as planned: prod was at
-28 with a hole (`…026, 027, 029` — the billing session applied
-`029_subscriptions.sql` straight to prod on 2026-09-01, skipping
-`028_suggestions.sql`), and the go-live deploy's boot migrate — a *filename-set
-difference* in `sorted()` order — applied `028`, `030` and `031` and skipped the
-already-present `029`. Prod `/health` confirms `{"applied":31,"pending":[]}`.
-The three files were independent (a `suggestions` table, the
-`staff_members.works_past_10pm` column, and `venues` comp columns + a standalone
-`admin_audit` table), so order never mattered. **The blast radius was closed in
-code** (the entrypoint runs migrate non-blocking, not as a boot gate — see
-Learnings), which is why the release applied three migrations on boot without
-risk. The Render **pre-deploy field remains paid-plan-only** (staging is on
-Free, prod unconfirmed) — still the one unfinished go-live hygiene item, but
-non-blocking now that boot-migrate is non-fatal.
+**One thing is deployed but has never worked on prod: the automatic weekly
+cycle** (availability auto-closes → solver runs → reminder, closed and review
+emails). Every rota on prod so far was generated by hand. See the 🔴 in Known
+bugs before assuming anything about cron.
 
-**Uncommitted now:** nothing code-bearing. Only untracked design artefacts
-(`*_MOCKUPS.html`, build prompts, `logos/`, `GO_LIVE_TEST_REPORT.md`, agent +
-skill definitions, `.codex/`, `AGENTS.md`, `skills-lock.json`) remain on disk,
-deliberately not committed. The old `(manager)/billing/page.tsx:63`
-`Unexpected any` lint error **is fixed** (line 63 is now a typed `Record`) — the
-tree is lint/build-clean.
+**Migrations apply on boot, and a failure doesn't block the boot**
+(`backend/entrypoint.sh`; see the 027 Learnings entries). The runner applies
+every file that isn't recorded yet, in filename order, rather than "everything
+after the last one applied", so an out-of-order history is safe. Render's
+pre-deploy field would be the cleaner home, but it needs a paid plan and **both
+services are on Free** (prod confirmed 2026-09-25).
 
-**The Home/Rota refresh is built** (`APP_BUILD_PLAN.md` + `HOME_ROTA_BUILD_PLAN.md`,
-both corrected in place where they were wrong): Phase 0 brand currency, the four
-foundation fixes John's pre-build review surfaced, Home rebuilt present-first
-(Today strip + status hero + demoted activity), the rota entry layer (week
-scrubber, state-gated entry, pre-generation chase screen), the generate
-animation on the brand wheel, and the manager+staff consistency pass. Six
-commits, `66ca716`…`fa68e07`. **Frontend-only except four small backend guards
-— no migration.**
+**Uncommitted now:** nothing code-bearing. The untracked files stay on disk on
+purpose, and are deliberately not committed: design artefacts, the audit reports
+(`AUDIT.md`, `SECURITY_ASSESSMENT.md`, `FIX_PLAN.md`, `GO_LIVE_TEST_REPORT.md`),
+agent and skill definitions, `.codex/`, `AGENTS.md` and `logos/`.
 
-## Near-term vision — real per-day shift model (Batches 0-5 done — functionally live)
-The one committed architectural change. Move the solver off the hardcoded
-two-daypart model (Day / Evening split at 17:00) to **real per-day, per-venue
-shift definitions** from actual open/close times: 3+ arbitrary shifts, a shift
-that runs different hours — or not at all — on different days, post-midnight
-closes first-class, and **`"close"` eliminated** in favour of stored real times.
-Full audit + target design: `SOLVER_AUDIT_PROMPT.md`. Sequenced build plan:
-`SHIFT_MODEL_BUILD_PROMPT.md`. This also unblocks 12.07%-of-hours leave accrual.
-The bridge to replace: `onboarding/page.tsx persistShifts()` (fakes Day/Evening)
-and the solver's `_parse_hour` (`"close" → 23.0`, lossy).
-
-**Progress:** Batches 0–2 are **done and verified**. Batch 0 = solver unit
-tests (`backend/tests/`, pytest, 35 green). Batch 1 = `shift_days` table + total
-backfill + shared accessor `services/shift_bounds.py`, migration `026` applied
-to prod. Batch 2 = every **backend** shift hours/staffing read routed through
-the accessor (solver, `_build_summary`, rota emails, PDF/Excel export) —
-grep-clean, output byte-identical except the intended `'close'→'11pm'` label on
-Bar So16's Evening shift (the Batch 1 close-elimination surfacing; rota *numbers*
-unchanged). Frontend per-day display (`sumShiftHours`, availability/hours labels)
-is **deferred** — it has no `shift_days` data flowing to it and is byte-identical
-until shifts actually differ per day; it lands with the editor plumbing (Batch 4).
-Batch 3 = the atomic solver re-key (done): every solver read keyed to
-`(shift, day)`, closed-day existence gate, per-day night/duration/rest/staffing,
-`_parse_hour` hardened. Batch 4 = the manager per-day editor + write-path
-validation + per-day display (done): `shift_days`-authoritative writes via
-`services/shift_days_service`, a `PUT /shifts/{id}/days` editor UI (Settings →
-"Hours"), per-day times resolved onto assignments so staff/manager see the real
-time of a divergent shift, and the `_build_summary` demand union gated to shifts
-with a real per-day pattern (≥1 closed day). Batch 5 = onboarding per-day
-capture (done): `persistShifts()` now writes real `shift_days` (per-day
-open/close + closed days emit no rows) via `setShiftSchedule`, splitting each
-open day into Day/Evening at 17:00 from the already-captured per-day `days`
-state; coverage → per-day evening `min_staff` via Batch 4's propagate; and a
-Settings banner prompts `needs_shift_recapture` venues, auto-clearing when they
-save any per-day schedule. **The model is functionally live end-to-end.**
-
-**No write path produces `'close'` any more** — onboarding, the per-day "Hours"
-editor, and now the legacy **Settings simple editor** all use real times
-(the simple editor moved to `ALL_TIMES`, which drops `'close'` and lifts the old
-11pm cap; a lingering `'close'` on `shifts.end_time` is normalised to `'11:00pm'`
-on load, so saving any shift migrates the representative off it). `parse_hour`
-keeps `'close'→23.0` only as a defensive fallback for any unmigrated row (`shift_days`
-already holds `'11:00pm'`). **Remaining follow-ups (UX / verification only):**
-(a) ~~the availability grid still offers every shift on every day at the
-shift-level time~~ — **DONE (Batches A–C, uncommitted — top Learnings entry).** The
-`/week` payload now carries per-day shift definitions; the grid renders the real
-per-day time, a closed day shows a "Closed" card, and progress/guard key off the
-open-day count. It was *not* "UX-only": a staffer available on a closed shift-day
-was also creating a phantom uncovered gap on the manager's rota
-(`_build_summary` demand had no existence gate) — Batch A closed that + the
-prefill/auto-submit carry-forward + `check_manual_assignment`.
-(b) the full **live onboarding walkthrough** (throwaway auth user) is unverified
-this session — backend write path + row-building logic are verified, the browser
-click-through is pending a clean session. **Batch 9 changed that wizard
-substantially** (email capture, per-band coverage, the quiet guard), so the
-walkthrough is now more overdue, not less.
-
-**The per-day model reached the manager surfaces in `FIX_PLAN.md` batches 4–7,
-which is where it stopped being "functionally live" and started being visible.**
-Batch 4 gave every manager screen a per-day read (`GET /api/shifts/days`,
-one query, `shift_days` bundled onto each shift) — before it, Settings, the
-Scheduler, the rota grid and the availability panel each reasoned about the
-whole week from one representative time, which is why The Gatehouse's closed
-Tuesday drew a red uncovered day at hours the venue isn't open. Batch 5 put one
-per-day time resolver on the client (`resolveShiftTimes` /
-`resolveAssignmentShifts` in `lib/utils.ts`) so no screen re-derives it, and
-deleted the dead `rota-grid.tsx` four files were still importing as a type
-module. Batch 7 made the Scheduler's coverage panel **read-only** — it was the only
-editor that could silently flatten the per-day schedule Settings had just built
-— and `propagate_fields` now refuses to flatten a diverging column (409).
+## Per-day shift model (done — how it works)
+Shipped through `SHIFT_MODEL_BUILD_PROMPT.md` batches 0–5, availability batches
+A–C and `FIX_PLAN.md` batches 4–7; all of it is on prod, and the onboarding
+wizard was clicked through live on staging (`GO_LIVE_TEST_REPORT.md` Phase 4).
+The build history is in Learnings. What a change to shifts needs to respect:
+- **Storage.** `shift_days` (migration `026`) holds one row per shift per
+  *open* day, with that day's real `start_time` / `end_time` / `min_staff` /
+  `max_staff`. A closed day has no row. `shifts.*` mirrors the first open day as
+  a representative fallback.
+- **Reads go through `services/shift_bounds.py`** (`bounds_for`,
+  `duration_for`, `touches_night_for`, `staffing_for`, `exists_on_day`), keyed
+  `(shift_id, day_index)`. A shift with no rows at all reads as running every
+  day at its `shifts.*` times. Don't read a shift's times off the row directly.
+- **Writes go through `services/shift_days_service.py`**. `sync_uniform` runs
+  on create. `propagate_fields` handles single-field edits, and **refuses to
+  flatten a column whose per-day values differ** (`DivergenceError` → 409).
+  `replace_schedule` backs the per-day editor. Every time is validated on the
+  way in.
+- **The solver** keys every compliance read (night window, duration, rest gap,
+  weekly hours, staffing) to `(shift, day)`, and builds nothing for a closed day.
+  `check_manual_assignment` is the one gate for manual-add, claim, give and
+  swap, and it hard-blocks a closed shift-day.
+- **Clients.** The backend attaches each assignment's real per-day
+  `start_time` / `end_time`; `resolveShiftTimes` / `resolveAssignmentShifts` in
+  `lib/utils.ts` are the only client-side resolvers. The staff `/week` payload
+  carries per-day shift definitions, so the availability grid shows real times
+  and a "Closed" card.
+- **Coverage is edited in one place:** Settings → a shift → the per-day editor.
+  The Scheduler's coverage panel is read-only.
+- **Demand.** `_build_summary` treats a shift's definition as demand (an open
+  day with `min_staff` > 0) only once the shift has at least one closed day.
+  Until then a shift open all seven days might still carry its backfill
+  defaults, so demand comes from submissions alone.
+- **No write path produces `'close'`.** `parse_hour` still maps it to 23.0 as a
+  fallback for an unmigrated row.
 
 ## Roadmap
 Done: staff hub restructure · shift drop+claim (auto-approve like-for-like,
@@ -248,15 +196,91 @@ toggle/delete, rota view) · holiday requests phase 1 (request/approve/reject/
 cancel + solver / manual-add / grid integration) · staff self-registration (join
 link + venue PIN + pending state) · full aesthetic pass (staff + manager +
 admin) · 7-step onboarding wizard + activation loop · availability §2/§6
-(four-state colours, prefill echo, auto-submit).
-Next: **per-day shift model** (above) → 12.07% hours accrual → notification
-system (email/push) for claims & approvals (today: `activity_log` only, so
-managers only see them on the dashboard and staff only by reopening the app).
+(four-state colours, prefill echo, auto-submit) · per-day shift model · Stripe
+billing (trials, comp switch, entitlement gate) · go-live · security
+remediation · Wave A (Next 15 / React 19, security headers) · nightly backups
+with a restore drill.
+Next: **settle the pilot trial lockout** (Known bugs; the first venue locks out
+on 2026-10-01) → **make the automatic weekly cycle actually run** (Known bugs;
+needs a plan and a hosting decision) → the rest of the `AUDIT.md` backlog
+(Launch gaps & ops) → 12.07% hours accrual → a notification system
+(email/push) for claims and approvals.
+Today those only reach `activity_log`, so managers see them only on the
+dashboard, and staff only by reopening the app.
 
 ## Known bugs / open issues
 Running list. Grouped by what it blocks. Resolved items move to Learnings.
 
 ### Near-term / in-flight
+- **🔴 Every pilot venue on prod will be locked out in October 2026. This
+  needs a decision, not code.** All three prod venues are at
+  `subscription_status = trialing`, with trials ending between 2026-10-01 and
+  2026-10-11. None has `billing_exempt` set and none has a Stripe customer.
+  When a trial ends, `effective_status` (`services/entitlement.py`) reads
+  `expired`, and then:
+  - generate and publish return 402;
+  - cron skips that venue's sends;
+  - the manager layout redirects to `/billing`, where Subscribe returns 503
+    because prod Render has no `STRIPE_*` env vars.
+
+  Meanwhile the marketing page says "£0 while we're in pilot". The options:
+  - comp each pilot venue in the admin console. This is the intended tool:
+    `billing_exempt` is logged to `admin_audit` and Stripe webhooks can't
+    overwrite it;
+  - extend `subscription_ends_at`;
+  - put Stripe on prod, with the user entering the keys.
+- **🔴 The automatic weekly cycle has never run on prod.** Availability never
+  auto-closes, the solver never auto-runs, and the automatic reminder and
+  manager review emails have never been sent. There are two causes, and either
+  one alone is enough to stop it:
+  - **A code bug, live since 2026-09-11.** It was introduced by `FIX_PLAN.md`
+    batch 2's A13 (`55ec56e`). `close_availability_for_venue` asks
+    `period_resolver.collection_period` which week to close. That calls
+    `compute_window`, which returns the soonest week whose close is still
+    *ahead* (`close > now`). The close job fires *at* `closes_at`, so by then
+    the window has already rolled on to the next week.
+    - Proved with the real functions: a job scheduled for w/c 2026-10-05 fires
+      on Fri 2 Oct at 05:00, and at that instant the collection week resolves
+      to 2026-10-12.
+    - With the default offsets that next week opens 24h later, so no period
+      exists yet and the close returns `None`. If a manager has already created
+      next week, the job would close and solve *that* week, six days early.
+    - The no-op return comes before `cron_scheduler.refresh_jobs()`, so nothing
+      re-arms the next week's jobs either. Even an always-on server stops after
+      one cycle, until a manager edits a shift, rule or setting, or the process
+      restarts.
+    - The reminder picks the right week, because it fires 24h before the close
+      while the window still points there. But it stops too, once the re-arm
+      breaks.
+    - No test covers `close_availability_for_venue`.
+  - **Render Free sleeps after ~15 idle minutes, and the scheduler lives in the
+    process.** At boot, `refresh_jobs()` catches up only two things: the open
+    for a window that is currently open, and the provisional→confirmed sweep. Any
+    open, reminder or close time that passed while the service slept is skipped
+    (`if run_at_naive <= now: continue`). The review email's `CronTrigger`
+    counts its next run from boot. A job that falls due during sleep is dropped,
+    not run late.
+  - **Evidence on prod (`activity_log`, read 2026-09-25).**
+    - Zero `availability_closed` and zero `review_email_sent`, ever.
+    - One `reminder_sent`: the manual "Reminded 3 of 3" on 2026-09-12.
+    - Both `rota_generated` and the one `rota_published` were manual.
+    - Every open since go-live lands at a wake time, for all venues at once.
+    - Result: `collecting` periods pile up (one venue has six). One venue's
+      current week (w/c 2026-09-21) has 14 submissions and no rota.
+  - **The fix needs a plan, not a patch:**
+    1. Pass the target week into the close job when it is scheduled, instead of
+       re-deriving it from the clock when it fires.
+    2. Call `refresh_jobs()` on every exit path of the close.
+    3. Make the catch-up due-based and idempotent. At boot, and on any external
+       tick, close a week whose `closes_at` has passed but is still
+       `collecting`, within a bounded grace window.
+    4. Make something run it on time: a paid instance, or an external cron that
+       calls that catch-up. The existing `/api/cron/*` endpoints won't do: they
+       carry the same A13 bug, and each venue's window has its own times.
+    5. **Before enabling any of it on prod, decide what happens to the stale
+       `collecting` backlog.** Otherwise the first run could close and solve old
+       weeks and email staff about them.
+    6. Add a test for `close_availability_for_venue`.
 - **Hours-based accrual (12.07%) is now unblocked — not yet built.** Since
   April 2024 UK statutory leave for irregular-hours staff accrues at 12.07% of
   hours worked. This was blocked by free-text `"close"` shift ends having no
@@ -264,31 +288,34 @@ Running list. Grouped by what it blocks. Resolved items move to Learnings.
   stores a real start/end, so `duration_for` is exact). The accrual computation
   itself is the remaining work; the days-based model in migration `021` is the
   honest interim until it's built.
-- **Manager-side leave controls unverified live** — the Team modal holiday
-  fields, the Settings holiday panel (migration `021`) and now batch 10's
-  overlap + remaining-allowance block on the leave queue are typechecked,
-  lint-clean and unit-tested at the router, but never clicked, because OTP login
-  is off-limits. First real manager session should exercise them.
-- ~~**Migration `030_works_past_10pm.sql` is applied to staging, not to prod.**~~
-  **RESOLVED at go-live (2026-09-11)** — `030` (and `028`, `031`) applied on the
-  release deploy; prod `/health` is `{"applied":31,"pending":[]}`. The WTR reg 6A
-  second-window path (solver, manual-add gate, availability notes, locked staff
-  slots, Team toggle) is now fully live on prod with real `works_past_10pm`
-  values. The Team switch no longer 400s.
+- **Manager-side leave controls are only partly verified live.** The Settings
+  holiday panel (migration `021`) and the Leave queue's empty states rendered in
+  a real manager session on staging (`GO_LIVE_TEST_REPORT.md` §3). Two things
+  have never been clicked: the Team modal's holiday fields, and batch 10's
+  overlap and remaining-allowance block on the leave queue, which needs a real
+  pending request to show up.
 
-(Three items once flagged here — staff-nav full-loads, the availability-grid
-colour/vocabulary swap, and calendar-day leave allowance — are **resolved**;
-details in Learnings.)
+(Resolved items that used to be here are in Learnings: staff-nav full-loads, the
+availability-grid colour swap, the calendar-day leave allowance, migration `030`
+on prod, the silent "Send code" failure and the unverifiable colleague avatars.)
 
 ### Unverified, not known-broken
-- **The whole Home/Rota refresh is verified against canned data, never a real
-  manager session.** Manager routes are OTP-gated, so every screen was driven
-  through a throwaway `.cp-manager` preview route with `window.fetch`
-  monkey-patched. That proves rendering, state derivation, layout and contrast;
-  it does not prove the real endpoints behave as stubbed. First real manager
-  session should walk: scrub to a past week (read-only), a fresh week (chase
-  screen → Remind → Generate), a draft (day view → publish), and a published
-  week (More → Rebuild → the unpublish-then-solve path).
+- **Parts of the Home/Rota refresh have only ever run against canned data.** A
+  real manager session on staging covered Home and a fresh week end to end
+  (Generate → day view → Publish; `GO_LIVE_TEST_REPORT.md` Phase 6 and §3). Three
+  paths have never met a real session:
+  - scrubbing to a past week, which should be read-only;
+  - the chase screen's Remind;
+  - a published week's More → Rebuild, the unpublish-then-solve path.
+- **No prod email has been proven to land in a non-owner inbox.** Prod's
+  config is right: it sends as `Rotally <noreply@rotally.co.uk>` from the
+  verified domain, and the non-production allowlist guard doesn't apply. Resend
+  has also accepted real sends. A manual reminder on 2026-09-12 logged
+  "Reminded 3 of 3", and that count only includes accepted sends. But nobody
+  has checked delivery or spam placement. Before the next venue onboards, do one
+  proof-send, or read the delivery events in Resend.
+- **The onboarding solve screen's brand wheel (VIS-4)** is shipped in code but
+  has never been driven live.
 - **Motion is unverifiable in this environment, as always.** The generate
   animation's easing, the scrubber's smooth scroll and the `prefers-reduced-motion`
   variants are all present in the cascade and their *logic* is verified, but the
@@ -298,34 +325,24 @@ details in Learnings.)
 - **Keyboard `:focus-visible` has never been tested with a real Tab press** —
   the Browser pane can't composite, so `computer` key/click actions time out.
   The rule is present in the cascade but unproven. Needs a real browser.
-- **Colleague avatars on My shifts can't be verified against real data** —
-  every shift at Bar So16 is `max_staff: 1` and no (period, day, shift) has ever
-  had more than one person. Layout proven with a temporary stub only.
 - **Drop's "already-passed" guard is code-reviewed only, never live-verified**
   (can't reach the state without publishing a period with a past day).
-- ~~`ReferenceError: formatWeekOf is not defined`~~ — **explained, not a bug.**
-  See the HMR entry in Learnings: editing a `lib/utils.ts` import into a page
-  that's already open in the browser leaves the hot-replaced module holding a
-  stale binding. Seen twice (`formatWeekOf`, then `DAY_LABELS`). Fresh loads and
-  the production build are always clean. Reload before believing it.
+- A `ReferenceError` naming a symbol you just imported from `lib/utils.ts` is
+  the HMR stale-binding artifact (see Learnings), not a bug. Reload before
+  believing it.
 
 ### Pre-existing, unrelated to the rebuild
-- "Send code" button fails silently for unregistered emails (no error shown)
 - **Cold/stale Supabase connection pool** → `httpx.RemoteProtocolError`, which
   surfaces in the browser as a phantom CORS error / `net::ERR_FAILED`. Retry
   once or twice before believing it. React StrictMode's double-fired effects
   make it far worse in local dev than in production.
-- **`RotaGrid` renders "On leave" *instead of* "+ Add"**, so the manual-add
-  confirm-override the backend genuinely supports has no UI path once a day
-  shows leave. Manager has to cancel the leave first.
-- ~~**The manual-add risk popup title is generic**~~ — **fixed** by the rota
-  redesign's B7. `rota-risk-modal.tsx` classifies the solver's reason sentence
-  into a tag + title (Max hours / Rest gap / Day off / On leave), so the popup
-  names the rule that fired. This entry was stale for several sessions.
-- ~~**No in-app path from `generated` back to `collecting`**~~ — **fixed.**
-  `reopen_availability` (`generated → collecting`) and `unpublish`
-  (`published/confirmed → generated`) now exist in `rota.py`; any stuck week
-  (e.g. the old 17 Aug) reopens without hand-run SQL.
+- **Leave hides the manual-add control, so the leave override the backend
+  supports has no UI path.** The week matrix draws "Leave" with no add
+  control (`rota-matrix.tsx`, the `leave[staffId]` branch). The day view's add
+  picker filters out anyone on leave that day (`rota-review.tsx`). The backend
+  accepts the add with `confirm: true`, but a manager still has to cancel the
+  leave first. This survived the redesign: the old `RotaGrid` is gone, and the
+  behaviour moved into these two files.
 - **No notification system** for shift claims/approvals — managers only see them
   via `activity_log`, and claimers/droppers only find out by reopening the app.
 - Activity-feed oddities deliberately left alone: a `detail` that mentions the
@@ -333,88 +350,181 @@ details in Learnings.)
   name label, and renamed staff show their *old* name in historical rows (that
   one is correct — audit logs freeze historical fact).
 
-## Before go-live (blockers & gaps)
-- **Render's pre-deploy command needs a paid compute plan, and both services are
-  unset (needs a spending decision, not a code change).** `backend/predeploy.sh`
-  exists and is the command to point the field at (`./predeploy.sh`); the field
-  itself is **disabled on Free** — verified on `rota-app-staging`, where
-  `input[name="preDeployCommand"]` is `disabled` while `dockerCommand` beside it
-  is not. Prod is on a Render account this environment cannot reach at all, so
-  its field is unknown; if that service is on a paid plan the change there is one
-  field plus `MIGRATE_ON_BOOT=false`. Until then the entrypoint fallback applies
-  migrations at boot — **non-blocking**, so the 027 class of outage is already
-  gone; what a pre-deploy step would add is failing the *deploy* instead of
+## Launch gaps & ops
+What stands between the live pilot and charging customers, plus the operational
+facts a session needs before touching an environment. (This was "Before
+go-live" until the 2026-09-11 release; several of its old blockers are now in
+Learnings.)
+
+- **Launch backlog: `AUDIT.md`, worked in three waves.** It is a local file,
+  deliberately uncommitted because the repo is public; item numbers below are
+  its own.
+  - **Wave A is done and live** (2026-09-25, PR #4): the Next 15.5 / React 19
+    upgrade (item 7, the only CRITICAL) and the security response headers
+    (item 6a).
+  - **Wave B:**
+    - **CSP (6b)** can start now: a nonce set in middleware, shipped
+      report-only first, then enforced.
+    - **Error tracking (9, Sentry)** waits on the user creating a free account.
+    - **A shared rate-limit store (4a, Redis/Upstash)** also waits on the user
+      creating a free account.
+  - **Wave C:**
+    - **6-digit PINs (4b)** touch the PIN flow, so flag them first. The policy
+      is locked: new PINs are 6 digits, and existing 4-digit PINs keep working
+      until reset.
+    - **DMARC (21)**: move off `p=none` and add reporting. It needs a logged-in
+      Namecheap session.
+  - **Item 10 (backups) is covered** by `rotally-db-backups` (see Backups).
+    Supabase Pro was declined, so there is no PITR.
+- **Render's pre-deploy command needs a paid plan, and both services are on
+  Free.** Both were checked in the dashboard on 2026-09-25. The field
+  (`input[name="preDeployCommand"]`) is disabled on Free, so this is a
+  spending decision, not a code change. If a service goes paid:
+  1. Point the field at `./predeploy.sh`.
+  2. Set `MIGRATE_ON_BOOT=false`.
+
+  Until then the entrypoint applies migrations at boot, **non-blocking**, so
+  the migration `027` class of outage can't recur. A pre-deploy step would add
+  one thing: a failed migration would fail the *deploy*, instead of the API
   serving briefly on an unmigrated schema.
+- **Render Free also means cold starts and a scheduler that runs only while the
+  process is awake.** A free service sleeps after ~15 idle minutes, and
+  APScheduler keeps its jobs in memory. At boot, `cron_scheduler.refresh_jobs()`
+  catches up only the open for a window that is currently open, plus the
+  provisional→confirmed sweep. A reminder, close or review email that fell due
+  while the service slept is **skipped, not run late**. This is half of the 🔴
+  weekly-cycle bug in Known bugs. Weigh it together with the pre-deploy
+  decision: a paid instance fixes both.
 - **Per-environment Supabase auth config is a manual checklist with no home in
   the repo (hard blocker for any new environment).** A fresh project starts on
-  Supabase defaults and silently breaks login. For each project set: **Site URL**
-  = that environment's origin; **Redirect URLs** allow-list (`https://host/**`)
-  or an explicit `redirect_to` is *ignored* and falls back to Site URL;
-  **Confirm email OFF** (`mailer_autoconfirm: true`) or a first-time address gets
-  the link-only Confirm-signup template instead of the code; **Magic Link
-  template** rendering `{{ .Token }}`; **Email OTP length = 8** to match
-  `NEXT_PUBLIC_OTP_LENGTH`; **Allow new users to sign up = OFF**.
-- **Signups are OPEN on both Supabase projects** (`disable_signup: false`),
-  which contradicts the invite-only pilot model — see Security posture.
-- **Prod `FRONTEND_URL` still points at `rota-app-mu.vercel.app`**, so every
-  staff email sends people to the Vercel alias rather than the brand domain.
-  Change it *together with* `ALLOWED_ORIGINS` — `FRONTEND_URL` is currently the
-  only thing keeping the vercel.app origin in the CORS allowlist.
-- **Staging Resend config is unverified.** Either `RESEND_API_KEY` is unset and
-  the staging cycle silently sends nothing (`email_service` returns
-  `{"status":"skipped"}` with no error surface), or it shares prod's verified
-  domain and **staging cron jobs will email real staff** the moment anyone seeds
-  staging from a prod dump. `cron_scheduler.refresh_jobs()` iterates every venue
-  in whatever DB it boots against. Decide deliberately before any restore.
-- **Email deliverability (hard blocker).** Resend is in sandbox — staff rota /
-  reminder emails only deliver to the account owner until a Resend domain is
-  verified and `RESEND_FROM_EMAIL` is set on Render. Manager login OTP goes via
-  Supabase's built-in email, unreliable until custom SMTP is configured (this
-  also gates return-login for onboarding session 2+).
-- **Backend coverage is now real; the frontend still has none.**
-  `backend/tests/` holds **167 pytest cases** across 14 test files — the
-  compliance-bearing solver helpers, the shared accessor, the per-day re-key,
-  and (since `FIX_PLAN.md` batch 0's `tests/fake_supabase.py` made router code
-  testable at all) period resolution, write-path gating, the per-day read, the
-  shift-days service, open drops, remind honesty, the email guard, the WTR reg
-  6A window, onboarding quietness, the leave overlap and the per-week deadline.
+  Supabase defaults and silently breaks login. For each project set:
+  - **Site URL** = that environment's origin.
+  - **Redirect URLs** allow-list (`https://host/**`). Without it, an explicit
+    `redirect_to` is *ignored* and falls back to Site URL.
+  - **Confirm email OFF** (`mailer_autoconfirm: true`). Otherwise a first-time
+    address gets the link-only Confirm-signup template instead of the code.
+  - **Custom SMTP** through Resend. The built-in mailer locks the templates
+    and is rate-limited.
+  - A **Magic Link template** that renders `{{ .Token }}`.
+  - **Email OTP length = 8**, to match `NEXT_PUBLIC_OTP_LENGTH`.
+  - **Allow new users to sign up = OFF.**
+
+  **Prod still has one gap: its Site URL is `https://rota-app-mu.vercel.app`**,
+  not `https://rotally.co.uk`. Everything else on the list matched on both
+  projects when read back on 2026-09-25. The fix is one Management API `PATCH`
+  of `site_url` (the allow-list already covers both hosts). It is held for the
+  user's OK because it changes where prod auth redirects land.
+- **CORS on prod runs on the `main.py` defaults.** Prod sets no
+  `ALLOWED_ORIGINS`, so its allowlist is the default list plus `FRONTEND_URL`
+  (already `https://rotally.co.uk`). That default list includes
+  `http://localhost:3000` and the vercel.app alias. Setting `ALLOWED_ORIGINS`
+  explicitly on prod would pin it; it is harmless but untidy as it stands.
+- **Staging can't email real people.** It runs with `ENVIRONMENT=staging` and
+  an `EMAIL_ALLOWLIST`. The fail-closed guard in `email_service` drops any send
+  to an address not on that list, which `GO_LIVE_TEST_REPORT.md` verified live.
+  **Still: never restore prod data into staging.**
+  `cron_scheduler.refresh_jobs()` schedules every venue in whatever database it
+  boots against.
+- **Email deliverability is solved except for one proof-send.**
+  - `rotally.co.uk` is verified in Resend, and prod sends as
+    `Rotally <noreply@rotally.co.uk>`.
+  - Manager codes on both Supabase projects go through custom SMTP to Resend.
+  - The last step is proving a real prod send lands in a non-owner inbox (see
+    Unverified).
+- **Backend coverage is real; the frontend has none.** `backend/tests/` holds
+  **230 pytest cases** across 19 test files. They cover:
+  - the compliance-bearing solver helpers, the shared accessor and the per-day
+    re-key;
+  - router code, testable since `tests/fake_supabase.py`: period resolution,
+    write-path gating, the per-day read, the shift-days service, open drops,
+    remind honesty, the WTR reg 6A window, onboarding quietness, the leave
+    overlap and the per-week deadline;
+  - entitlement;
+  - the email guard and escaping, and the cron secret.
+
   Run: `cd backend && PYTHONPATH=. .venv/Scripts/python.exe -m pytest tests -q`.
-  **The frontend still has zero automated tests** and is verified by hand
-  against one live venue. Next-highest-value backend targets: the availability
-  submit endpoint and the claim/give/swap mutations.
-- **PIN brute-force protection is best-effort only** — see Security posture.
+  **The frontend has zero automated tests** and is verified by hand.
+  Next-highest-value backend targets: the availability submit endpoint and the
+  claim/give/swap mutations.
+- **PIN brute-force protection is best-effort only.** See Security posture.
+
+## Backups (prod database)
+The Supabase projects are on Free, which has no backups and no PITR. **Prod is
+backed up by a separate private repo, `Akin0606/rotally-db-backups`.** It is
+private because this repo is public, and a public repo's Actions artifacts and
+logs are readable by anyone. The repo's `README.md` is the full runbook,
+including a step-by-step disaster restore.
+
+- **Nightly Backup (02:23 UTC).**
+  1. `supabase db dump` writes roles, schema and data. This includes
+     `auth.users` and every RLS policy.
+  2. It checks the dump against the live database: completion markers, and
+     every public table plus `auth.users` present.
+  3. It writes a manifest: rows per table, RLS flags, SHA-256 of each file, and
+     the Postgres and **Auth/Storage releases** prod ran.
+  4. It encrypts with gpg (AES-256, symmetric) and uploads as an Actions
+     artifact kept **90 days**. Worst-case data loss is one day of writes.
+- **Weekly Restore drill (Sundays 04:41 UTC).** It restores the newest backup
+  into a throwaway local Supabase, pinned to the Auth and Storage releases the
+  backup recorded. It then requires identical row counts and identical RLS on
+  every public table. It also fails if the newest backup is over 48 hours old,
+  which catches a nightly job that has quietly stopped. The first drill passed
+  on 2026-09-25: 50 tables, 639 rows, RLS identical on 19 public tables.
+- **RLS canary.** Every Backup run turns red if any public table has RLS off,
+  and GitHub emails the owner. It runs after the upload, so it never costs a
+  night's backup.
+- **Secrets:**
+  - `SUPABASE_PROD_DB_URL`: the prod session-pooler URL. **If the prod
+    database password is ever reset, update this secret or backups start
+    failing.**
+  - `BACKUP_PASSPHRASE`: GitHub can't reveal a secret, so the only other copies
+    are `DB_BACKUP_PASSPHRASE` in this repo's gitignored root `.env` and the
+    user's password manager. Without it no backup can be decrypted.
+- **Not in a backup, because it isn't in the database:**
+  - Supabase dashboard auth settings (the checklist in Launch gaps & ops);
+  - API keys;
+  - Storage files (none are used);
+  - Render and Vercel env vars.
+- **Never restore into staging** (see Launch gaps & ops). Restores go into a
+  new project, or a local Supabase to inspect old data. `restore.sh` refuses a
+  target that already has tables in `public`.
 
 ## Security posture (audited — mitigations & known weaknesses)
-Sound where it counts, with two known-weak areas flagged in-code:
+Sound where it counts. The one known-weak area is staff PIN auth, which is
+flagged in code and queued in the launch backlog.
 - **Tenant isolation is manual and load-bearing.** The backend uses the Supabase
   **service-role key (RLS bypassed)**, so every staff / shift / period / rota
   lookup must be explicitly venue- or period-scoped. Any new query that isn't
-  leaks cross-tenant — there is no second net. RLS policies (migration `001`)
-  exist only as defense-in-depth for direct/anon access.
-- **PIN auth is weak but mitigated.** 4-digit PINs (10k space); rate-limited
-  per-IP (5/15min) plus an IP-independent venue-wide backstop (30/15min). But
-  the store is an **in-memory dict** (`services/rate_limit.py`) — it **resets on
-  every Render deploy and is per-instance**, so protection is ineffective if
-  Render ever scales past one instance. Proper fix: shared store (Redis) +
-  longer PINs. Tracked in-code.
-- **Anyone can self-register a tenant.** `disable_signup: false` on both Supabase
-  projects, and `create_venue` (`routers/venue.py:29`) gates on nothing but a
-  valid session — so the public `/login` OTP form issues a session to any email
-  on earth, which walks straight through onboarding into a live venue with cron
-  jobs and outbound email on your Resend quota. The login page's own copy ("This
-  email isn't registered — contact your Rotally admin", `lib/api.ts`) can never
-  fire. **Fix is one toggle per project**; admin invites are unaffected because
+  leaks cross-tenant — there is no second net.
+- **RLS is on for all 19 public tables, and a nightly canary checks it.**
+  - Migration `032` (2026-09-13) switched on the last seven.
+  - Ten tables carry policies (from migration `001` on), as defense in depth
+    for direct/anon access.
+  - The other nine have RLS on and no policies, which denies the anon and
+    authenticated roles outright.
+  - The backend is unaffected either way, because it uses the service-role key.
+
+  **A new table needs `enable row level security` in its own migration**,
+  or the public anon key can read and write it. The Backup workflow turns red if
+  any public table has RLS off (see Backups).
+- **Staff PIN auth is the weakest point, and it's known.** Since migration
+  `027`, venue URLs are readable slugs (`generate_venue_slug`, resolved by
+  `_get_venue_or_404`), so the 4-digit PIN is the only staff-side secret. PIN
+  attempts are rate-limited per IP and per venue. But the store is an in-memory
+  dict (`services/rate_limit.py`) that resets on every deploy and is
+  per-instance. Fix order:
+  1. a shared rate-limit store (`AUDIT.md` 4a);
+  2. 6-digit PINs (4b). This touches the PIN flow, so flag it first.
+
+  The detail lives in the local `AUDIT.md` and `SECURITY_ASSESSMENT.md`,
+  deliberately not here.
+- **Tenant self-registration is closed, but only by a dashboard toggle.**
+  `disable_signup` is true on both Supabase projects (read back 2026-09-25).
+  `create_venue` checks nothing beyond a valid session, so that toggle is the
+  only barrier. A new Supabase project starts with signups **on** (see the auth
+  checklist in Launch gaps & ops). Admin invites are unaffected:
   `_create_manager_account` uses `admin.create_user({email_confirm: True})`,
-  which bypasses the signup toggle by design.
-- **Migration 027's slugs made venue URLs enumerable, and nothing else moved.**
-  `generate_venue_slug` produces a bare readable slug with no hex, and
-  `_get_venue_or_404` resolves it — so `/api/availability/the-anxhor` returns 200
-  unauthenticated on prod (verified). The old `/v/{link_token}` capability URL
-  was the outer secret; now the only secret is a **4-digit PIN over a ~6-person
-  roster**, and `_get_staff_by_pin` matches *any* member, so an attacker needs no
-  specific target. With the venue-wide backstop at 30/15min (2,880/day) and the
-  store resetting on every deploy, expected time to first hit is roughly
-  overnight. Fix order: shared persistent rate-limit store, then 6-digit PINs.
+  which bypasses the toggle by design.
 - **Destructive transitions are validated server-side, not just confirmed in the
   UI.** `generate` used to accept any period in any status while
   `run_solver_for_period` deletes every non-manually-assigned row first — so
@@ -430,6 +540,14 @@ Sound where it counts, with two known-weak areas flagged in-code:
   transition a client can trigger is validated at the endpoint, because the
   backend runs on the service-role key with no RLS net and a confirm dialog is
   not a guard.
+- **Email bodies escape every dynamic value** through `email_service._esc`
+  (2026-09-13). Staff names arrive through public self-registration, so an
+  unescaped name would be HTML injection into a manager's inbox. Subjects are
+  plain text and stay raw.
+- **Security response headers are live** (Wave A). `frontend/next.config.mjs`
+  sets `X-Frame-Options: SAMEORIGIN`, `nosniff`, a `Referrer-Policy` and a
+  `Permissions-Policy`. HSTS comes from Vercel's edge and is deliberately not
+  duplicated. **There is no CSP yet**; that is `AUDIT.md` 6b.
 - **Admin console:** every route gated by `X-Admin-Secret` vs `ADMIN_SECRET`
   (`require_admin`), constant-time via `hmac.compare_digest`. The cron secret
   gate (`require_cron`) is now constant-time too (2026-09-13); both fail closed
@@ -439,9 +557,68 @@ Sound where it counts, with two known-weak areas flagged in-code:
   swap writes are atomic (guarded status flip) against double-assign races.
 - `.env` / `.env.local` are gitignored, no secrets tracked; CORS uses a
   configured origin allowlist (not `*`) with credentials.
+- **Backups hold prod data, including `auth.users`.** Treat the private
+  `rotally-db-backups` repo and `BACKUP_PASSPHRASE` as prod-equivalent secrets
+  (see Backups).
 - **Never touch the OTP / PIN auth flow without flagging first** (working rule).
 
 ## Learnings (append after each session — most recent first)
+- **Wave A shipped to prod, nightly backups built and restore-drilled, and a
+  check of this file against the live systems found that the automatic weekly
+  cycle has never run on prod (2026-09-25).**
+  - **Wave A** went out as PR #4. It was merged through the GitHub merge API
+    (`bcc7d64`), because the classifier still blocks `git push …:main`. Staging
+    was fast-forwarded to the same commit, and both `/health` endpoints report
+    `{"applied":32,"pending":[]}`.
+  - **The backups live in a separate private repo because this one is public.**
+    A public repo's Actions artifacts and logs are readable by anyone. The
+    design is under Backups; the drill is the part worth remembering. **The
+    first drill runs failed on backups that had "succeeded", for three reasons
+    that only a real restore could surface:**
+    1. `supabase db dump` emits `GRANT … ON PARAMETER` and
+       `ALTER … OWNER TO "supabase_admin"`. Only Supabase's own superuser can
+       run them, so the documented single-transaction restore rolls back.
+       `restore.sh` comments them out, since a fresh project already has both.
+    2. The CLI's bundled Auth image (v2.196.0) lagged prod's (v2.197.0) and was
+       missing tables the dump had rows for. Every backup now records prod's
+       Auth and Storage releases in its manifest, and the drill pins its local
+       stack to them.
+    3. `--keep-comments` can't be combined with `--data-only`.
+
+    **A backup you haven't restored is a hope.**
+  - **Render's env editor masks values.** Reading one takes "Show secret" on
+    that row, so read only the rows you need (the URL-shaped ones) and hide them
+    again.
+  - **Checking this file against the live systems found it stale in more places
+    than it was right:**
+    - prod `FRONTEND_URL` was already `https://rotally.co.uk`;
+    - `disable_signup` was already true on both projects;
+    - prod's Render service is reachable, and it is on Free;
+    - staging's Resend domain is verified;
+    - there are 230 tests across 19 files, not 167 across 14;
+    - "`FRONTEND_URL` is the only thing keeping vercel.app in CORS" was wrong,
+      because the `main.py` defaults include it.
+
+    The same check surfaced the trial lockout. All three prod venues are on
+    trial with no comp and no Stripe, the first trial ends 2026-10-01, and the
+    marketing page promises £0 during the pilot.
+  - **The weekly-cycle bug came to light because I had just written a wrong
+    claim into this file.** I wrote that a cron job due during sleep "runs late,
+    not never". Checking `cron_scheduler.py` before committing showed that
+    past-due jobs are skipped. So I looked in prod's `activity_log` for
+    automatic actions that should have been there: zero closes and zero review
+    emails ever, and every open at a wake time. Running the real
+    `compute_window` at the close instant then proved a code bug that doesn't
+    depend on hosting at all.
+    - **A job that re-derives its target from the clock when it fires sees its
+      own boundary as already past. Pass the target in when scheduling.** This
+      file already documented the 24h gap between one week's close and the next
+      week's open, in the phantom-generator entry. A13 moved the close onto the
+      resolver without checking what the resolver returns *at* the close.
+    - **A scheduled job leaves rows when it runs, not errors when it doesn't.**
+      A dead scheduler raises nothing, so the evidence is the missing rows.
+    - **What I write here is a hypothesis too.** Check the code before
+      committing a claim about it.
 - **Security-assessment remediation shipped to prod + staging (2026-09-13): three findings fixed, two left spend-gated. See [[security-remediation-status]].** Fixed and merged to `main` (PRs #1/#2/#3) and carried to `staging`: (1) **RLS** on 7 world-readable public tables — migration `032`, applied to both DBs directly via the Supabase **Management API** `database/query` (DDL; the MCP `execute_sql` is read-only) and verified `relrowsecurity=true`/0 policies on both; the worst of these was `onboarding_tokens` = **unauthenticated manager-account takeover**. (2) **Email templates HTML-escape** every dynamic value (`email_service._esc`; subjects left raw as plain text) — staff names are attacker-influenced via public self-registration. (3) **Cron secret constant-time** compare (`require_cron` `!=` → `hmac.compare_digest`, matching `require_admin`). 230 backend tests green (+5 cron, +9 email). **Left OPEN — both need a user decision, not autonomously doable:** Supabase **leaked-password (HIBP)** protection returns **HTTP 402 "Pro Plans and up"** on both Free-tier projects (a spend decision; low impact since managers use OTP and staff use PINs — no Auth password is ever set); and **Redis rate-limit store + 6-digit PINs**, which touches the OTP/PIN auth flow (flag-first rule) and needs infra spend. **The load-bearing ops lesson: a GitHub-side incident (merge + PR-create endpoints 500/502/504 for ~30 min) is indistinguishable from a rejection by HTTP status alone — a 504 can mean "the merge executed but the response timed out" (PR #1's merge commit landed and advanced `main` while its PR record was stuck `open/merged:false`, self-correcting only on recovery).** So during a 5xx storm: trust the **git ref** (`GET /git/ref/heads/main` and `git ls-tree origin/main <path>`), not the PR object's `merged`; re-check the ref after every failed merge; and just keep retrying with backoff — all three PRs landed within a few rounds. The classifier blocks `git push …:main` but **not** the GitHub merge API, which is the working path to `main`; staging pushes are unblocked, so staging got each fix first (cherry-pick, since staging already carried `032` and the branches diverged at `2c7e35c`).
 - **WENT LIVE: `staging` → `main`, deployed to prod (2026-09-11, `ba79c97`).** The user asked "are we ready to go live"; the answer was "one small punch-list away," and after clearing it we shipped. **The decisive pre-merge facts, each verified rather than trusted from this doc:** (1) `git merge-base --is-ancestor origin/main staging` → clean fast-forward, zero divergence, so the merge was `git push origin staging:main` (no local checkout dance, no merge commit, safe alongside another session's dev server and the untracked files on disk). (2) The old build-blocker — `(manager)/billing/page.tsx:63` `Unexpected any` — was already fixed (line 63 is a typed `Record`); billing had been committed on `staging` (`99ed3ba`), so the merge shipped it to prod by design, on the user's explicit go/no-go. (3) The Terms/Privacy pages were **committed but placeholder-draft**, and the real copy was **uncommitted and still carried `[operator legal name and registered address]`** — a genuine GDPR blocker the login footer links to. Fixed by filling `OPERATOR` in both `(marketing)/privacy/page.tsx` and `terms/page.tsx` with the real controller identity (Pycroft Solutions / Oluwaseun Akinshilo, SO16 7HN) and committing (`ba79c97`). **The go-live itself needed no orchestration beyond the push** — Vercel (main→prod) and Render (main→prod, auto-deploy) both watch `main`. **Verified on prod within ~2 min, the same checks that would have been the pre-merge blockers:** backend `/health` → `{"applied":31,"pending":[]}` (028+030+031 applied on boot by the non-blocking filename-set-diff runner, 029 correctly skipped — the migrations field doubling as the new-code marker, since prod was at 28); CORS from `rotally.co.uk` flipped 400→200 with **no env change** (the merge carried the fixed default-origin list in `main.py`, exactly as this doc predicted); `/terms` + `/privacy` both 200 with "Pycroft Solutions" rendering live; frontend `<title>` is "Rotally …". **The first `/health` poll came back empty — a Render cold-start blip, not a failure;** the immediate retry was correct. **Two human gates deliberately left to the user, neither blocking the merge:** a real prod email proof-send to a non-owner inbox before onboarding any real client (prod config is correct — `Rotally <noreply@rotally.co.uk>` on the verified domain, allowlist bypassed — but never fired end-to-end), and a professional legal review of the now-complete Terms/Privacy (open question: is Pycroft Solutions a registered Ltd needing a company number, or a sole trader, in which case the current text is fine). **Prior session's `GO_LIVE_TEST_REPORT.md` (2026-09-09/10) did the heavy lifting** — it drove the whole core loop live on staging with a real 5-person roster including a genuine under-18 and confirmed the WTR night-shift block; this session's job was to reconcile its "conditional GO" against the 7 commits that landed after it, clear the legal gate, and pull the trigger.
 - **Admin comp control + server-side entitlement enforcement built and shipped to staging (`805e9ed`).** The ask: an admin control for who gets a free pass vs who gets billed, plus governance essentials, plus real enforcement. **The load-bearing design call is that a comp is its own boolean (`billing_exempt`), never a `subscription_status` value** — because the concurrent Stripe session's webhook `_sync_subscription` overwrites `subscription_status`, so a comp encoded there would be silently wiped on the venue's next Stripe event. `services/entitlement.py` (`is_comped` / `effective_status` / `venue_is_entitled`) checks comp **first and independently of Stripe**, imports nothing from `routers/` (services must not depend on routers — ~10 lines of `_effective_status` are duplicated from `billing.py` on purpose), and duplicates none of Stripe's logic beyond that read. Entitlement = comped OR status in {trialing, active, past_due}; `past_due` deliberately keeps grace, {cancelled, expired} + not-comped is the only locked-out state. **The one non-obvious predicate: `venue_is_entitled` guards `if venue is None`, NOT `if not venue`** — an empty dict `{}` is falsy but must read as trialing/entitled (a brand-new venue with no billing row is on trial, not locked out); a test pins `venue_is_entitled({}) is True`. **Enforcement sits next to the effect, not on the caller** (the same discipline as the batch-8/9 guards and the `run_solver_for_period` status gate): cron functions `return None` for a non-entitled venue right beside the send, and manager generate/publish raise 402 right after `get_manager_venue` — so a new send path or a new manager mutation can't bypass it by forgetting a wrapper. **`admin_audit` is deliberately OUTSIDE the venue cascade** — `target_venue_id` is a plain uuid, not an FK, and the row copies the venue name/email onto itself — so the accountability trail *survives* a venue delete (the delete is logged, then the venue vanishes, and the log row remains). It's the only accountability under a single shared `ADMIN_SECRET`; it records what was done to which venue, not which admin. `require_admin` also moved to `hmac.compare_digest` (constant-time) in passing. **The comp PATCH can't be used to poke `subscription_status`** because the Pydantic request model declares only the comp/trial fields and `exclude_unset` drops everything else — a field that isn't in the model can't be smuggled through. 16 entitlement tests, 216 backend total (was 200). **Migration 031 applied to staging on the redeploy** and its `/health` `migrations.applied` bumped 30→31 — which (per the entry below about the `migrations` field being a cheaper new-code marker than an OpenAPI diff) is itself the proof the pushed code is live, since this change adds no routes to diff. **Prod is deliberately NOT migrated:** the migrate runner is a filename-set difference, so running it against prod (still at 28, with 028+030 pending) would drag in the two unrelated staging-only migrations — 031 rides the eventual `staging`→`main` merge like everything else. **The comp/lockout UI and the 402 paths are typecheck/test-clean but never clicked** (admin + manager are secret/OTP-gated) — first real admin session on staging should exercise the toggle, the lockout warning, and a lapsed-venue generate.
