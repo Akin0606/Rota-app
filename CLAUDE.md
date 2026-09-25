@@ -265,8 +265,9 @@ Running list. Grouped by what it blocks. Resolved items move to Learnings.
     - One `reminder_sent`: the manual "Reminded 3 of 3" on 2026-09-12.
     - Both `rota_generated` and the one `rota_published` were manual.
     - Every open since go-live lands at a wake time, for all venues at once.
-    - Result: `collecting` periods pile up (one venue has six). One venue's
-      current week (w/c 2026-09-21) has 14 submissions and no rota.
+    - Result: `collecting` periods pile up (one venue has six). Two of the
+      three venues have no rota for the current week (w/c 2026-09-21), and none
+      of them has one for next week.
   - **The fix needs a plan, not a patch:**
     1. Pass the target week into the close job when it is scheduled, instead of
        re-deriving it from the clock when it fires.
