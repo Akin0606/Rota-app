@@ -33,13 +33,12 @@ import {
   listStaff,
   reopenAvailability,
   unpublishRota,
-  updateRules,
   updateVenue,
   updateVenueLeaveSettings,
 } from "@/lib/api";
 import { SHIFT_COLORS } from "@/lib/constants";
 import { DAY_INITIAL, summariseShift } from "@/lib/shift-summary";
-import { DAY_NAMES, formatWeekRange } from "@/lib/utils";
+import { formatWeekRange } from "@/lib/utils";
 import Waiting from "@/components/waiting";
 
 const MONTH_NAMES = [
@@ -250,13 +249,13 @@ export default function SettingsPage() {
     if (!rules) return;
     setSaving(true);
     try {
-      await Promise.all([
-        venue && venueName.trim() && venueName !== venue.name ? updateVenue(venueName.trim()) : null,
-        // The availability-window datetimes and scheduling rules (max hours,
-        // min rest, shift staffing) are owned by Scheduler now; Settings only
-        // saves this remaining venue-level field.
-        updateRules({ review_email_day: rules.review_email_day }),
-      ]);
+      // The availability-window timing and the scheduling rules (max hours,
+      // min rest, shift staffing) are owned by Scheduler, and the manager review
+      // email goes out when availability closes, so the venue name is all this
+      // button still saves.
+      if (venue && venueName.trim() && venueName !== venue.name) {
+        await updateVenue(venueName.trim());
+      }
       showToast("Settings saved!");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Could not save settings");
@@ -556,15 +555,9 @@ export default function SettingsPage() {
           </div>
           <div className="flex flex-col gap-3.5">
             <RuleRow label="Manager review email">
-              <select
-                value={rules.review_email_day}
-                onChange={(e) => setRules((r) => (r ? { ...r, review_email_day: e.target.value } : r))}
-                className="rounded-lg border-[1.5px] border-unset-border bg-surface-subtle px-3 py-2 text-sm font-medium text-ink outline-none"
-              >
-                {DAY_NAMES.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
+              {/* It reports on the week that has just closed, so it goes out at
+                  that moment rather than on a weekday of its own. */}
+              <span className="text-right text-[13px] text-ink-muted">Sent when availability closes</span>
             </RuleRow>
           </div>
         </div>

@@ -1,19 +1,30 @@
-"""Wires the /api/cron/* job functions to run automatically at each venue's
-computed notice window (see services.notice_window / services.schedule_windows).
+"""Arms the weekly cycle's timers. The cycle itself lives in routers/cron.py.
 
-For every venue we work out the active collection week and its open / reminder /
-close datetimes from that week's earliest shift, then schedule a one-shot
-DateTrigger for each point still in the future. When a venue's availability
-closes, the close handler calls refresh_jobs() again, which recomputes the next
-week's window — so the cadence repeats automatically with nothing stored per
-week. Jobs are rebuilt from the database at startup and after any relevant change.
+For every venue we place the active collection week (the soonest week whose
+deadline is still ahead) and arm a one-shot job at its open, reminder and close
+moments, whichever are still in the future. A job carries the venue id, what it
+is for and the week it was armed for. When it fires it reads the venue fresh,
+runs everything due for it (cron.run_due_for_venue_id) and then re-arms,
+whatever happened - so a close that turns out to be a no-op still leaves the
+next week's timers in place. The old close re-armed only on its success path,
+and it never succeeded (A13), so one missed close stopped the cycle for good.
+
+Timers live in memory and die with the process. That is survivable because
+they are not the only trigger: starting the process queues a catch-up, and an
+hourly tick (POST /api/cron/tick) runs the same function from outside.
+
+The misfire grace is an hour rather than APScheduler's default of one second:
+a timer that fires a little late (a busy worker, a long solve ahead of it)
+should still run, not be dropped with a log line nobody reads.
 """
 
 import logging
+import threading
+from datetime import datetime
 from typing import Optional
 
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
 from database import get_supabase
@@ -21,56 +32,36 @@ from services import notice_window, schedule_windows
 
 logger = logging.getLogger("cron_scheduler")
 
-_DAY_TO_APS = {
-    "Monday": "mon",
-    "Tuesday": "tue",
-    "Wednesday": "wed",
-    "Thursday": "thu",
-    "Friday": "fri",
-    "Saturday": "sat",
-    "Sunday": "sun",
-}
+JOB_DEFAULTS = {"misfire_grace_time": 3600, "coalesce": True, "max_instances": 1}
+TIMER_KINDS = ("open", "remind", "close")
+CATCH_UP_JOB_ID = "catch_up"
 
 _scheduler: Optional[BackgroundScheduler] = None
 
+# refresh_jobs runs on request threads (a manager's settings save) and on the
+# scheduler's own workers (every timer re-arms when it finishes). Two rebuilds
+# interleaving could each undo the other's, so they take turns.
+_lock = threading.RLock()
 
-def _parse_time(value: str) -> tuple[int, int]:
-    try:
-        h, m = value.split(":")
-        return int(h), int(m)
-    except (ValueError, AttributeError):
-        return 9, 0
-
-
-def _run_safely(fn, venue: dict) -> None:
-    try:
-        fn(venue)
-    except Exception:
-        logger.exception("Scheduled job %s failed for venue %s", fn.__name__, venue.get("id"))
+# Set whenever a catch-up is asked for and cleared as one starts. A request
+# that lands while a catch-up is already running cannot start a second job
+# under the same id, so the running one loops and does another pass instead.
+_catch_up_requested = threading.Event()
 
 
-def refresh_jobs() -> None:
-    """Clears and rebuilds every venue's scheduled jobs from its current shifts,
-    rules and week overrides. Call this at startup and after any change that
-    could move the window (rules, shifts, overrides, availability close)."""
-    if _scheduler is None:
-        return
+def new_scheduler() -> BackgroundScheduler:
+    return BackgroundScheduler(timezone=schedule_windows.LONDON, job_defaults=JOB_DEFAULTS)
 
-    # Imported here (not at module load) to avoid a circular import with
-    # routers.cron, which itself imports from routers.rota / routers.staff.
-    from routers.cron import (
-        close_availability_for_venue,
-        open_availability_for_venue,
-        send_reminders_for_venue,
-        send_review_email_for_venue,
-    )
-    from routers.rota import confirm_published_periods_for_venue
 
-    for job in _scheduler.get_jobs():
-        job.remove()
+def _is_timer(job_id: str) -> bool:
+    return job_id.split("_", 1)[0] in TIMER_KINDS
 
+
+def _active_windows(now: datetime) -> list[tuple[str, dict]]:
+    """[(venue_id, active window)] for every venue that has shifts to place a
+    window with, from four reads however many venues there are."""
     supabase = get_supabase()
-    venues = supabase.table("venues").select("*").execute().data
+    venues = supabase.table("venues").select("id").execute().data
     rules_rows = supabase.table("scheduling_rules").select("*").execute().data
     shift_rows = supabase.table("shifts").select("venue_id, start_time").execute().data
     override_rows = (
@@ -85,73 +76,124 @@ def refresh_jobs() -> None:
     for row in override_rows:
         overrides_by_venue.setdefault(row["venue_id"], []).append(row)
 
-    now = schedule_windows.now_london()
-    scheduled = 0
-
+    out = []
     for venue in venues:
-        # Opportunistic sweep: promote any provisional (published) period whose
-        # window has closed since we last checked. Runs here rather than as its
-        # own precise timer so it self-heals on every startup/settings change,
-        # not just at the one active window's close moment.
-        _run_safely(confirm_published_periods_for_venue, venue)
-
-        rules = rules_by_venue.get(venue["id"], {})
-        shifts = shifts_by_venue.get(venue["id"], [])
-        overrides = notice_window.overrides_map(overrides_by_venue.get(venue["id"], []))
-        off = notice_window.offsets_from_rules(rules)
-
-        window = schedule_windows.compute_window(
-            now=now,
-            earliest_minutes=schedule_windows.earliest_shift_minutes(shifts),
-            override_close_by_week=overrides,
-            **off,
+        vid = venue["id"]
+        schedule = notice_window.schedule_from(
+            rules_by_venue.get(vid, {}),
+            shifts_by_venue.get(vid, []),
+            notice_window.overrides_map(overrides_by_venue.get(vid, [])),
         )
-
+        window = schedule_windows.compute_window(now=now, **schedule) if schedule else None
         if window:
-            # If we're already inside the window (e.g. the server started after
-            # the open point passed), make sure the collecting period exists.
-            if window["opens_at"] <= now < window["closes_at"]:
-                _run_safely(open_availability_for_venue, venue)
+            out.append((vid, window))
+    return out
 
-            window_jobs = (
-                ("open", window["opens_at"], open_availability_for_venue),
-                ("remind", window["reminder_at"], send_reminders_for_venue),
-                ("close", window["closes_at"], close_availability_for_venue),
+
+def refresh_jobs(*, arm_only: bool = False) -> None:
+    """Re-arm every venue's timers from its current shifts, rules and week
+    overrides. Call it after any change that could move a window.
+
+    Unless arm_only, it also queues a catch-up that runs whatever is due right
+    now for every venue. That is how a change that puts a moment in the past - a
+    manager's override, a finished onboarding - takes effect straight away
+    rather than at the next tick. The catch-up re-arms with arm_only=True when
+    it finishes, so this never loops."""
+    if _scheduler is None:
+        return
+
+    with _lock:
+        now = schedule_windows.now_london()
+        # Read everything before touching a job, so a failed read leaves the
+        # timers already armed where they were.
+        wanted: dict[str, tuple[datetime, list]] = {}
+        for venue_id, window in _active_windows(now):
+            week_iso = window["week_monday"].isoformat()
+            for kind, at in (
+                ("open", window["opens_at"]),
+                ("remind", window["reminder_at"]),
+                ("close", window["closes_at"]),
+            ):
+                if at > now:
+                    wanted[f"{kind}_{venue_id}"] = (at, [venue_id, kind, week_iso])
+
+        due_by = now.replace(tzinfo=schedule_windows.LONDON)
+        for job in _scheduler.get_jobs():
+            if not _is_timer(job.id) or job.id in wanted:
+                continue
+            # A timer whose moment has come is left to fire. It re-checks
+            # everything itself, and removing it in the instant between falling
+            # due and running would lose it.
+            next_run = getattr(job, "next_run_time", None)
+            if next_run is not None and next_run <= due_by:
+                continue
+            try:
+                job.remove()
+            except JobLookupError:
+                pass  # it fired and removed itself since we listed it
+
+        for job_id, (at, args) in wanted.items():
+            _scheduler.add_job(
+                _run_timer,
+                trigger=DateTrigger(run_date=at.replace(tzinfo=schedule_windows.LONDON)),
+                args=args,
+                id=job_id,
+                replace_existing=True,
             )
-            for prefix, run_at_naive, fn in window_jobs:
-                if run_at_naive <= now:
-                    continue
-                run_at = run_at_naive.replace(tzinfo=schedule_windows.LONDON)
-                _scheduler.add_job(
-                    _run_safely,
-                    args=[fn, venue],
-                    trigger=DateTrigger(run_date=run_at),
-                    id=f"{prefix}_{venue['id']}",
-                    replace_existing=True,
-                )
-                scheduled += 1
 
-        # Manager review email stays on its legacy weekly day/time.
-        review_day = _DAY_TO_APS.get(rules.get("review_email_day", "Saturday"), "sat")
-        review_hour, review_minute = _parse_time(rules.get("review_email_time", "09:00"))
-        _scheduler.add_job(
-            _run_safely,
-            args=[send_review_email_for_venue, venue],
-            trigger=CronTrigger(day_of_week=review_day, hour=review_hour, minute=review_minute),
-            id=f"review_{venue['id']}",
-            replace_existing=True,
-        )
+    logger.info("Weekly cycle timers armed: %d", len(wanted))
+    if not arm_only:
+        queue_catch_up()
 
-    logger.info("Scheduled window jobs refreshed for %d venue(s), %d timed jobs", len(venues), scheduled)
+
+def _run_timer(venue_id: str, kind: str, week_iso: str) -> None:
+    """What every timer runs: everything due for its venue, then re-arm - in a
+    finally, so a no-op or a failure re-arms exactly like a success."""
+    from routers.cron import run_due_for_venue_id  # routers.cron imports this module
+
+    try:
+        run_due_for_venue_id(venue_id)
+    except Exception:
+        logger.exception("Scheduled %s for venue %s (w/c %s) failed", kind, venue_id, week_iso)
+    finally:
+        try:
+            refresh_jobs(arm_only=True)
+        except Exception:
+            logger.exception("Re-arming after the scheduled %s for venue %s failed", kind, venue_id)
+
+
+def queue_catch_up() -> None:
+    """Run everything due for every venue, on the scheduler's thread, now."""
+    if _scheduler is None:
+        return
+    _catch_up_requested.set()
+    # Two instances at most: one finishing its last pass while the next starts.
+    # Everything it does is claimed with a guarded update, so overlap is safe.
+    _scheduler.add_job(_catch_up, id=CATCH_UP_JOB_ID, replace_existing=True, max_instances=2)
+
+
+def _catch_up() -> None:
+    from routers.cron import run_due_all  # routers.cron imports this module
+
+    while _catch_up_requested.is_set():
+        _catch_up_requested.clear()
+        try:
+            run_due_all()  # re-arms the timers itself when it finishes
+        except Exception:
+            logger.exception("Weekly cycle catch-up failed")
 
 
 def start_scheduler() -> None:
+    """Starts the scheduler and queues the boot catch-up. Nothing here reads the
+    database: startup must not depend on a connection pool that is often cold
+    at boot, and the catch-up runs off the startup path on the scheduler's own
+    thread."""
     global _scheduler
     if _scheduler is not None:
         return
-    _scheduler = BackgroundScheduler(timezone=schedule_windows.LONDON)
+    _scheduler = new_scheduler()
     _scheduler.start()
-    refresh_jobs()
+    queue_catch_up()
 
 
 def stop_scheduler() -> None:

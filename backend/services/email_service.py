@@ -359,7 +359,25 @@ def send_manager_review_email(
     total_count: int,
     review_link_url: str,
     conflicts: int = 0,
+    has_rota: bool = True,
 ) -> dict:
+    # Sent once, when the week's availability closes. The solve that runs at
+    # that moment can come back with nothing — nobody marked themselves
+    # available, or it failed — and "your rota is ready to review" would then
+    # send the manager to an empty week. They still need to hear the window
+    # shut, so the email changes its message rather than going quiet.
+    if not has_rota:
+        subject = f"No rota yet for {week_label}"
+        body = f"""
+<p style="margin:0 0 8px;">Hi {_esc(manager_name)},</p>
+<p style="margin:0 0 16px;">Availability for <strong>{_esc(week_label)}</strong> at {_esc(venue_name)} has closed, but we couldn't build a rota from it automatically.</p>
+<p style="margin:0 0 16px;font-size:13px;color:#6b7280;">{submitted_count}/{total_count} staff submitted availability.</p>
+<p style="margin:0 0 16px;font-size:13px;color:#6b7280;">Open the rota to reopen availability and chase your team, or fill the week in yourself.</p>
+{_button("Open rota", review_link_url)}
+"""
+        html = _shell(f"No rota yet for {week_label}", f"Sent because you manage {venue_name} on Rotally.", body)
+        return _send(to_email, subject, html)
+
     subject = f"Rota ready to review — {week_label}"
     conflicts_line = (
         f"""<p style="margin:0 0 16px;font-size:13px;color:#b91c1c;">{conflicts} shift{"s" if conflicts != 1 else ""} still need staff — review before publishing.</p>"""

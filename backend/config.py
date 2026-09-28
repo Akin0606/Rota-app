@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     # are either a full address or a "@domain.com" suffix. Empty means nobody.
     email_allowlist: str = Field(default="", alias="EMAIL_ALLOWLIST")
     cron_secret: str = Field(default="", alias="CRON_SECRET")
+    # Kill switch for the automatic half of the weekly cycle: closing a week at
+    # its deadline (which solves it and emails staff and the manager) and the
+    # automatic reminder. Opening a week and the provisional -> confirmed sweep
+    # are not behind it; they behave as they always have. Off by default, so a
+    # deploy can never start closing weeks on a database whose backlog nobody
+    # has looked at — see routers/cron.py.
+    weekly_cycle_enabled: bool = Field(default=False, alias="WEEKLY_CYCLE_ENABLED")
     admin_secret: str = Field(default="", alias="ADMIN_SECRET")
     # In production this must be set to the deployed frontend origin
     # (https://rota-app-mu.vercel.app) so email links and CORS resolve

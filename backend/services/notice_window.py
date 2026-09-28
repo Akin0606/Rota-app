@@ -60,6 +60,26 @@ def _venue_inputs(venue_id: str) -> tuple[dict, list[dict], dict[date, datetime]
     return rules, shifts, overrides_map(override_rows)
 
 
+def schedule_from(rules: dict, shifts: list[dict], overrides: dict[date, datetime]) -> Optional[dict]:
+    """Everything needed to place any of a venue's weeks, as keyword arguments
+    for schedule_windows.week_window / compute_window. None when the venue has
+    no parseable shift, since there is then no deadline to derive.
+
+    Pure, so the scheduler can build it from rows it has bulk-loaded for every
+    venue while the cycle builds it from one venue's rows — and both get the
+    same answer."""
+    earliest = schedule_windows.earliest_shift_minutes(shifts)
+    if earliest is None:
+        return None
+    return {"earliest_minutes": earliest, "override_close_by_week": overrides, **offsets_from_rules(rules)}
+
+
+def schedule_for_venue(venue_id: str) -> Optional[dict]:
+    """schedule_from() for one venue, read in three queries however many of its
+    weeks are then placed with it."""
+    return schedule_from(*_venue_inputs(venue_id))
+
+
 def compute_for_venue(venue_id: str, now: Optional[datetime] = None) -> Optional[dict]:
     """The active collection window for a venue, or None if it has no shifts."""
     now = now or schedule_windows.now_london()

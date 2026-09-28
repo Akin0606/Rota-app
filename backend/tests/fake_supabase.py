@@ -16,6 +16,10 @@ Two things to know before using it:
   models filtering, ordering, limiting and the four verbs, because that is what
   the code under test uses. If a test needs more than that, the test is
   reaching too far and wants a real integration run instead.
+* The one exception is column defaults (`defaults=`), because some code is
+  correct only *because* the database fills a column in: the open writes no
+  `collecting_since` and relies on the column's `default now()`. A fake that
+  left it out would test a row the real database can never produce.
 """
 
 from __future__ import annotations
@@ -134,6 +138,8 @@ class _Query:
             new = [copy.deepcopy(payload)] if isinstance(payload, dict) else [copy.deepcopy(r) for r in payload]
             for i, row in enumerate(new):
                 row.setdefault("id", f"{self._table}-{len(rows) + i + 1}")
+                for col, make in self._store.defaults.get(self._table, {}).items():
+                    row.setdefault(col, make())
             rows.extend(new)
             return _Result(new)
 
@@ -163,10 +169,18 @@ class _Query:
 
 class FakeSupabase:
     """`tables` is {name: [row, ...]}; `calls` records (verb, table) in order,
-    which is how a test asserts that a *read* path performed no writes."""
+    which is how a test asserts that a *read* path performed no writes.
 
-    def __init__(self, tables: dict[str, list[dict]] | None = None):
+    `defaults` is {table: {column: zero-argument callable}}: what the database
+    would fill in on insert when the payload leaves the column out."""
+
+    def __init__(
+        self,
+        tables: dict[str, list[dict]] | None = None,
+        defaults: dict[str, dict[str, Any]] | None = None,
+    ):
         self.tables: dict[str, list[dict]] = copy.deepcopy(tables or {})
+        self.defaults: dict[str, dict[str, Any]] = defaults or {}
         self.calls: list[tuple[str, str]] = []
 
     def table(self, name: str) -> _Query:

@@ -1,4 +1,5 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
@@ -28,6 +29,7 @@ from services import (
     leave,
     notice_window,
     notify,
+    reopen_log,
     rota_export,
     schedule_windows,
     shift_bounds,
@@ -1551,8 +1553,9 @@ def publish(period_id: str, manager: dict = Depends(get_current_manager)):
     provisional rota (status stays "published", staff can see it but it may
     still change); publishing after the window has closed goes straight to
     "confirmed". A provisional rota is promoted to confirmed automatically
-    once its window closes — see confirm_published_periods_for_venue, swept
-    from cron_scheduler.refresh_jobs()."""
+    once its window closes — see confirm_published_periods_for_venue, which
+    the weekly cycle (routers/cron.run_due_for_venue) runs on every timer,
+    hourly tick and boot catch-up."""
     venue = get_manager_venue(manager["id"])
     _require_entitled(venue)
     period = _get_period_or_404(venue["id"], period_id)
@@ -1635,7 +1638,14 @@ def reopen_availability(period_id: str, manager: dict = Depends(get_current_mana
     way back. That is precisely the quiet week where a manager most needs to
     reopen and chase. The existing assignments are left in place (a later
     Auto-fill or re-solve overwrites them); this only flips the status so the
-    availability grid unlocks (editable == status == "collecting")."""
+    availability grid unlocks (editable == status == "collecting").
+
+    It also restamps `collecting_since`, in the same write, and that stamp is
+    what keeps the automatic cycle's hands off: a week that started collecting
+    again after its own deadline is the manager's to close (cron.classify_close
+    calls it "reopened"), and one reopened after its reminder moment gets no
+    automatic "you haven't replied" chase minutes after staff were asked. One
+    update, so no reader can ever see the week collecting with the old stamp."""
     venue = get_manager_venue(manager["id"])
     period = _get_period_or_404(venue["id"], period_id)
 
@@ -1646,13 +1656,15 @@ def reopen_availability(period_id: str, manager: dict = Depends(get_current_mana
         )
 
     supabase = get_supabase()
-    supabase.table("availability_periods").update({"status": "collecting"}).eq("id", period_id).execute()
+    supabase.table("availability_periods").update(
+        {"status": "collecting", "collecting_since": datetime.now(timezone.utc).isoformat()}
+    ).eq("id", period_id).execute()
 
     supabase.table("activity_log").insert(
         {
             "venue_id": venue["id"],
-            "action": "availability_reopened",
-            "detail": f"Availability reopened for week of {period['week_start']}",
+            "action": reopen_log.ACTION,
+            "detail": reopen_log.detail(period["week_start"]),
         }
     ).execute()
 
@@ -1660,13 +1672,18 @@ def reopen_availability(period_id: str, manager: dict = Depends(get_current_mana
     return _build_summary(venue["id"], updated_period)
 
 
-def confirm_published_periods_for_venue(venue: dict) -> list[dict]:
+def confirm_published_periods_for_venue(venue: dict, *, now: Optional[datetime] = None) -> list[dict]:
     """Promotes any provisional (status "published") period whose availability
-    window has now closed to "confirmed". Swept from cron_scheduler.refresh_jobs()
-    rather than scheduled as a precise one-shot job, since that already runs on
-    every server startup (so a missed transition self-heals after a redeploy)
-    and after every settings/weekly-close change — good enough cadence for what
-    is purely a status label, without needing new scheduler plumbing."""
+    window has now closed to "confirmed". Run by the weekly cycle
+    (routers/cron.run_due_for_venue) on every timer, hourly tick and boot
+    catch-up rather than on a precise one-shot timer of its own: that is plenty
+    often for what is purely a status label, and a transition missed while the
+    service slept heals on the next run.
+
+    Those runners can overlap, so the promotion is a guarded update (only a row
+    still "published" flips) and only the runner that gets the row back logs
+    it. A manager who unpublishes in the same instant keeps their "generated"
+    week rather than having it silently confirmed underneath them."""
     supabase = get_supabase()
     published = (
         supabase.table("availability_periods")
@@ -1679,7 +1696,7 @@ def confirm_published_periods_for_venue(venue: dict) -> list[dict]:
     if not published:
         return []
 
-    now = schedule_windows.now_london()
+    now = now or schedule_windows.now_london()
     confirmed = []
     for period in published:
         week_monday = date.fromisoformat(str(period["week_start"]))
@@ -1687,7 +1704,17 @@ def confirm_published_periods_for_venue(venue: dict) -> list[dict]:
         if close_at is None or close_at > now:
             continue
 
-        supabase.table("availability_periods").update({"status": "confirmed"}).eq("id", period["id"]).execute()
+        won = (
+            supabase.table("availability_periods")
+            .update({"status": "confirmed"})
+            .eq("id", period["id"])
+            .eq("venue_id", venue["id"])
+            .eq("status", "published")
+            .execute()
+            .data
+        )
+        if not won:
+            continue
         supabase.table("activity_log").insert(
             {
                 "venue_id": venue["id"],

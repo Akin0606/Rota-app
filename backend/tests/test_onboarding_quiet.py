@@ -1,9 +1,9 @@
 """E9 — a venue still being set up must not email its staff.
 
 Almost every write the onboarding wizard makes ends in
-`cron_scheduler.refresh_jobs()`, which calls straight back into
-`open_availability_for_venue` whenever the clock is already inside a notice
-window. That creates the collecting period and emails every active staff member
+`cron_scheduler.refresh_jobs()`, which queues the catch-up that calls straight
+back into `open_availability_for_venue` whenever the clock is already inside a
+notice window. That creates the collecting period and emails every active staff member
 "tell us your availability" — while the manager is still three screens from
 finishing, with hours and coverage they are about to change.
 
@@ -31,7 +31,9 @@ def fake(monkeypatch):
     f = FakeSupabase({"availability_periods": [], "activity_log": [], "staff_members": []})
     # The window calculation and the send are both out of scope here; what is
     # being pinned is whether we get as far as either.
-    monkeypatch.setattr(cron, "_target_open_week", lambda _vid: __import__("datetime").date.fromisoformat(MONDAY))
+    monkeypatch.setattr(
+        cron, "_target_open_week", lambda _vid, _now=None: __import__("datetime").date.fromisoformat(MONDAY)
+    )
     monkeypatch.setattr(cron, "_auto_submit_for_new_period", lambda *a: None)
     sent: list = []
     monkeypatch.setattr(cron, "_send_open_emails", lambda v, w: sent.append((v["id"], w)))

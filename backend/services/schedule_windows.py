@@ -215,6 +215,53 @@ def notice_hours(close_dt: datetime, week_monday: date, earliest_minutes: int) -
     return (start - close_dt).total_seconds() / 3600.0
 
 
+# How late the automatic cycle will still close a week on its own. A service that
+# slept through a deadline catches up when it wakes, but only for so long: after
+# this the week is left for a person, because a rota solved and emailed days
+# late gives staff far less notice than the window exists to guarantee.
+# scripts/close_stale_periods.py is how a backlog of such weeks is tidied up.
+CATCH_UP_GRACE = timedelta(hours=48)
+
+
+def past_catch_up(window: dict, now: datetime) -> bool:
+    """Whether it is too late for the cycle to close this week itself: the grace
+    after its deadline has run out, or its first shift has already begun - which
+    a manager's override closing within 72 hours of that shift reaches well
+    inside the grace. One definition, shared by the cycle (cron.classify_close)
+    and the backlog script, so the two can never disagree about a week."""
+    return now >= window["closes_at"] + CATCH_UP_GRACE or now >= window["earliest_shift_at"]
+
+
+def week_window(
+    week_monday: date,
+    *,
+    earliest_minutes: Optional[int],
+    buffer_hours: int,
+    open_offset_hours: int,
+    reminder_offset_hours: int,
+    override_close_by_week: Optional[dict[date, datetime]] = None,
+) -> Optional[dict]:
+    """One named week's window, wherever `now` happens to be.
+
+    compute_window answers "which week are we collecting for?", and at the
+    exact moment a week closes that answer is already the NEXT week — which is
+    how the automatic close spent its whole life closing a week that did not
+    exist yet (A13). Anything that acts on a week it already knows about must
+    ask about that week by name, through here."""
+    if earliest_minutes is None:
+        return None
+    overrides = override_close_by_week or {}
+    close = overrides.get(week_monday) or formula_close(week_monday, earliest_minutes, buffer_hours)
+    return {
+        "week_monday": week_monday,
+        "opens_at": close - timedelta(hours=open_offset_hours),
+        "reminder_at": close - timedelta(hours=reminder_offset_hours),
+        "closes_at": close,
+        "earliest_shift_at": week_earliest_start(week_monday, earliest_minutes),
+        "is_override": week_monday in overrides,
+    }
+
+
 def compute_window(
     *,
     now: datetime,
@@ -229,20 +276,18 @@ def compute_window(
     the venue has no shifts to derive a time from."""
     if earliest_minutes is None:
         return None
-    overrides = override_close_by_week or {}
     start_monday = monday_of(now.date())
     for i in range(0, 8):
-        wk = start_monday + timedelta(weeks=i)
-        close = overrides.get(wk) or formula_close(wk, earliest_minutes, buffer_hours)
-        if close > now:
-            return {
-                "week_monday": wk,
-                "opens_at": close - timedelta(hours=open_offset_hours),
-                "reminder_at": close - timedelta(hours=reminder_offset_hours),
-                "closes_at": close,
-                "earliest_shift_at": week_earliest_start(wk, earliest_minutes),
-                "is_override": wk in overrides,
-            }
+        window = week_window(
+            start_monday + timedelta(weeks=i),
+            earliest_minutes=earliest_minutes,
+            buffer_hours=buffer_hours,
+            open_offset_hours=open_offset_hours,
+            reminder_offset_hours=reminder_offset_hours,
+            override_close_by_week=override_close_by_week,
+        )
+        if window["closes_at"] > now:
+            return window
     return None
 
 
@@ -273,16 +318,14 @@ def upcoming_weeks(
     weeks = []
     for i in range(count):
         wk = first_monday + timedelta(weeks=i)
-        close = overrides.get(wk) or formula_close(wk, earliest_minutes, buffer_hours)
-        weeks.append(
-            {
-                "week_monday": wk,
-                "opens_at": close - timedelta(hours=open_offset_hours),
-                "reminder_at": close - timedelta(hours=reminder_offset_hours),
-                "closes_at": close,
-                "earliest_shift_at": week_earliest_start(wk, earliest_minutes),
-                "notice_hours": notice_hours(close, wk, earliest_minutes),
-                "is_override": wk in overrides,
-            }
+        window = week_window(
+            wk,
+            earliest_minutes=earliest_minutes,
+            buffer_hours=buffer_hours,
+            open_offset_hours=open_offset_hours,
+            reminder_offset_hours=reminder_offset_hours,
+            override_close_by_week=overrides,
         )
+        window["notice_hours"] = notice_hours(window["closes_at"], wk, earliest_minutes)
+        weeks.append(window)
     return weeks
