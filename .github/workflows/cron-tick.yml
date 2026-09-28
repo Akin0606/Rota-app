@@ -1,0 +1,102 @@
+# The weekly availability cycle's hourly heartbeat.
+#
+# POSTs /api/cron/tick, which runs whatever the cycle has due for every venue -
+# close a week at its deadline, send the reminder, open the next week - and
+# re-arms the in-process timers (backend/routers/cron.py). Those timers live in
+# memory, and Render's free plan sleeps the service after 15 idle minutes, so
+# they die with it. This request is what wakes the service, and the backstop
+# for every timer that died in its sleep.
+#
+# Things to know before touching it:
+#
+# * Scheduled workflows only run from the default branch (main). This file does
+#   nothing on staging or a feature branch.
+# * The repository is public, and so are these logs. The job prints the HTTP
+#   status and nothing else; the response body (counts only, by design) is
+#   discarded, and the secret travels in a header GitHub masks.
+# * The production job is OFF until the repository variable PROD_TICK_ENABLED is
+#   "true". Do not set it until the stale `collecting` weeks on production have
+#   been dealt with (backend/scripts/close_stale_periods.py): the moment the
+#   cycle runs there with WEEKLY_CYCLE_ENABLED on, any week inside its 48-hour
+#   grace is solved and emailed to real staff.
+# * Each wake keeps a free Render service up for its ~1 minute spin-up plus 15
+#   idle minutes, so hourly ticks cost roughly 200 instance-hours a month per
+#   service. The workspace gets 750 free hours a month across all its
+#   services, and when they run out Render suspends every free service -
+#   production included - until the month ends. Check the workspace's usage
+#   before turning the production job on.
+# * GitHub pauses scheduled workflows in a public repository after 60 days with
+#   no commits. If the repo goes quiet for that long, re-enable it from the
+#   Actions tab.
+#
+# Secrets (Settings > Secrets and variables > Actions): STAGING_CRON_SECRET and
+# PROD_CRON_SECRET, each equal to CRON_SECRET on the matching Render service.
+
+name: Weekly cycle tick
+
+on:
+  schedule:
+    - cron: "17 * * * *" # hourly, off the top of the hour when GitHub's scheduler is busiest
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cron-tick
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Tick staging
+        env:
+          URL: https://rota-app-staging.onrender.com/api/cron/tick
+          CRON_SECRET: ${{ secrets.STAGING_CRON_SECRET }}
+        run: |
+          set -u
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::STAGING_CRON_SECRET is not set"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 300 \
+              -X POST --data '' -H "X-Cron-Secret: ${CRON_SECRET}" "${URL}" || true)
+            echo "attempt ${attempt}: HTTP ${status}"
+            case "${status}" in
+              2??) exit 0 ;;
+              000|502|503|504) ;;          # not answering yet: Render is still waking it
+              *) exit 1 ;;                 # it answered: a real failure; the next tick is the retry
+            esac
+            if [ "${attempt}" -lt 3 ]; then sleep 30; fi
+          done
+          exit 1
+
+  production:
+    if: vars.PROD_TICK_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Tick production
+        env:
+          URL: https://rota-app-ugee.onrender.com/api/cron/tick
+          CRON_SECRET: ${{ secrets.PROD_CRON_SECRET }}
+        run: |
+          set -u
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::PROD_CRON_SECRET is not set"
+            exit 1
+          fi
+          for attempt in 1 2 3; do
+            status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 300 \
+              -X POST --data '' -H "X-Cron-Secret: ${CRON_SECRET}" "${URL}" || true)
+            echo "attempt ${attempt}: HTTP ${status}"
+            case "${status}" in
+              2??) exit 0 ;;
+              000|502|503|504) ;;          # not answering yet: Render is still waking it
+              *) exit 1 ;;                 # it answered: a real failure; the next tick is the retry
+            esac
+            if [ "${attempt}" -lt 3 ]; then sleep 30; fi
+          done
+          exit 1
