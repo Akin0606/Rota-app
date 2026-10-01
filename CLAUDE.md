@@ -614,7 +614,7 @@ flagged in code and queued in the launch backlog.
   cycle's emails treated a joiner waiting for approval (`is_active` and
   `pending`) like approved staff. A joiner can send availability, but the solve
   skips them. The user's standing instruction is that operational questions go
-  to Dan. His rulings are below, and a test pins each one:
+  to Dan. Dan's rulings are below, and a test pins each one:
   - **The open email still reaches joiners.** They can answer before they are
     approved, and a manager wants those answers in hand when they approve.
   - **The closed email no longer does** (the reminder already didn't). It
