@@ -211,8 +211,9 @@ admin) · 7-step onboarding wizard + activation loop · availability §2/§6
 billing (trials, comp switch, entitlement gate) · go-live · security
 remediation · Wave A (Next 15 / React 19, security headers) · nightly backups
 with a restore drill.
-Next: **settle the pilot trial lockout** (Known bugs; the first venue locks out
-on 2026-10-01) → **roll out the weekly-cycle fix** (Known bugs; built on
+Next: **settle the pilot trial lockout** (Known bugs; The Anxhor has been
+locked out since 2026-10-01, the other two venues lock out on 2026-10-11) →
+**roll out the weekly-cycle fix** (Known bugs; built on
 `fix/weekly-cycle`: staging first, then a decision on prod's stale weeks) → the
 rest of the `AUDIT.md` backlog
 (Launch gaps & ops) → 12.07% hours accrual → a notification system
@@ -224,14 +225,15 @@ dashboard, and staff only by reopening the app.
 Running list. Grouped by what it blocks. Resolved items move to Learnings.
 
 ### Near-term / in-flight
-- **🔴 Every pilot venue on prod will be locked out in October 2026. This
-  needs a decision, not code.** All three prod venues are at
-  `subscription_status = trialing`, with trials ending between 2026-10-01 and
-  2026-10-11. None has `billing_exempt` set and none has a Stripe customer.
+- **🔴 One pilot venue on prod is already locked out, and the other two lock
+  out on 2026-10-11. This needs a decision, not code.** All three prod venues
+  are at `subscription_status = trialing`. The Anxhor's trial ended at 07:59 UTC
+  on 2026-10-01. Barso16's and 25 Market Buildings' end on 2026-10-11 (read
+  2026-10-01). None has `billing_exempt` set and none has a Stripe customer.
   When a trial ends, `effective_status` (`services/entitlement.py`) reads
   `expired`, and then:
   - generate and publish return 402;
-  - cron skips that venue's sends;
+  - the weekly cycle skips that venue completely, opening weeks included;
   - the manager layout redirects to `/billing`, where Subscribe returns 503
     because prod Render has no `STRIPE_*` env vars.
 
@@ -269,19 +271,31 @@ Running list. Grouped by what it blocks. Resolved items move to Learnings.
     4. Decide prod's stale `collecting` weeks. Dry-run
        `backend/scripts/close_stale_periods.py` against prod, which only reads,
        and run `--apply --i-know-this-is-production` only on the user's yes.
+       The dry run on 2026-10-01 found 12 collecting weeks across the three
+       venues, the oldest w/c 17 Aug. It would close 5: four of The Anxhor's
+       and one of Barso16's. It leaves The Anxhor's w/c 31 Aug alone because
+       that week has a rota. The other 6 are still under way or ahead. Re-run
+       it when the decision is made, because the answer changes every week.
     5. Merge to `main` with the switch off. Then, for prod: `CRON_SECRET`, the
        `PROD_CRON_SECRET` GitHub secret, `WEEKLY_CYCLE_ENABLED=true` and the
        `PROD_TICK_ENABLED` variable.
   - **What the switch does on prod once it is on.** Migration `033` stamps every
     existing week's `collecting_since` with the moment it runs. A week already
     past its deadline by then reads as reopened, and the cycle never closes it;
-    only the script or a manager does. A week whose deadline is still ahead
-    when `033` runs is the cycle's to close, solve and email. Every prod venue
-    has a w/c 5 Oct week due on Fri 2 Oct: 25 Market Buildings at 05:00,
-    Barso16 and The Anxhor at 09:00.
-  - **It meets the trial lockout above.** The cycle acts only for an entitled
-    venue, so it skips a venue whose trial has ended. The Anxhor's trial ends
-    on Thu 1 Oct at 08:59, one minute before its first automatic reminder.
+    only the script or a manager does. A week whose deadline passes after
+    `033` runs is the cycle's. With the switch on, it is closed, solved and
+    emailed at its deadline. **If the switch goes on later than that deadline,
+    the week is closed, solved and emailed the moment the switch goes on**,
+    provided the deadline is under 48 hours old and the week's first shift
+    hasn't begun. Older than that, the week is left for the script. In the same
+    way, a reminder whose moment fell between `033` and the switch goes out at
+    once, if the week's deadline is still ahead. So read which weeks are in that
+    window before turning the switch on.
+  - **It meets the trial lockout above.** The cycle does nothing at all for a
+    venue that isn't entitled, opening weeks included. The Anxhor's trial ended
+    on 2026-10-01, so it gets nothing until it is comped or subscribed, and
+    Barso16 and 25 Market Buildings join it on 2026-10-11 unless that is
+    settled first.
   - **The hourly tick spends Render free hours, which both services share.**
     See the Render Free entry in Launch gaps & ops before turning on the prod
     job.
@@ -347,6 +361,19 @@ on prod, the silent "Send code" failure and the unverifiable colleague avatars.)
   accepts the add with `confirm: true`, but a manager still has to cancel the
   leave first. This survived the redesign: the old `RotaGrid` is gone, and the
   behaviour moved into these two files.
+- **The approve sheet drops a name or email the manager types into it.** It
+  shows the Name and Contact fields, but `handleApprove`
+  (`(manager)/team/page.tsx`) sends only the role, the under-18 flags and the
+  role ids. That matters more than it looks: the join page collects no email,
+  so the approve sheet is where a manager would add one. Without it, an
+  approved joiner gets no email from the app at all, the cycle's included.
+  Until it is fixed, add the email with Edit after approving.
+- **The published-rota email can link to a different week from the one it
+  names.** It links to the staff rota page with no week (`rota.py`, the
+  `venue_link` in the publish email), and that page opens the published week
+  covering today. So publishing next week while this week is live sends
+  "your rota for next week" to a page showing this week. Links to the
+  availability page already carry their week (`email_service.availability_url`).
 - **No notification system** for shift claims/approvals — managers only see them
   via `activity_log`, and claimers/droppers only find out by reopening the app.
 - Activity-feed oddities deliberately left alone: a `detail` that mentions the
@@ -445,7 +472,7 @@ Learnings.)
   - The last step is proving a real prod send lands in a non-owner inbox (see
     Unverified).
 - **Backend coverage is real; the frontend has none.** `backend/tests/` holds
-  **274 pytest cases** across 21 test files. They cover:
+  **284 pytest cases** across 22 test files. They cover:
   - the compliance-bearing solver helpers, the shared accessor and the per-day
     re-key;
   - router code, testable since `tests/fake_supabase.py`: period resolution,
@@ -453,8 +480,8 @@ Learnings.)
     remind honesty, the WTR reg 6A window, onboarding quietness, the leave
     overlap and the per-week deadline;
   - the weekly cycle (timers on a real, paused APScheduler, the boot catch-up,
-    the guarded claims, the grace, the kill switch and the tick) and the
-    stale-week script;
+    the guarded claims, the grace, the kill switch, the tick and who each email
+    reaches), the rendered wording of its emails, and the stale-week script;
   - entitlement;
   - the email guard and escaping, and the cron secret.
 
@@ -581,6 +608,52 @@ flagged in code and queued in the launch backlog.
 - **Never touch the OTP / PIN auth flow without flagging first** (working rule).
 
 ## Learnings (append after each session — most recent first)
+- **Who each weekly-cycle email reaches, settled with Dan, and the rollout
+  checked against prod (2026-10-01, `fix/weekly-cycle`, not deployed).** The
+  finished branch was reviewed before commit, and the review found that the
+  cycle's emails treated a joiner waiting for approval (`is_active` and
+  `pending`) like approved staff. A joiner can send availability, but the solve
+  skips them. The user's standing instruction is that operational questions go
+  to Dan. His rulings are below, and a test pins each one:
+  - **The open email still reaches joiners.** They can answer before they are
+    approved, and a manager wants those answers in hand when they approve.
+  - **The closed email no longer does** (the reminder already didn't). It
+    promised them shifts that could never come.
+  - **The manager's review email names any joiner who sent availability for
+    the week that just closed.** It says what to do: approve them on the Staff
+    tab, then re-run auto-fill, or build the rota if the solve produced none.
+    Nothing else in the app joins those two facts up, and a starter approved
+    after the close just misses the week. The line names up to three people and
+    counts the rest.
+  - **"You'll be notified" now reads "If you're on it, we'll email your shifts
+    once it's published."** The publish email reaches only staff with shifts,
+    so approved staff the solve gave nothing were waiting for nothing too. A
+    "you're not on this week" email is a possible next step, not built.
+  - **The closed email lost its button.** The staff rota page opens the
+    published week, never the one that has just locked. The publish email's
+    link has the same fault (Known bugs).
+  - **Dan said "the Team page". The email says "the Staff tab".** The manager
+    nav labels it Staff, and only the page heading says Team. An instruction in
+    an email has to name what the manager can see in the nav.
+  - **This is latent on prod today.** No venue has a pending joiner, and the
+    join page collects no email. The approve sheet is where an email would be
+    added, and it drops one (Known bugs).
+  - **Two smaller things.** The reopen endpoint, which writes the log, and the
+    stale-week script, which reads it, share `services/reopen_log`. A cycle
+    test now parses back what the endpoint really logs, so the two can't
+    drift. And times here are naive London wall-clock. In the repeated hour
+    when the clocks go back (01:00–02:00 on 25 Oct 2026), converting one to UTC
+    picks the first reading, so a stamp written during the second is recorded
+    an hour early. Nothing breaks, and no current venue has a deadline in that
+    hour, so it is noted rather than fixed.
+  - **Prod, read-only, on the day.** The Anxhor's trial had ended at 07:59 UTC
+    that morning, so the cycle would do nothing for it at all, opens included.
+    The stale-week dry run found 12 collecting weeks going back to w/c 17 Aug.
+    Both are in the 🔴s.
+  - **Get the number by running the old code.** A draft of the A13 note said
+    the old close would have taken W+1 "six days early". Running the old
+    `compute_window` at W's close gave seven, and a day before W+1's own window
+    opened.
 - **The automatic weekly cycle was rebuilt so it can run on a free instance that
   sleeps (2026-09-28, branch `fix/weekly-cycle`, not deployed).** The plan was
   approved with decisions D1–D6 at their recommendations. The rollout and its
@@ -594,6 +667,10 @@ flagged in code and queued in the launch backlog.
       closes, that is already W+1, which normally doesn't exist yet. So the
       close returned `None`, and it returned before `refresh_jobs()`, so nothing
       re-armed: even an always-on server would have stopped after one cycle.
+      Where a manager had already created W+1 (allowed up to four weeks ahead)
+      it was worse. The close took W+1 instead, a week before its deadline and
+      a day before its own window opened. It solved W+1, emailed staff that
+      W+1 had locked, and left W open.
     - **Render Free sleeps after ~15 idle minutes, and the jobs lived in
       memory.** At boot, `refresh_jobs()` skipped every past-due open, reminder
       and close, and the review email's `CronTrigger` counted from boot. Prod's
@@ -641,16 +718,18 @@ flagged in code and queued in the launch backlog.
     - **The four `/api/cron/*` endpoints are gone.** `POST /api/cron/tick`
       replaces them, and it returns counts only because the repo and its
       Actions logs are public.
-  - **Testing it: 44 new cases, 274 in the suite.**
+  - **Testing it: 54 new cases (with the 2026-10-01 follow-up above), 284 in
+    the suite.**
     - **Real APScheduler, with nothing firing.** A `BackgroundScheduler`
       started with `start(paused=True)` arms real jobs, and a test can read
       their ids and run times.
     - **A mutation check.** A scratch script put one deliberate bug at a time
       into the real source (the 48-hour grace, each guarded claim, the
       `finally` re-arm, the first-shift cutoff, A13 itself), ran the tests,
-      then restored the file and checked its sha256. The tests caught 19 of 19
-      and 10 of 10. **A mutant that doesn't compile isn't a kill:** every test
-      fails, for the wrong reason, so check that each mutant parses.
+      then restored the file and checked its sha256. The tests caught every
+      one: 26 of 26 in the cycle, 9 of 9 in its email wording and 12 of 12 in
+      the stale-week script. **A mutant that doesn't compile isn't a kill:**
+      every test fails, for the wrong reason, so check that each mutant parses.
     - **A vacuous negative assertion slipped in.** `"w/c 2 Nov 2026" not in
       body` could never fail, because `uk_date` zero-pads the day ("02 Nov").
       It is now a positive check that the emailed week labels are exactly the

@@ -115,6 +115,21 @@ def _roster(venue_id: str) -> list[dict]:
     )
 
 
+def _joiners(venue_id: str) -> list[dict]:
+    """Self-registrants waiting for approval: active, so they can send
+    availability, but off the roster, so the solve never places them."""
+    return (
+        get_supabase()
+        .table("staff_members")
+        .select("id, name")
+        .eq("venue_id", venue_id)
+        .eq("is_active", True)
+        .eq("pending", True)
+        .execute()
+        .data
+    )
+
+
 def _submitted_ids(period_id: str) -> set[str]:
     rows = (
         get_supabase()
@@ -399,7 +414,10 @@ def _auto_submit_for_new_period(venue: dict, period: dict) -> None:
 
 
 def _send_open_emails(venue: dict, week_monday: date) -> None:
-    """Tells every active staff member availability has opened for the week."""
+    """Tells every active staff member availability has opened for the week,
+    a joiner still waiting for approval included. They can send availability
+    before they are approved, and a manager wants it in hand the moment they
+    are."""
     settings = get_settings()
     week_label = f"w/c {dates.uk_date(week_monday)}"
     deadline_label = (
@@ -483,11 +501,16 @@ def close_week(venue: dict, period: dict, window: Optional[dict], *, now: dateti
 
 
 def _send_closed_emails(venue: dict, week_start) -> None:
-    """Tells every active staff member the week's availability has locked."""
-    settings = get_settings()
+    """Tells the roster the week's availability has locked.
+
+    A joiner still waiting for approval is left out. The solve skips them, and
+    the publish email reaches only people with shifts, so "we'll email your
+    shifts" would set them waiting for an email that can't come.
+
+    It carries no link. The staff rota page opens the published week, never
+    the one that has just locked, so a button here would show the wrong week."""
     week_label = f"w/c {dates.uk_date(date.fromisoformat(str(week_start)))}"
-    rota_link_url = f"{settings.frontend_url}/v/{venue['link_token']}/rota"
-    for member in _active_staff(venue["id"]):
+    for member in _roster(venue["id"]):
         if not member.get("email"):
             continue
         email_service.send_availability_closed_email(
@@ -495,7 +518,6 @@ def _send_closed_emails(venue: dict, week_start) -> None:
             name=member["name"],
             venue_name=venue["name"],
             week_label=week_label,
-            rota_link_url=rota_link_url,
         )
 
 
@@ -513,9 +535,14 @@ def send_review_email(venue: dict, period: dict, *, summary: Optional[dict] = No
     if not venue.get("manager_email") or not _cycle_may_act(venue):
         return None
 
+    sent_ids = _submitted_ids(period["id"])
     roster_ids = {m["id"] for m in _roster(venue["id"])}
-    submitted = len(_submitted_ids(period["id"]) & roster_ids)
+    submitted = len(sent_ids & roster_ids)
     total = len(roster_ids)
+    # Joiners who answered for this week. The solve skipped them, and nothing
+    # else tells the manager their availability is sitting there unused. One
+    # who didn't answer is left to the dashboard, which lists everyone waiting.
+    waiting = sorted(m["name"] for m in _joiners(venue["id"]) if m["id"] in sent_ids)
     has_rota = bool(summary) and summary.get("status") == "generated"
     week_start = date.fromisoformat(str(period["week_start"]))
 
@@ -529,6 +556,7 @@ def send_review_email(venue: dict, period: dict, *, summary: Optional[dict] = No
         review_link_url=f"{get_settings().frontend_url}/rota",
         conflicts=summary.get("conflicts", 0) if has_rota else 0,
         has_rota=has_rota,
+        waiting=waiting,
     )
 
     # Logged with what actually happened, like the manual Remind: an audit row

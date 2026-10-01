@@ -46,7 +46,7 @@ import database
 from models.schemas import RemindRequest
 from routers import cron, rota
 from routers import staff as staff_router
-from services import cron_scheduler, email_service, notice_window, schedule_windows
+from services import cron_scheduler, email_service, notice_window, reopen_log, schedule_windows
 from tests.fake_supabase import FakeSupabase
 
 LONDON = schedule_windows.LONDON
@@ -308,8 +308,10 @@ def test_the_close_at_its_deadline_closes_that_week_and_opens_the_next(cycle):
     assert cycle.log("availability_closed") == [f"Availability closed for week of {W}"]
 
     # Staff hear that W has locked; the manager hears what the solve made of W.
+    # Not Cal: the solve skips a joiner waiting for approval, and this email
+    # tells whoever gets it to expect their shifts.
     locked = cycle.emails(CLOSED)
-    assert {_email("Ada"), _email("Ben")} <= {e["to_email"] for e in locked}
+    assert sorted(e["to_email"] for e in locked) == [_email("Ada"), _email("Ben")]
     assert {e["week_label"] for e in locked} == {"w/c 12 Oct 2026"}
     assert cycle.emails(REVIEW) == [
         {
@@ -322,13 +324,16 @@ def test_the_close_at_its_deadline_closes_that_week_and_opens_the_next(cycle):
             "review_link_url": "https://app.example.test/rota",
             "conflicts": 2,
             "has_rota": True,
+            "waiting": [],  # Cal is waiting for approval, but sent nothing for W
         }
     ]
     assert cycle.log("review_email_sent") == [f"Review email sent to manager for week of {W} (1/2 submitted)"]
 
-    # W1 opens at once, so staff always have a week to fill...
+    # W1 opens at once, so staff always have a week to fill. Cal is asked too:
+    # a joiner can send availability before they are approved...
     assert cycle.period(W1)["status"] == "collecting"
     assert {e["week_label"] for e in cycle.emails(OPENED)} == {"w/c 19 Oct 2026"}
+    assert sorted(e["to_email"] for e in cycle.emails(OPENED)) == [_email("Ada"), _email("Ben"), _email("Cal")]
     # ...and the timers point at W1 now, not at the week that has gone.
     assert cycle.timers() == W1_TIMERS
 
@@ -363,6 +368,23 @@ def test_a_solver_crash_does_not_stop_the_rest_of_the_close(cycle):
     [review] = cycle.emails(REVIEW)
     assert (review["has_rota"], review["conflicts"]) == (False, 0)
     assert cycle.period(W1)["status"] == "collecting"
+
+
+def test_the_review_names_joiners_whose_availability_the_solve_skipped(cycle):
+    """A joiner can send availability before they are approved, and the solve
+    skips them. The review is the one place that tells the manager their
+    answers are sitting there unused."""
+    cycle.fake.rows("availability_submissions").append(
+        {"period_id": _period_id(W), "staff_id": f"cal-{VENUE_ID}", "day_index": 2, "shift_id": f"evening-{VENUE_ID}", "status": 3}
+    )
+    cycle.now = CLOSE
+
+    cron.run_due_all()
+
+    [review] = cycle.emails(REVIEW)
+    assert review["waiting"] == ["Cal"]
+    # Still 1 of 2: Cal answered, but the count describes the roster.
+    assert (review["submitted_count"], review["total_count"]) == (1, 2)
 
 
 # Re-arming -------------------------------------------------------------------
@@ -541,6 +563,10 @@ def test_a_week_the_manager_reopens_after_its_deadline_is_theirs_to_close(cycle,
     rota.reopen_availability(_period_id(W), manager={"id": f"m-{VENUE_ID}"})
     assert cycle.period(W)["status"] == "collecting"
     assert cycle.period(W)["collecting_since"] == _utc(CLOSE + timedelta(hours=1))
+    # The stale-week script learns about a reopen from this audit line alone,
+    # so it has to be one its reader parses back to the right week.
+    reopens = [r for r in cycle.fake.rows("activity_log") if r["action"] == reopen_log.ACTION]
+    assert [reopen_log.week_of(r["detail"]) for r in reopens] == [W]
 
     cycle.now = CLOSE + timedelta(hours=2)
     sent = len(cycle.sent)

@@ -336,19 +336,46 @@ def send_availability_closed_email(
     name: str,
     venue_name: str,
     week_label: str,
-    rota_link_url: str,
 ) -> dict:
+    # No button. The staff rota page opens the published week, never the one
+    # that has just locked, and an email that names a week must link to that
+    # week (see availability_url) or not link at all.
     subject = f"The rota for {week_label} is now locked"
     body = f"""
 <p style="margin:0 0 8px;">Hi {_esc(name)},</p>
-<p style="margin:0 0 16px;">Availability for <strong>{_esc(week_label)}</strong> at {_esc(venue_name)} has closed and the rota is now locked. You'll be notified once it's published.</p>
-{_button("View the rota", rota_link_url)}
+<p style="margin:0 0 16px;">Availability for <strong>{_esc(week_label)}</strong> at {_esc(venue_name)} has closed and the rota is now locked. If you're on it, we'll email your shifts once it's published.</p>
 """
     html = _shell(f"Availability closed for {week_label}", f"Sent because you're part of the {venue_name} team on Rotally.", body)
     return _send(to_email, subject, html)
 
 
 # 5. Manager review -----------------------------------------------------------
+
+def _waiting_line(names: list[str], week_label: str, has_rota: bool) -> str:
+    """Joiners who sent availability for the week but aren't approved yet.
+
+    The solve skipped them, so their answers sit unused until the manager
+    approves them and builds the week again. Nothing else in the app connects
+    the two, and a starter approved after the close just misses the week."""
+    if not names:
+        return ""
+    shown = [_esc(n) for n in names]
+    if len(shown) == 1:
+        who = shown[0]
+    elif len(shown) <= 3:
+        who = f"{', '.join(shown[:-1])} and {shown[-1]}"
+    else:
+        who = f"{shown[0]}, {shown[1]} and {len(shown) - 2} others"
+    approved = "isn't" if len(shown) == 1 else "aren't"
+    # A built week is rebuilt from the More sheet. A week with no rota stays
+    # closed, and its page offers "Build it with what came in" instead.
+    then = "re-run auto-fill (under More)" if has_rota else "build the rota"
+    return (
+        f'<p style="margin:0 0 16px;">{who} sent availability for {_esc(week_label)} '
+        f"but {approved} approved yet, so auto-fill skipped them. "
+        f"Approve them on the Staff tab, then {then}.</p>"
+    )
+
 
 def send_manager_review_email(
     to_email: str,
@@ -360,18 +387,21 @@ def send_manager_review_email(
     review_link_url: str,
     conflicts: int = 0,
     has_rota: bool = True,
+    waiting: Optional[list[str]] = None,
 ) -> dict:
     # Sent once, when the week's availability closes. The solve that runs at
     # that moment can come back with nothing — nobody marked themselves
     # available, or it failed — and "your rota is ready to review" would then
     # send the manager to an empty week. They still need to hear the window
     # shut, so the email changes its message rather than going quiet.
+    waiting_line = _waiting_line(waiting or [], week_label, has_rota)
     if not has_rota:
         subject = f"No rota yet for {week_label}"
         body = f"""
 <p style="margin:0 0 8px;">Hi {_esc(manager_name)},</p>
 <p style="margin:0 0 16px;">Availability for <strong>{_esc(week_label)}</strong> at {_esc(venue_name)} has closed, but we couldn't build a rota from it automatically.</p>
 <p style="margin:0 0 16px;font-size:13px;color:#6b7280;">{submitted_count}/{total_count} staff submitted availability.</p>
+{waiting_line}
 <p style="margin:0 0 16px;font-size:13px;color:#6b7280;">Open the rota to reopen availability and chase your team, or fill the week in yourself.</p>
 {_button("Open rota", review_link_url)}
 """
@@ -388,6 +418,7 @@ def send_manager_review_email(
 <p style="margin:0 0 8px;">Hi {_esc(manager_name)},</p>
 <p style="margin:0 0 16px;">Your rota for <strong>{_esc(week_label)}</strong> at {_esc(venue_name)} is ready to review.</p>
 <p style="margin:0 0 16px;font-size:13px;color:#6b7280;">{submitted_count}/{total_count} staff submitted availability.</p>
+{waiting_line}
 {conflicts_line}
 {_button("Review rota", review_link_url)}
 """
